@@ -5,12 +5,14 @@ for(const path of ['assets/studio-header.css','assets/studio-tool-access.css','s
 }
 document.querySelector('[data-studio-home]').href=base.href;
 document.querySelector('[data-studio-logo]').src=asset('assets/gb-studio-icon.svg?v=2');
-const [{initializeApp,getApps,getApp},{getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged,signOut}]=await Promise.all([
+const [{initializeApp,getApps,getApp},{getAuth,GoogleAuthProvider,signInWithPopup,reauthenticateWithPopup,onAuthStateChanged,signOut}]=await Promise.all([
   import('https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js'),
   import('https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js'),
   import(asset('firebase-config.js'))
 ]);
 const auth=getAuth(getApps().length?getApp():initializeApp(window.STORYBOARD_FIREBASE_CONFIG));
+const {createGoogleDocsImporter}=await import('./google-docs.mjs?v=1.1.0');
+window.RODA_IMPORT_GOOGLE_DOC=createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticateWithPopup,config:window.STORYBOARD_FIREBASE_CONFIG});
 const [{createSubscriptionGate},{createAccessController},{watchStaffRole}]=await Promise.all([
   import(asset('studio-subscription-gate.mjs?v=2')),import(asset('compi/access.mjs?v=4')),import(asset('reviews-cloud.js?v=16'))
 ]);
@@ -26,8 +28,8 @@ async function start(user){
   try{
     const project=projects.context();
     if(!project){home.hidden=false;workspace.hidden=true;projects.show(document.getElementById('roda-projects'),'roda');return;}
-    window.RODA_STUDIO={canEdit:project.role!=='viewer',project};
-    await script('js/studio-storage.js?v=1.0.0');
+    window.RODA_STUDIO={canEdit:project.role!=='viewer',project,userName:user.displayName||user.email};
+    await script('js/studio-storage.js?v=1.1.0');
     window.StorageLayer=window.createRodaStorage({projects,project,user});
     // Fail closed before boot: never create or edit a placeholder after a failed pull.
     await StorageLayer.init();
@@ -36,7 +38,8 @@ async function start(user){
     const back=new URL('roda/',base);document.getElementById('roda-back').href=back.href;
     document.getElementById('projectTitle').readOnly=true;
     await script('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js').catch(()=>{});
-    await script('js/utils.js?v=1');await script('js/app.js?v=1.0.0');
+    await script('js/screenplay.js?v=1.1.0');
+    await script('js/utils.js?v=1');await script('js/app.js?v=1.1.0');
   }catch(error){workspace.hidden=true;home.hidden=false;document.getElementById('roda-projects').textContent=error.message;}
   finally{starting=false;}
 }
