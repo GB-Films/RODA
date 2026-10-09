@@ -1168,86 +1168,8 @@ function enforceScriptVersionsLimit(){return false;}
     return makeUniqueSceneNumber(String(maxBase + 1), null);
   }
 
-  function sluglineToLocTOD(slugline){
-    const s = String(slugline||"").trim();
-    // separa por guiones con o sin espacios (INT. CASA - DÍA / INT-CASA-DÍA)
-    const parts = s.split(/\s*[-–—]\s*/g).map(p=>p.trim()).filter(Boolean);
-    let location = "";
-    let tod = "";
-
-    const stripPrefix = (txt)=>{
-      return String(txt||"")
-        .replace(/^\s*(INT\/EXT|INT\.?\/EXT\.?|I\/E\.?|INT|EXT)\s*[.\-–—:]?\s*/i,"")
-        .replace(/^\s*(INTERIOR|EXTERIOR)\s*[.\-–—:]?\s*/i,"")
-        .trim();
-    };
-
-    const extractTOD = (txt)=>{
-      const raw = String(txt||"")
-        .replace(/\[[^\]]*\]/g, " ")
-        .replace(/\([^\)]*\)/g, " ")
-        .replace(/[.,;:!?]+$/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-      if(!raw) return "";
-      const up = raw.toUpperCase();
-
-      if(/\b(AMANECER|DAWN)\b/.test(up)) return "Amanecer";
-      if(/\b(ATARDECER|TARDE|SUNSET|DUSK)\b/.test(up)) return "Atardecer";
-      if(/\b(NOCHE|NIGHT)\b/.test(up)) return "Noche";
-      if(/\b(D[IÍ]A|DAY|MAÑANA|MORNING)\b/.test(up)) return "Día";
-      return "";
-    };
-
-    if(parts.length >= 2){
-      // Buscar el TOD desde el final (soporta: "... - NOCHE - CONT.")
-      let todIndex = -1;
-      for(let i=parts.length-1;i>=0;i--){
-        const t = extractTOD(parts[i]);
-        if(t){
-          tod = t;
-          todIndex = i;
-          break;
-        }
-      }
-      if(todIndex >= 0){
-        location = stripPrefix(parts.slice(0, todIndex).join(" - "));
-        if(!location){
-          // fallback: si quedó vacío, no rompemos
-          location = stripPrefix(parts.join(" - "));
-        }
-      }else{
-        location = stripPrefix(parts.join(" - "));
-      }
-    }else{
-      // Sin guiones: intentamos detectar TOD al final (p.ej. "INT. CASA NOCHE")
-      const t = extractTOD(s);
-      if(t){
-        tod = t;
-        const loc = s.replace(/\b(AMANECER|DAWN|ATARDECER|TARDE|SUNSET|DUSK|NOCHE|NIGHT|D[IÍ]A|DAY|MAÑANA|MORNING)\b[\s\S]*$/i,"").trim();
-        location = stripPrefix(loc);
-      }else{
-        location = stripPrefix(s);
-      }
-    }
-
-    return { location, timeOfDay: tod };
-  }
-
-  function sluglineToIntExt(slugline){
-    const s = String(slugline||"").trim();
-    if(!s) return "";
-    const up = s.toUpperCase();
-
-    // INT./EXT. y variantes
-    if(/^\s*(INT\/EXT|INT\.?\/EXT\.?|I\/E)\s*[.\-–—:]?\s*/i.test(up)) return "Int";
-    if(/^\s*(EXT\/INT|EXT\.?\/INT\.?|E\/I)\s*[.\-–—:]?\s*/i.test(up)) return "Ext";
-
-    if(/^\s*(INT|INTERIOR)\s*[.\-–—:]?\s*/i.test(up)) return "Int";
-    if(/^\s*(EXT|EXTERIOR)\s*[.\-–—:]?\s*/i.test(up)) return "Ext";
-    return "";
-  }
-
+  function sluglineToLocTOD(slugline){return RodaScreenplay.headingMetadata(slugline);}
+  function sluglineToIntExt(slugline){return RodaScreenplay.headingMetadata(slugline).intExt;}
 
   function normalizeTOD(raw){
     const t = (raw||"").trim().toLowerCase();
@@ -2453,7 +2375,7 @@ function setupScheduleWheelScroll(){
     if(new TextEncoder().encode(rawText).length>250000)throw Error("El texto del guion es demasiado largo para cargarlo junto al historial. Dividilo en capítulos.");
     const latest=state.script.versions.find(v=>v.id===state.script.activeVersionId);
     const comparable=value=>String(value).replace(/[ \t]+$/gm,'').replace(/\n\s*\n+/g,'\n').trim();
-    if(!force&&latest?.scenes?.length&&comparable(scriptVersionText(latest))===comparable(rawText)){scriptStatus("El guion no tiene cambios desde la última carga.");return false;}
+    if(!force&&latest?.parserVersion===RodaScreenplay.parserVersion&&latest?.scenes?.length&&comparable(scriptVersionText(latest))===comparable(rawText)){scriptStatus("El guion no tiene cambios desde la última carga.");return false;}
     const keywords=el("scriptKeywords")?.value||"";
     const scenes=parseScreenplayToScriptScenes(rawText,keywords);
     if(!scenes.length)throw Error("No encontramos encabezados de escena. Usá INT. o EXT. al comienzo de cada escena; también podés indicar otros encabezados en Opciones de detección.");
@@ -2464,7 +2386,7 @@ function setupScheduleWheelScroll(){
     next.script.versions=next.script.versions.filter(v=>!v.draft||v.scenes?.length);
     const now=new Date().toISOString(),number=next.script.versions.length+1;
     const custom=source.type==='text'?(el("scriptVersionName")?.value||"").trim():"";
-    const version={id:uid("scrVer"),name:`V${number}`+(custom?" · "+custom:""),createdAt:now,updatedAt:now,keywords,scenes,rawText,source,authorName:window.RODA_STUDIO?.userName||"",draft:false};
+    const version={id:uid("scrVer"),name:`V${number}`+(custom?" · "+custom:""),createdAt:now,updatedAt:now,keywords,scenes,rawText,source,parserVersion:RodaScreenplay.parserVersion,authorName:window.RODA_STUDIO?.userName||"",draft:false};
     next.script.versions.push(version);next.script.activeVersionId=version.id;
     // Construct and size the complete next snapshot before replacing any project data.
     state=next;let result;
@@ -2486,107 +2408,9 @@ function setupScheduleWheelScroll(){
 
 
   // ======= Guion (versionado) =======
-    function parseScreenplayToScriptScenes(text, extraKeywordsCsv=""){
-    const rawLines = (text||"").split(/\r?\n/);
-    if(!rawLines.length) return [];
-
-    const extra = (extraKeywordsCsv||"")
-      .split(",")
-      .map(s=>s.trim())
-      .filter(Boolean)
-      .map(s=>s.toUpperCase());
-
-    function stripSceneNumber(line){
-      return String(line||"")
-        .replace(/^\s*\(?\s*\d+[A-Za-z]*\s*\)?\s*[.)-:]\s*/, "")
-        .replace(/^\s*\(?\s*\d+[A-Za-z]*\s*\)?\s+/, "");
-    }
-
-    function detectChapterMarker(line){
-      const t = String(line||"").trim();
-      if(!t) return null;
-      const up = t.toUpperCase();
-      // Ej: "CAPÍTULO 1", "CAPITULO 2:", "EPISODIO 3", "EP. 4", "CHAPTER 5"
-      const m1 = up.match(/^(?:CAP[ÍI]TULO|CAPITULO|EPISODIO|EP\.?|CHAPTER)\s*[:.\-]?\s*(\d{1,3})\b/);
-      if(m1) return Number(m1[1]);
-      return null;
-    }
-
-    function isHeading(line){
-      const cleaned = stripSceneNumber(line).trimStart();
-      const up = cleaned.toUpperCase();
-      for(const k of extra){ if(up.startsWith(k)) return true; }
-      const starters = [
-        "INT/EXT.", "INT/EXT ", "INT./EXT.", "INT./EXT ", "I/E.", "I/E ",
-        "INT.", "INT ", "INT-", "INT:",
-        "EXT.", "EXT ", "EXT-", "EXT:",
-        "INTERIOR", "EXTERIOR"
-      ];
-      return starters.some(s=>up.startsWith(s));
-    }
-
-    const out = [];
-    let current = null;
-    let autoN = 1;
-    let currentChapter = "";
-    let headingFound = false;
-
-    for(const raw of rawLines){
-      const line = String(raw ?? "").replace(/\s+$/, "");
-
-      const chap = detectChapterMarker(line);
-      if(chap !== null){
-        // Cierra la escena anterior (si venía en curso) y setea el capítulo para las siguientes
-        if(current){
-          out.push(finalize(current));
-          current = null;
-        }
-        currentChapter = chap;
-        continue;
-      }
-
-      if(isHeading(line.trim())){
-        if(current) out.push(finalize(current));
-        headingFound = true;
-        current = { rawHeading: line.trim(), body:[], autoNumber:autoN++, chapter: currentChapter };
-      }else{
-        if(!current) continue;
-        current.body.push(line);
-      }
-    }
-    if(current) out.push(finalize(current));
-    if(!headingFound) return [];
-
-    // normalize ids and return
-    return out.map(s=>({
-      id: uid("scrScene"),
-      number: canonSceneNumber(String(s.number)),
-      chapter: s.chapter ?? "",
-      slugline: s.slugline,
-      intExt: s.intExt || sluglineToIntExt(s.slugline),
-      location: s.location,
-      timeOfDay: s.timeOfDay,
-      body: s.body.join("\n").trim(),
-      summary: s.summary
-    }));
-
-    function finalize(s){
-      const heading = s.rawHeading || "";
-      let num = s.autoNumber;
-      // Accept existing numbers like 6A, 6B...
-      const mNum = heading.match(/^\s*(\d+)([A-Za-z]*)\b/);
-      if(mNum) num = canonSceneNumber(mNum[1] + (mNum[2]||""));
-
-      const slugline = stripSceneNumber(heading).trim();
-      const { location, timeOfDay } = sluglineToLocTOD(slugline);
-
-      const bodyText = (s.body||[]).join(" ").trim();
-      const summary = bodyText.slice(0, 220);
-      return { number:num, chapter: s.chapter ?? "", slugline, location, timeOfDay, body: s.body||[], summary };
-    }
+  function parseScreenplayToScriptScenes(text,keywords=""){
+    return RodaScreenplay.parse(text,keywords).map(scene=>({...scene,id:uid("scrScene")}));
   }
-
-
 
   function getActiveScriptVersion(){
     sanitizeScriptState({ migrateRawToLocal:true });

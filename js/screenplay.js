@@ -2,6 +2,60 @@
   const categories = ['cast','props','wardrobe','art','makeup','sound','sfx','vfx','vehicles','animals','extras'];
   const labels = {cast:'Cast',props:'Props',wardrobe:'Vestuario',art:'Arte',makeup:'Maquillaje',sound:'Sonido',sfx:'SFX',vfx:'VFX',vehicles:'Vehículos',animals:'Animales',extras:'Extras'};
   const normalize = s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const parserVersion=2;
+  const prefix=/^(?:(?:INT|EXT)\.?\s*\/\s*(?:INT|EXT)\.?|[IE]\/[IE]\.?|INTERIOR|EXTERIOR|INT|EXT)(?=$|[\s.:–—-])\s*[.:–—-]?\s*/i;
+  const moment=/\b(AMANECER|DAWN|ATARDECER|TARDE|SUNSET|DUSK|NOCHE|NIGHT|D[IÍ]A|DAY|MAÑANA|MORNING)\b/i;
+  function headingMetadata(heading){
+    const text=String(heading||'').trim();
+    const token=text.match(prefix)?.[0]||'';
+    const intExt=/^(?:INT|INTERIOR|I\/)/i.test(token)?'Int':/^(?:EXT|EXTERIOR|E\/)/i.test(token)?'Ext':'';
+    let location=text.replace(prefix,'').trim(),timeOfDay='';
+    const parts=location.split(/\s*[-–—]\s*/);
+    let found=-1;
+    for(let i=parts.length-1;i>=0;i--)if(moment.test(parts[i])){found=i;break;}
+    const match=(found>=0?parts[found]:location).match(moment);
+    if(match){
+      const word=normalize(match[1]);timeOfDay=/amanecer|dawn/.test(word)?'Amanecer':/atardecer|tarde|sunset|dusk/.test(word)?'Atardecer':/noche|night/.test(word)?'Noche':'Día';
+      location=found>0?parts.slice(0,found).join(' - '):location.slice(0,location.search(moment)).trim();
+    }
+    return {intExt,location,timeOfDay};
+  }
+  function parse(text,extraKeywordsCsv=''){
+    const lines=String(text||'').replace(/\r\n?|\u2028|\u2029/g,'\n').split('\n');
+    const extra=String(extraKeywordsCsv).split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    const canonical=n=>String(n).replace(/^0+(?=\d)/,'').toUpperCase();
+    function standard(line){
+      const t=line.replace(/^\.(?=\S)/,'').trim();
+      if(extra.some(k=>t.toUpperCase().startsWith(k)))return true;
+      if(!prefix.test(t))return false;
+      // Full words inside action prose are not sluglines ("Interior ambulancia, vemos…").
+      if(/^(INTERIOR|EXTERIOR)\b/i.test(t))return t.length<=160&&!/[,;!?]/.test(t)&&(t===t.toUpperCase()||/\s[-–—]\s/.test(t)&&moment.test(t));
+      return t.length<=200;
+    }
+    function heading(line){
+      const t=line.trim().replace(/^#{1,6}\s+/,'').replace(/^\*\*(.*?)\*\*$/,'$1');
+      const labeled=t.match(/^(?:ESCENA|SCENE|ESC\.?)\s*(?:N[º°o.]?\s*)?(\d+[A-Za-z]*)(?:\s*[.:)–—-]\s*|\s+|$)(.*)$/i);
+      if(labeled)return {number:canonical(labeled[1]),title:labeled[2].trim(),explicit:true};
+      const numbered=t.match(/^\(?\s*(\d+[A-Za-z]*)\s*\)?(?:[.):–—-]\s*|\s+)(.*)$/);
+      const title=(numbered?numbered[2]:t).replace(/^\.(?=\S)/,'');
+      return standard(title)?{number:numbered?canonical(numbered[1]):null,title,explicit:false}:null;
+    }
+    const scenes=[];let current=null,chapter='',autoNumber=1;
+    function finish(){if(!current)return;const body=current.lines.join('\n').trim();const meta=headingMetadata(current.slugline);scenes.push({number:current.number,chapter:current.chapter,slugline:current.slugline,...meta,body,summary:body.replace(/\s+/g,' ').slice(0,220)});current=null;}
+    for(let i=0;i<lines.length;i++){
+      const line=lines[i].replace(/\s+$/,'');
+      const ch=line.trim().match(/^(?:CAP[ÍI]TULO|EPISODIO|EP\.?|CHAPTER)\s*[:.\-]?\s*(\d{1,3})\b/i);
+      if(ch){finish();chapter=Number(ch[1]);autoNumber=1;continue;}
+      const h=heading(line);
+      if(h){
+        finish();
+        if(h.explicit&&!h.title){let j=i+1;while(j<lines.length&&!lines[j].trim())j++;if(j<lines.length&&standard(lines[j].trim())){h.title=lines[j].trim();i=j;}}
+        const number=h.number||String(autoNumber);autoNumber=Math.max(autoNumber+1,parseInt(number,10)+1);
+        current={number,chapter,slugline:h.title||'ESCENA '+number,lines:[]};
+      }else if(current)current.lines.push(line);
+    }
+    finish();return scenes;
+  }
   // These are suggestions grounded in words actually present in the scene, never inferred budgets or crew.
   const vocabulary = {
     props:['pistola','revolver','cuchillo','telefono','celular','carta','maleta','valija','mochila','llave','vaso','botella','copa','libro','computadora','laptop','paraguas','linterna','cigarrillo','reloj','dinero','arma'],
@@ -29,8 +83,8 @@
       const line=lines[i].trim();
       const cue=line.replace(/^@/,'').replace(/\s*\((?:V\.?O\.?|O\.?S\.?|O\.?C\.?|CONT.*|FUERA.*)\)\s*$/i,'').replace(/\^$/,'').trim();
       let next=i+1;while(next<lines.length&&!lines[next].trim())next++;
-      const excluded=/^(?:INT|EXT|CORTE|CUT|FADE|FUNDIDO|DISUELVE|TRANSICION|CONTINU[OA]|FIN|TITLE|TITULO|CAP[IÍ]TULO|EPISODIO)\b/i;
-      if(cue.length<55&&/^[\p{Lu}][\p{Lu}\p{N} .’'_-]*$/u.test(cue)&&!excluded.test(cue)&&!/[.!?:]$/.test(cue)&&next<lines.length&&next-i<=3&&(!/^[\p{Lu}\s]+$/u.test(lines[next].trim())||line.startsWith('@'))){add('cast',cue);}
+      const excluded=/^(?:INT|EXT|INTERIOR|EXTERIOR|ESCENA|SCENE|CORTE|CUT|FADE|FUNDIDO|DISUELVE|TRANSICION|CONTINU[OA]|FIN|TITLE|TITULO|CAP[IÍ]TULO|EPISODIO)\b/i;
+      if(cue.length<55&&/^(?:[\p{Lu}][\p{Lu}\p{N} .’'_-]*|\d+[A-Z]?)$/u.test(cue)&&!excluded.test(cue)&&!/[.!?:]$/.test(cue)&&next<lines.length&&next-i<=3&&(!/^[\p{Lu}\s]+$/u.test(lines[next].trim())||line.startsWith('@'))){add('cast',cue);}
       // Explicit production tags allow unusual elements to be recognized without guessing.
       for(const match of line.matchAll(/\[([^:\]]+):\s*([^\]]+)\]/g)){
         const key=normalize(match[1]);const cat=categories.find(c=>normalize(c)===key||normalize(labels[c])===key);
@@ -79,7 +133,7 @@
     if(!text?.trim())throw Error('No encontramos texto en el archivo. Si el PDF está escaneado, cargá una copia con texto seleccionable.');
     return text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
   }
-  const api={categories,labels,breakdown,docsLink,docsText,sceneKey,pdfLines,readFile};
+  const api={parserVersion,parse,headingMetadata,categories,labels,breakdown,docsLink,docsText,sceneKey,pdfLines,readFile};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.RodaScreenplay=api;
 })(typeof window!=='undefined'?window:globalThis);

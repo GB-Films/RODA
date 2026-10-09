@@ -1,12 +1,14 @@
 # Roda · GB Studio
 
-Abrí Roda en https://gbstudio.com.ar/roda/. Usa la cuenta de Google y los proyectos de GB Studio: elegí un cliente y un proyecto y tocá **Crear Roda**. El nombre, cliente y portada pertenecen al mismo proyecto usado por las demás apps. El editor conserva breakdown, jornadas, planes, equipo, shotlist y reportes; su interfaz usa negro, blanco y grises.
+Abrí Roda en https://gbstudio.com.ar/roda/. Usa la cuenta de Google y los proyectos de GB Studio: al elegir o crear un proyecto se abre directamente su único Roda. El nombre, cliente y portada pertenecen al mismo proyecto usado por las demás apps. El editor conserva breakdown, jornadas, planes, equipo, shotlist y reportes; su interfaz usa negro, blanco y grises.
 
 Los datos de Roda se guardan juntos dentro del proyecto del estudio. Los permisos se comprueban en el servidor, incluidas las cuentas de solo lectura y el vencimiento de la prueba. Antes de volver a Proyectos se terminan de guardar los cambios pendientes.
 
 La distribución integrada se copia en `roda/` del repositorio `GB-Films/GB-Studio` y se publica con su Hosting. `tests/studio-browser.cjs` comprueba el flujo con una sesión y servidor simulados; requiere Playwright, JSZip y `STUDIO_ROOT` apuntando al checkout de Studio. `node --test tests/screenplay.test.cjs` verifica el análisis de texto sin dependencias.
 
-## Guion · 1.1.0
+## Guion · 1.1.1
+
+El importador reconoce tanto encabezados tradicionales como `ESCENA 01  EXT. FÁBRICA - DÍA`, rótulos separados del encabezado y escenas de montaje. Los párrafos narrativos que empiezan con «Interior» o «Exterior» no se toman como escenas. El reparto admite nombres numéricos, como 700 y 22. Cada importación guarda la versión del analizador para permitir reprocesar textos cargados con una detección anterior.
 
 La sección **Guion** permite cargar PDF con texto seleccionable, DOCX, TXT o Fountain, o pegar el texto. Cada carga con cambios crea una actualización compartida con fecha, autor y origen. Las versiones anteriores se pueden consultar, descargar como texto y restaurar creando una nueva actualización. No se borran automáticamente. El texto del archivo se procesa en el navegador; la copia de guion se guarda en el proyecto con sus mismos permisos. Los PDF escaneados necesitan una copia con texto.
 
