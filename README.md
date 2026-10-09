@@ -1,4 +1,14 @@
-# GB Production Board
+# Roda · GB Studio
+
+Abrí Roda en https://gbstudio.com.ar/roda/. Usa la cuenta de Google y los proyectos de GB Studio: elegí un cliente y un proyecto y tocá **Crear Roda**. El nombre, cliente y portada pertenecen al mismo proyecto usado por las demás apps. El editor conserva breakdown, jornadas, planes, equipo, shotlist y reportes; su interfaz usa negro, blanco y grises.
+
+Los datos de Roda se guardan juntos dentro del proyecto del estudio. Los permisos se comprueban en el servidor, incluidas las cuentas de solo lectura y el vencimiento de la prueba. Antes de volver a Proyectos se terminan de guardar los cambios pendientes.
+
+La distribución integrada se copia en `roda/` del repositorio `GB-Films/GB-Studio` y se publica con su Hosting. `tests/studio-browser.cjs` comprueba el flujo con una sesión y servidor simulados; requiere Playwright y `STUDIO_ROOT` apuntando al checkout de Studio.
+
+## Proyectos anteriores
+
+Los proyectos del Firebase anterior se conservan en https://gb-films.github.io/RODA/?legacy=1. No se migran automáticamente ni se mezclan con los proyectos de Studio. La siguiente configuración corresponde a esa versión anterior.
 
 App web estatica para organizar proyectos de produccion: breakdown, plan de rodaje, equipo, reportes, call sheets y shotlist.
 

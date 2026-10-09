@@ -177,6 +177,7 @@ function sanitizeScriptState(opts={}){
   }
 
   function loadEditUnlocked(){
+    if(window.RODA_STUDIO)return window.RODA_STUDIO.canEdit;
     try{
       const k = getEditUnlockKey();
       const v = sessionStorage.getItem(k);
@@ -209,11 +210,12 @@ function sanitizeScriptState(opts={}){
   function updateModeBanner(){
     const pill = document.getElementById("modeBanner");
     if(!pill) return;
+    if(window.RODA_STUDIO){pill.textContent=window.RODA_STUDIO.canEdit?"Edición · GB Studio":"Solo lectura · GB Studio";return;}
     pill.innerHTML = editUnlocked ? "✏️ Edición (click para bloquear)" : "🔒 Lector (click para editar)";
   }
 
   function setEditUnlocked(v){
-    editUnlocked = !!v;
+    editUnlocked = window.RODA_STUDIO ? window.RODA_STUDIO.canEdit : !!v;
     try{ sessionStorage.setItem(getEditUnlockKey(), editUnlocked ? "1" : "0"); }catch(_e){}
     try{ document.body.classList.toggle("readOnly", !editUnlocked); }catch(_e){}
     updateModeBanner();
@@ -228,6 +230,7 @@ function sanitizeScriptState(opts={}){
     try{ pill.dataset.roAllow = "1"; }catch(_e){}
     pill.title = "Click para alternar edición";
     pill.addEventListener("click", ()=>{
+      if(window.RODA_STUDIO)return;
       if(editUnlocked){
         const ok = confirm("¿Volver a modo lector?");
         if(ok) setEditUnlocked(false);
@@ -661,6 +664,7 @@ const shotlistCollapsedSceneIds = new Set();
       if(st) st.textContent = "Lector";
       return;
     }
+    if(window.RODA_STUDIO)window.RODA_UNSAVED=true;
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
     const saved = el("savedAtText");
@@ -724,6 +728,7 @@ const shotlistCollapsedSceneIds = new Set();
 
         // Si el remoto cambio desde la ultima vez que lo vimos, solo lo absorbemos
         // cuando es mas nuevo que lo local. Un cambio recien cargado no se borra.
+        if(window.RODA_STUDIO && changedByStamp){saveConflictBackup(cfg.binId,state);window.dispatchEvent(new CustomEvent("roda-sync-error",{detail:"Otra persona actualizó este Roda. Tus cambios quedan en una copia local. Actualizá antes de continuar."}));updateSyncPill("Cambios pendientes");return;}
         if(changedByStamp && tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)){
           saveConflictBackup(cfg.binId, state); // copia local por si hay conflicto
           state = remoteCombined;
@@ -787,6 +792,7 @@ const shotlistCollapsedSceneIds = new Set();
         StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
       }
 
+      if(window.RODA_STUDIO && String(state.meta.updatedAt)===pushStamp)window.RODA_UNSAVED=false;
       updateSyncPill(remoteSyncLabel());
     }catch(err){
       updateSyncPill("Local");
@@ -5073,7 +5079,7 @@ function bindSchedDayPickerUI(){
 
     const daysToShow = getScheduleDaysFiltered();
 
-    if(!state.shootDays.length){
+    if(!state.shootDays.length && !window.RODA_STUDIO){
       board.innerHTML = `<div class="muted">No hay días cargados.</div>`;
       setupScheduleTopScrollbar();
       return;
@@ -8817,6 +8823,7 @@ async function printPlanGeneral(){
 
   async function createProjectFromUI(){
     if(createProjectFromUI._running) return;
+    if(window.RODA_STUDIO){window.GBStudioProjects.openPicker();return;}
     const name = prompt("Nombre del nuevo proyecto:");
     if(name === null) return;
     const cleanName = String(name || "").trim();
@@ -10151,7 +10158,7 @@ if(_bf) touch();
     el("projectTitle").value = state.meta.title || "Proyecto";
     const _savedAt = el("savedAtText");
     if(_savedAt) _savedAt.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-if(!state.scenes.length){
+if(!state.scenes.length && !window.RODA_STUDIO){
       state.scenes.push({
         id: uid("scene"),
         number:"1",
@@ -10277,6 +10284,9 @@ if(!state.scenes.length){
     });
 
     try{ document.body.classList.remove("bootLoading"); }catch(_e){}
+    window.RODA_FLUSH=async()=>{const until=Date.now()+30000;while(autosyncInFlight){if(Date.now()>until)throw Error("Todavía estamos guardando. Volvé a intentar.");await new Promise(resolve=>setTimeout(resolve,30));}if(window.RODA_UNSAVED)await autosyncRun();if(window.RODA_UNSAVED)throw Error("Hay cambios pendientes. Actualizá o guardá una copia antes de salir.");};
+    window.addEventListener("beforeunload",event=>{if(window.RODA_STUDIO&&window.RODA_UNSAVED){event.preventDefault();event.returnValue="";}});
+    window.RODA_READY=true;window.dispatchEvent(new Event("roda-ready"));
   }if(document.readyState === "loading") window.addEventListener("DOMContentLoaded", init);
   else init();
 })();

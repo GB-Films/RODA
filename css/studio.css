@@ -1,0 +1,62 @@
+:root,html[data-theme="pink"]{
+  color-scheme:dark;
+  --bg:#101010;--panel:#161616;--card:#1b1b1b;
+  --bg-rgb:16,16,16;--panel-rgb:22,22,22;--panel-deep-rgb:18,18,18;--card-rgb:27,27,27;
+  --text:#f5f5f5;--muted:#aaa;--border:#333;--border2:#484848;--accent:#fff;--accent-rgb:255,255,255;
+  --ok:#ddd;--ok-rgb:221,221,221;--shadow:0 12px 30px #0004;
+}
+body{background:var(--bg);}
+[hidden],.shell[hidden]{display:none!important;}
+body.roda-studio{display:flex;flex-direction:column;height:100dvh;overflow:hidden;}
+.roda-studio>.shell{flex:1;min-height:0;height:auto;}
+.roda-studio .sidebar{background:#141414;border-right:1px solid #333;}
+.roda-studio .brand{background:#181818;border-radius:10px;}
+.roda-studio .card{background:#191919;border-radius:10px;box-shadow:none;}
+.roda-studio .cardHeader{background:#1b1b1b;}
+.roda-studio .navBtn{border-radius:7px;}
+.roda-studio .navBtn.active{background:#fff;color:#111;border-color:#fff;}
+.roda-studio .navBtn.active .navIco{color:#111;background:#e5e5e5;border-color:#ccc;}
+.roda-studio .btn.primary{background:#fff;color:#111;border-color:#fff;}
+.roda-studio .btn.primary:hover{background:#ddd;}
+.roda-studio :is(.input,.textarea,.btn){border-radius:7px;}
+.roda-studio :is(.input,.textarea):focus{outline:2px solid #fff;outline-offset:2px;}
+.roda-studio #projectSwitch,.roda-studio #btnNewProject,.roda-studio #btnRefreshProjects{display:none;}
+.roda-project-change{display:block;margin-top:10px;color:#ddd;font-size:12px;text-decoration:none;}
+.roda-project-change:hover{color:#fff;text-decoration:underline;}
+.roda-studio .projectActions{display:none;}
+.roda-studio #projectTitle{font-weight:700;}
+.roda-studio .modeBanner{border-radius:8px;cursor:default;}
+.roda-studio .navIco{filter:grayscale(1);}
+.roda-studio .gbp-button.primary{background:#fff;border-color:#fff;color:#111;}
+.roda-studio .gbp-eyebrow{color:#ddd;}
+.roda-studio :is(.gbp-search-row input,.gbp-search-row select,.gbp-dialog input,.gbp-dialog select){background:#1b1b1b;border-color:#444;color:#fff;}
+.roda-studio .gbp-dialog{background:#171717;}
+.roda-home{flex:1;overflow:auto;padding:32px clamp(16px,3vw,48px);}
+.roda-home-heading{display:flex;align-items:center;gap:16px;margin:0 auto 28px;max-width:1448px;}
+.roda-home-heading img{width:56px;height:56px;filter:grayscale(1);}
+.roda-home-heading h1{margin:0;font-size:30px;letter-spacing:-1px;}
+.roda-home-heading p{margin:6px 0 0;color:#aaa;line-height:1.5;font-size:14px;}
+#roda-projects{max-width:1448px;margin:auto;}
+.roda-back{color:#ccc;text-decoration:none;font-size:12px;white-space:nowrap;}
+.roda-back:hover{color:#fff;}
+.roda-sync-message{position:fixed;bottom:56px;right:16px;z-index:80;max-width:min(480px,calc(100vw - 32px));padding:14px;background:#252525;color:#fff;border:1px solid #888;border-radius:8px;}
+.roda-studio .gbp-context{display:none;}
+.roda-account-dialog{max-width:420px;border:1px solid #444;border-radius:12px;padding:24px;background:#171717;color:#fff;}
+.roda-account-dialog::backdrop{background:#000a;}
+@media(max-width:820px){
+  .roda-studio .studio-global-header{z-index:90;height:54px;min-height:54px;}
+  .roda-studio .mTopbar{top:54px;background:#161616;}
+  .roda-studio .mDayBar{top:112px;background:#161616;}
+  .roda-studio .sidebar{top:112px;bottom:0;}
+  .roda-studio .sidebar:not(.mOpen){transform:translateX(-105%);}
+  .roda-studio .sidebar.mOpen{transform:translateX(0);}
+  .roda-studio .mBackdrop{top:112px;}
+  .roda-studio #mProjectSwitch{display:none;}
+  .roda-studio .mTopMid{justify-content:flex-start;}
+  .roda-studio .modeBanner{bottom:12px;font-size:10px;}
+  .roda-studio .shell{overflow:auto;}
+  .roda-studio .studio-global-actions{gap:10px;}
+  .roda-studio .studio-global-account{max-width:120px;}
+  .roda-home{padding:24px 16px;}
+}
+@media print{.studio-global-header,.roda-home,.roda-sync-message{display:none!important;}body.roda-studio{display:block;height:auto;overflow:visible;}.roda-studio>.shell{height:auto;}}
