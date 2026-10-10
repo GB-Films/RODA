@@ -3076,7 +3076,8 @@ function setupScheduleWheelScroll(){
       if(!person){if(!input.value.trim())return;person={id:uid('crew'),area:'Cast',role:g.name,name:'',phone:'',email:'',notes:''};state.crew.push(person);}
       // Preserve legacy entries whose character was stored in name, not role.
       if(!String(person.role||'').trim())person.role=g.name;
-      person.name=input.value.trim();touch();renderCastDirectory();refreshElementSuggestions();
+      person.name=input.value.trim();touch();refreshElementSuggestions();
+      el('castStats').querySelectorAll('strong')[1].textContent=all.filter(g=>findCastCrewEntryByName(g.name)?.name).length;
     };});
     root.querySelectorAll('[data-cast-plan]').forEach(b=>b.onclick=()=>{showView('dayplan');resetPlanFilters();el('dpCastFilter').value=normName(entries[Number(b.dataset.castPlan)].name);el('dpCastFilter').closest('details').open=true;renderSceneBank();});
     bindSceneLinks(root);el('castSearch').oninput=renderCastDirectory;
