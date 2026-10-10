@@ -1,6 +1,6 @@
 (function(){
   const el = (id)=>document.getElementById(id);
-  const views = ["script","breakdown","shooting","dayplan","schedule","shotlist","elements","crew","reports","callsheet"];
+  const views = ["script","breakdown","locations","cast","shooting","dayplan","schedule","shotlist","elements","crew","reports","callsheet"];
 
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
@@ -315,7 +315,7 @@ const shotlistCollapsedSceneIds = new Set();
       "modeBanner",
       "btnNavCollapse","projectSwitch","btnNewProject","btnRefreshProjects",
       "sceneSearch","sceneFilterTOD",
-      "dpBankSearch","shootDaySelect","dayplanSelect","shotDaySelect",
+      "dpBankSearch","dpBankFilter","dpLocationFilter","dpSetFilter","dpCastFilter","dpClearFilters","shootDaySelect","dayplanSelect","shotDaySelect",
       "dayplanSnap","dayplanZoom",
       "schedSearch","schedZoom","schedSnap","btnSchedDays","btnSchedPrint","schedDayPicker","schedDayPickerClose","schedCalPrev","schedCalNext","schedCalAll","schedCalNone","schedCalDone","schedCalGrid",
       "elxSearch","crewSearch","reportsSearch",
@@ -456,6 +456,8 @@ const shotlistCollapsedSceneIds = new Set();
     const iconMap = {
       script:"▤",
       breakdown:"🧩",
+      locations:"⌖",
+      cast:"♙",
       shooting:"🕒",
       dayplan:"📋",
       schedule:"🗓️",
@@ -466,6 +468,20 @@ const shotlistCollapsedSceneIds = new Set();
       callsheet:"🧾"
     };
 
+    const iconPaths={
+      script:'M6 3h9l3 3v15H6z M9 10h6 M9 14h6 M9 18h4',
+      breakdown:'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z',
+      locations:'M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0z M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+      cast:'M15 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M5 21v-3a7 7 0 0 1 14 0v3',
+      shooting:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M12 7v5l3 2',
+      dayplan:'M5 4h14v17H5z M9 2v4 M15 2v4 M8 10h8 M8 14h8 M8 18h5',
+      schedule:'M3 5h18v16H3z M3 10h18 M9 10v11 M15 10v11 M7 3v4 M17 3v4',
+      shotlist:'M3 6h18v14H3z M3 10h18 M7 6l3 4 M14 6l3 4 M10 14l5 2-5 2z',
+      elements:'M4 8h16v13H4z M8 8V4h8v4 M4 13h16 M10 13v3h4v-3',
+      crew:'M10 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M2 20v-2a5 5 0 0 1 10 0v2 M19 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M14 13a5 5 0 0 1 8 5v2',
+      reports:'M4 6h16 M7 12h10 M10 18h4',
+      callsheet:'M5 3h14v18H5z M8 17v-4 M12 17V9 M16 17v-6'
+    };
     // Ensure icon + label structure
     document.querySelectorAll(".navBtn").forEach(nb=>{
       const view = nb.dataset.view || "";
@@ -489,6 +505,7 @@ const shotlistCollapsedSceneIds = new Set();
         glyph = ((t[0]||"") + (t[1]||"")).toUpperCase();
       }
       ico.textContent = glyph;
+      if(iconPaths[view])ico.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${iconPaths[view]}"/></svg>`;
     });
 
     function apply(collapsed){
@@ -2238,6 +2255,8 @@ function setupScheduleWheelScroll(){
 }
 
   function showView(name){
+    dayplanMetaOpen = false;
+    document.body.dataset.rodaView=name;
     // Reset print-only mode if a browser skipped the afterprint event.
     try{ clearPrintOrientation(); }catch(_e){}
     try{ cleanupGbPrintRoot(); }catch(_e){}
@@ -2254,6 +2273,8 @@ function setupScheduleWheelScroll(){
     try{ if(isMobileUI() && window.MobileChrome?.syncDayBarActive) window.MobileChrome.syncDayBarActive(name); }catch(_e){}
 
     if(name==="script") renderScriptUI();
+    if(name==="locations") renderLocations();
+    if(name==="cast") renderCastDirectory();
     if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
     if(name==="dayplan"){ renderSceneBank(); renderDayPlan(); applyBankCollapsedUI(); }
@@ -2980,7 +3001,88 @@ function setupScheduleWheelScroll(){
     }
   }
 
-  function sceneCardNode(scene, mode="bank", dayId=null){
+  function shootingLocations(){ return Array.isArray(state.shootingLocations) ? state.shootingLocations : []; }
+  function shootingLocation(scene){ return shootingLocations().find(l=>l.id===scene?.shootingLocationId) || null; }
+  function sceneDays(scene){ return state.shootDays.filter(d=>(d.sceneIds||[]).includes(scene.id)); }
+  function sceneDayLabel(scene){
+    return sceneDays(scene).map(d=>`${d.label || "Jornada"}${d.date ? " · "+formatDDMMYYYY(d.date) : ""}`).join(" / ");
+  }
+  function locationOptions(value="", mixed=false){
+    return `${mixed ? '<option value="__mixed" selected disabled>Varios lugares</option>' : ''}<option value="">Sin asignar</option>` + shootingLocations().map(l=>`<option value="${esc(l.id)}"${l.id===value ? " selected" : ""}>${esc(l.name)}</option>`).join("");
+  }
+  function sceneLinks(scenes){
+    return scenes.map(s=>`<button class="scene-link" data-scene="${esc(s.id)}" data-ro-allow="1" title="${esc(s.slugline)}">${s.chapter ? esc(s.chapter)+" · " : ""}#${esc(s.number)}</button>`).join("");
+  }
+  function bindSceneLinks(root){
+    root.querySelectorAll("[data-scene]").forEach(b=>b.onclick=()=>jumpToSceneInBreakdown(b.dataset.scene));
+  }
+  let locationFilter = "all";
+  function renderLocations(){
+    const directory=el("locationDirectory"), sets=el("locationSets"), detail=el("locationDetail");
+    if(!directory || !sets) return;
+    const locations=shootingLocations(), assigned=state.scenes.filter(s=>shootingLocation(s)).length;
+    const groups=new Map();
+    for(const s of state.scenes){
+      const label=String(s.location||"").trim() || "Sin espacio en el guion", key=normName(label);
+      if(!groups.has(key)) groups.set(key,{label,scenes:[]});
+      groups.get(key).scenes.push(s);
+    }
+    el("locationStats").innerHTML=`<div><strong>${groups.size}</strong><span>Espacios del guion</span></div><div><strong>${locations.length}</strong><span>Lugares de rodaje</span></div><div><strong>${assigned}/${state.scenes.length}</strong><span>Escenas con lugar asignado</span></div>`;
+    const choices=[{id:"all",name:"Todos los espacios"},{id:"unassigned",name:"Sin lugar asignado"},...locations];
+    if(!choices.some(l=>l.id===locationFilter)) locationFilter="all";
+    const matches=s=>locationFilter==="all" || (locationFilter==="unassigned" ? !shootingLocation(s) : s.shootingLocationId===locationFilter);
+    directory.innerHTML=choices.map(l=>`<button class="directory-item ${l.id===locationFilter?'selected':''}" data-location="${esc(l.id)}" data-ro-allow="1" aria-pressed="${l.id===locationFilter}"><span>${esc(l.name)}</span><span class="count">${state.scenes.filter(s=>l.id==='all' || (l.id==='unassigned' ? !shootingLocation(s) : s.shootingLocationId===l.id)).length}</span></button>`).join("");
+    directory.querySelectorAll("[data-location]").forEach(b=>b.onclick=()=>{locationFilter=b.dataset.location;renderLocations();});
+    const selected=locations.find(l=>l.id===locationFilter);
+    detail.innerHTML=selected ? `<form class="location-edit stack-form"><h3>Datos del lugar</h3><label>Nombre<input class="input" name="name" required maxlength="160" value="${esc(selected.name)}"/></label><label>Dirección<input class="input" name="address" maxlength="300" value="${esc(selected.address||'')}"/></label><label>Notas de producción<textarea class="textarea" name="notes" rows="2" maxlength="3000">${esc(selected.notes||'')}</textarea></label><div><button class="btn" type="submit">Guardar datos</button> <button class="btn" type="button" data-plan-location="${esc(selected.id)}" data-ro-allow="1">Ver en el plan →</button></div></form>` : "";
+    detail.querySelector("form")?.addEventListener("submit",e=>{e.preventDefault();if(isReadOnly())return roToast();const data=new FormData(e.target),name=String(data.get('name')).trim();if(!name)return; if(locations.some(l=>l.id!==selected.id&&normName(l.name)===normName(name)))return toast("Ya existe un lugar con ese nombre.");Object.assign(selected,{name,address:String(data.get('address')).trim(),notes:String(data.get('notes')).trim()});touch();renderLocations();renderSceneBank();toast("Lugar actualizado");});
+    detail.querySelector("[data-plan-location]")?.addEventListener("click",()=>{showView("dayplan");resetPlanFilters();el("dpLocationFilter").value=selected.id;el('dpLocationFilter').closest('details').open=true;renderSceneBank();});
+    const q=normName(el("locationSearch").value);
+    const visible=[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label,'es')).map(g=>({...g,visible:g.scenes.filter(matches)})).filter(g=>g.visible.length && (!q || normName(g.label+' '+g.visible.map(s=>s.number+' '+s.slugline).join(' ')).includes(q)));
+    sets.innerHTML=visible.map((g,i)=>{
+      const ids=union(g.visible.map(s=>shootingLocation(s)?.id || '__none')), mixed=ids.length>1;
+      return `<article class="location-set" data-group="${i}"><div class="set-heading"><div><h3>${esc(g.label)}</h3><span class="muted small">${g.visible.length} escena${g.visible.length===1?'':'s'} · ${g.visible.filter(s=>sceneDays(s).length).length} programadas</span></div><label class="set-assignment">Lugar de rodaje<select class="input" data-assign-group="${i}" aria-label="Lugar de rodaje de ${esc(g.label)}">${locationOptions(ids[0],mixed)}</select></label></div><details><summary data-ro-allow="1">Ver escenas y jornadas</summary><div class="set-scenes">${g.visible.map(s=>`<div class="set-scene"><div>${sceneLinks([s])}<span>${esc(s.slugline)}</span><small class="${sceneDays(s).length?'text-scheduled':'muted'}">${esc(sceneDayLabel(s)||'Pendiente de programar')}</small></div><select class="input" data-assign-scene="${esc(s.id)}" aria-label="Lugar de rodaje de escena ${esc(s.number)}">${locationOptions(shootingLocation(s)?.id)}</select></div>`).join('')}</div></details></article>`;
+    }).join('') || '<div class="empty-state">No hay espacios para este filtro. Cargá tu guion en la sección Guion o elegí otro filtro.</div>';
+    sets.querySelectorAll("[data-assign-group],[data-assign-scene]").forEach(select=>select.onchange=()=>{
+      if(isReadOnly())return roToast();
+      if(select.value && !locations.some(l=>l.id===select.value))return;
+      const targets=select.dataset.assignScene ? [getScene(select.dataset.assignScene)] : visible[Number(select.dataset.assignGroup)].visible;
+      targets.filter(Boolean).forEach(s=>{s.shootingLocationId=select.value;});touch();renderLocations();renderSceneBank();
+    });
+    bindSceneLinks(sets);
+    el("locationSearch").oninput=renderLocations;
+    el("locationCreateForm").onsubmit=e=>{
+      e.preventDefault();if(isReadOnly())return roToast();const data=new FormData(e.target),name=String(data.get('name')).trim();if(!name)return;
+      if(locations.some(l=>normName(l.name)===normName(name)))return toast("Ya existe un lugar con ese nombre.");
+      const location={id:uid('location'),name,address:String(data.get('address')).trim(),notes:''};
+      state.shootingLocations=[...locations,location];locationFilter='all';touch();e.target.reset();el('locationCreate').open=false;renderLocations();renderSceneBank();toast('Lugar creado. Asignalo a los espacios del guion.');
+    };
+    if(isReadOnly())el('view-locations').querySelectorAll('input:not([data-ro-allow]),select,textarea,button:not([data-ro-allow])').forEach(n=>n.disabled=true);
+  }
+  function renderCastDirectory(){
+    const root=el('castDirectory');if(!root)return;
+    const groups=new Map();
+    for(const s of state.scenes)for(const name of s.elements?.cast||[]){const key=normName(name);if(!key)continue;if(!groups.has(key))groups.set(key,{name,scenes:[]});const g=groups.get(key);if(!g.scenes.includes(s))g.scenes.push(s);}
+    for(const name of getCastRoster())if(!groups.has(normName(name)))groups.set(normName(name),{name,scenes:[]});
+    const all=[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    el('castStats').innerHTML=`<div><strong>${all.length}</strong><span>Personajes</span></div><div><strong>${all.filter(g=>findCastCrewEntryByName(g.name)?.name).length}</strong><span>Con intérprete</span></div><div><strong>${state.shootDays.length}</strong><span>Jornadas de rodaje</span></div>`;
+    const q=normName(el('castSearch').value), entries=all.filter(g=>!q||normName(g.name+' '+(findCastCrewEntryByName(g.name)?.name||'')).includes(q));
+    root.innerHTML=entries.map((g,i)=>{
+      const person=findCastCrewEntryByName(g.name),days=state.shootDays.filter(d=>g.scenes.some(s=>(d.sceneIds||[]).includes(s.id)));
+      return `<article class="card cast-card"><div class="cardContent"><div class="cast-title"><span class="cast-avatar">${esc(g.name.slice(0,2))}</span><div><h2>${esc(g.name)}</h2><span class="muted small">${g.scenes.length} escenas · ${days.length} jornadas</span></div></div><label>Intérprete<input class="input" data-cast-entry="${i}" maxlength="160" value="${esc(person?.name||'')}" placeholder="Asignar actor o actriz"/></label><div class="scene-links">${sceneLinks(g.scenes)}</div><p class="muted small">${esc(days.map(d=>(d.label||'Jornada')+(d.date?' · '+formatDDMMYYYY(d.date):'')).join(' / ')||'Sin jornadas programadas')}</p><button class="btn small" data-cast-plan="${i}" data-ro-allow="1">Ver escenas en el plan →</button></div></article>`;
+    }).join('')||'<div class="empty-state">No hay personajes para esta búsqueda. Revisá el reparto detectado en el desglose del guion.</div>';
+    root.querySelectorAll('[data-cast-entry]').forEach(input=>{input.disabled=isReadOnly();input.onchange=()=>{
+      if(isReadOnly())return roToast();const g=entries[Number(input.dataset.castEntry)];let person=findCastCrewEntryByName(g.name);
+      if(!person){if(!input.value.trim())return;person={id:uid('crew'),area:'Cast',role:g.name,name:'',phone:'',email:'',notes:''};state.crew.push(person);}
+      // Preserve legacy entries whose character was stored in name, not role.
+      if(!String(person.role||'').trim())person.role=g.name;
+      person.name=input.value.trim();touch();renderCastDirectory();refreshElementSuggestions();
+    };});
+    root.querySelectorAll('[data-cast-plan]').forEach(b=>b.onclick=()=>{showView('dayplan');resetPlanFilters();el('dpCastFilter').value=normName(entries[Number(b.dataset.castPlan)].name);el('dpCastFilter').closest('details').open=true;renderSceneBank();});
+    bindSceneLinks(root);el('castSearch').oninput=renderCastDirectory;
+  }
+
+  function sceneCardNode(scene, mode="bank", dayId=null, planBank=false){
     const node = document.createElement("div");
     node.className = "sceneCard";
     node.draggable = true;
@@ -2992,10 +3094,21 @@ function setupScheduleWheelScroll(){
       node.innerHTML = `
         <div class="left">
           <div class="title">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>
-          <div class="meta">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")}</div>
+          <div class="meta">${esc(shootingLocation(scene)?.name || 'Lugar de rodaje sin asignar')}</div>
+          <div class="scene-status ${assigned?'scheduled':'pending'}">${assigned ? '✓ '+esc(sceneDayLabel(scene)) : '○ Pendiente'}</div>
         </div>
-        <div class="right"><span class="dragHandle">⠿</span></div>
+        <div class="right">${planBank ? `<button class="btn icon scene-plan-action" type="button" ${assigned?'data-ro-allow="1"':''} aria-label="${assigned?'Ver jornada de':'Programar'} escena ${esc(scene.number)}" title="${assigned?'Ver en su jornada':'Agregar al final del día seleccionado'}">${assigned?'↗':'+'}</button>` : '<span class="dragHandle">⠿</span>'}</div>
       `;
+      node.querySelector('.scene-plan-action')?.addEventListener('click',e=>{
+        e.stopPropagation();hideHoverTip();
+        const existingDay=sceneAssignedDayId(scene.id);
+        if(existingDay){selectedDayplanDayId=existingDay;selectedDayId=existingDay;dayplanMetaOpen=false;renderDayPlan();renderSceneBank();const block=el('dpLane').querySelector(`[data-id="${scene.id}"]`);block?.scrollIntoView({block:'center'});return;}
+        if(isReadOnly())return roToast();
+        const day=getDay(selectedDayplanDayId);if(!day)return toast('Creá un día de rodaje para programar escenas.');
+        ensureDayTimingMaps(day);const items=buildDayplanItems(day),start=Math.max(0,...items.map(i=>(i.start||0)+(i.dur||0)));
+        if(start+60>dayplanAvailSpan(day))return toast('Este día no tiene una hora libre al final. Ajustá sus horarios o elegí otro día.');
+        day.sceneIds.push(scene.id);day.times[scene.id]=start;day.durations[scene.id]=60;touch();renderSceneBank();renderDayPlan();renderDaysBoard();renderDayDetail();renderScheduleBoard();renderReportsDetail();
+      });
     }else{
       // mode === "day"
       node.innerHTML = `
@@ -3052,6 +3165,19 @@ function setupScheduleWheelScroll(){
   }
 
   function renderSceneBank(){
+    const fillFilter=(id, label, options)=>{
+      const select=el(id);if(!select)return;const value=select.value;
+      select.innerHTML=`<option value="">${label}</option>`+options.map(([value,text])=>`<option value="${esc(value)}">${esc(text)}</option>`).join('');
+      select.value=[...select.options].some(o=>o.value===value)?value:'';
+      select.onchange=renderSceneBank;
+    };
+    fillFilter('dpLocationFilter','Todos los lugares',[['__none','Sin lugar asignado'],...shootingLocations().map(l=>[l.id,l.name])]);
+    const sets=new Map(),cast=new Map();
+    for(const s of state.scenes){if(s.location)sets.set(normName(s.location),s.location);for(const name of s.elements?.cast||[])cast.set(normName(name),name);}
+    for(const name of getCastRoster())if(!cast.has(normName(name)))cast.set(normName(name),name);
+    fillFilter('dpSetFilter','Todos los espacios',[...sets].sort((a,b)=>a[1].localeCompare(b[1],'es')));
+    fillFilter('dpCastFilter','Todos los personajes',[...cast].sort((a,b)=>a[1].localeCompare(b[1],'es')));
+    if(el('dpClearFilters'))el('dpClearFilters').onclick=()=>{resetPlanFilters();renderSceneBank();};
     function renderInto(wrapId, searchId, filterId){
       const wrap = el(wrapId);
       if(!wrap) return;
@@ -3062,19 +3188,34 @@ function setupScheduleWheelScroll(){
 
       let list = state.scenes.slice();
       if(filter==="unassigned") list = list.filter(s=>!sceneAssignedDayId(s.id));
+      if(filter==="assigned") list = list.filter(s=>sceneAssignedDayId(s.id));
+      if(filter==="today") list = list.filter(s=>sceneDays(s).some(d=>d.id===selectedDayplanDayId));
+      if(wrapId==='dpSceneBankList'){
+        const loc=el('dpLocationFilter')?.value,set=el('dpSetFilter')?.value,cast=el('dpCastFilter')?.value;
+        if(loc)list=list.filter(s=>loc==='__none'?!shootingLocation(s):s.shootingLocationId===loc);
+        if(set)list=list.filter(s=>normName(s.location)===set);
+        if(cast)list=list.filter(s=>(s.elements?.cast||[]).some(n=>normName(n)===cast));
+        const assigned=state.scenes.filter(s=>sceneAssignedDayId(s.id)).length;
+        el('dpBankProgress').innerHTML=`<span class="text-scheduled">✓ ${assigned} programadas</span><span>${state.scenes.length-assigned} pendientes</span>`;
+      }
       if(q){
         list = list.filter(s=>{
-          const hay = `${s.number} ${s.slugline} ${s.location} ${s.summary}`.toLowerCase();
+          const hay = `${s.number} ${s.slugline} ${s.location} ${shootingLocation(s)?.name||''} ${(s.elements?.cast||[]).join(' ')} ${s.summary}`.toLowerCase();
           return hay.includes(q);
         });
       }
-      for(const s of list) wrap.appendChild(sceneCardNode(s, "bank"));
+      for(const s of list) wrap.appendChild(sceneCardNode(s, "bank",null,wrapId==='dpSceneBankList'));
+      if(!list.length)wrap.innerHTML='<div class="empty-state">No hay escenas para estos filtros.</div>';
     }
 
     // Call Diario
     renderInto("sceneBankList", "bankSearch", "bankFilter");
     // Plan de Rodaje (vista diaria)
     renderInto("dpSceneBankList", "dpBankSearch", "dpBankFilter");
+  }
+  function resetPlanFilters(){
+    for(const id of ['dpLocationFilter','dpSetFilter','dpCastFilter','dpBankSearch'])if(el(id))el(id).value='';
+    if(el('dpBankFilter'))el('dpBankFilter').value='all';
   }
 
   function addShootDay(){
@@ -4947,7 +5088,7 @@ function bindSchedDayPickerUI(){
             elemsTxt = parts.join(" ");
           }catch(_e){ elemsTxt = ""; }
 
-          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""} ${elemsTxt}`.toLowerCase();
+          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${shootingLocation(s)?.name||''} ${s.summary||""} ${elemsTxt}`.toLowerCase();
           if(!hay.includes(q)) continue;
         }
 
@@ -4973,6 +5114,7 @@ function bindSchedDayPickerUI(){
           <div class="schedContent">
             <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
             <div class="meta">${esc(startTxt)} - ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
+            ${shootingLocation(s) ? `<div class="meta">⌖ ${esc(shootingLocation(s).name)}</div>` : ''}
             ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
           </div>
           <div class="resize" title="Cambiar duración"></div>
@@ -5441,6 +5583,7 @@ function updateScheduleDayDOM(dayId){
   let dayplanLastTapAt = 0;
 
   let dayplanMetaOpen = false;
+  let dayplanMetaDayId = null;
 
   const DAYPLAN_PPM = 1.2; // px por minuto (altura total ~1728px)
   const DAYPLAN_COLORS = [
@@ -5795,6 +5938,8 @@ items.push({
       timeCol.innerHTML = "";
       lane.innerHTML = "";
       inspector.innerHTML = "";
+      inspector.hidden=true;
+      inspector.closest('.dayplanBody')?.classList.remove('has-selection');
       printWrap.innerHTML = "";
       return;
     }
@@ -5821,6 +5966,7 @@ items.push({
     }
 
 
+    if(dayplanMetaDayId!==d.id){dayplanMetaOpen=false;dayplanMetaDayId=d.id;dayplanSelectedKey=null;dayplanSelectedKeys.clear();}
     // Header (día seleccionado)
     const proj = esc(state.meta?.title || "Proyecto");
     const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
@@ -5829,9 +5975,8 @@ items.push({
     head.innerHTML = `
   <div class="dayplanHeader">
     <div class="dpTitle">
-      <div class="dpProj">${proj}</div>
       <div class="dpRowLine">
-        <button class="dpDayBtn" id="dpDayTitleBtn" type="button" title="Editar detalle del día">${dayTxt}</button>
+        <button class="dpDayBtn" id="dpDayTitleBtn" type="button" title="Editar detalle del día" aria-expanded="${dayplanMetaOpen}" aria-controls="dpDayMetaEditor">${dayTxt}</button>
         <div class="dpBadges" id="dpDayBadges">
           <span class="metaPill"><b>Call</b> ${esc(d.callTime || "—")}</span>
           <span class="metaPill"><b>Locación</b> ${esc(d.location || "—")}</span>
@@ -5841,20 +5986,15 @@ items.push({
     </div>
 
     <div class="dpRight">
-      <div class="dpActions noPrint">
-        <div class="row gap" style="align-items:center; flex-wrap:wrap; justify-content:flex-end;">
-          <div id="dpDayNightMount"></div>
-          <div id="dpDayDeleteMount"></div>
-        </div>
-      </div>
-
       <div class="dpMeta">
-        <div class="muted small">${esc((d.notes||"").trim() ? (d.notes||"").trim() : "Click en el título para editar fecha, call time, locación, nombre y notas.")}</div>
+        <button class="btn small" id="dpEditDay" type="button" aria-expanded="${dayplanMetaOpen}" aria-controls="dpDayMetaEditor">${dayplanMetaOpen?'Cerrar datos':'Editar día'}</button>
+        <span class="muted small">${(d.sceneIds||[]).length} escenas programadas</span>
       </div>
     </div>
   </div>
 
   <div class="dayMetaEditor noPrint" id="dpDayMetaEditor" style="display:${dayplanMetaOpen ? "block" : "none"};">
+    <div class="day-meta-heading"><strong>Datos de la jornada</strong><button class="btn small" id="dpCloseMeta" type="button">Listo · cerrar</button></div>
     <div class="dayMetaGrid">
       <div class="field">
         <label>Fecha</label>
@@ -5876,7 +6016,8 @@ items.push({
 
       <div class="field">
         <label>Locación</label>
-        <input class="input" id="dp_day_location" value="${eattr(d.location||"")}"/>
+        <input class="input" id="dp_day_location" list="dp_location_options" value="${eattr(d.location||"")}"/>
+        <datalist id="dp_location_options">${shootingLocations().map(l=>`<option value="${esc(l.name)}">${esc(l.address||'')}</option>`).join('')}</datalist>
       </div>
 
       <div class="field">
@@ -5889,6 +6030,7 @@ items.push({
         <textarea class="textarea smallArea" id="dp_day_notes">${esc(d.notes||"")}</textarea>
       </div>
     </div>
+    <div class="row gap day-meta-actions"><div id="dpDayNightMount"></div><div id="dpDayDeleteMount"></div></div>
   </div>
 `;
 
@@ -5916,10 +6058,10 @@ items.push({
 
       const liteSave = window.U.debounce(()=>{ touch(); }, 450);
 
-      const fullRefresh = ()=>{
+      const fullRefresh = (redrawPlan=true)=>{
         sortShootDaysInPlace();
         touch();
-        renderDayPlan();
+        if(redrawPlan)renderDayPlan();
         renderDayDetail();
         renderReports();
         renderScheduleBoard();
@@ -5932,11 +6074,10 @@ items.push({
         if(!d0) return;
 
         // Toggle editor (click en el título del día)
-        const titleBtn = e.target?.closest && e.target.closest("#dpDayTitleBtn");
+        const titleBtn = e.target?.closest && e.target.closest("#dpDayTitleBtn,#dpEditDay,#dpCloseMeta");
         if(titleBtn){
-          dayplanMetaOpen = !dayplanMetaOpen;
-          const box = head.querySelector("#dpDayMetaEditor");
-          if(box) box.style.display = dayplanMetaOpen ? "block" : "none";
+          dayplanMetaOpen = titleBtn.id==='dpCloseMeta' ? false : !dayplanMetaOpen;
+          renderDayPlan();
           return;
         }
 
@@ -6026,7 +6167,7 @@ items.push({
           d0.callTime = (e.target.value||"").trim();
           e.target.value = d0.callTime;
           cleanupDayCallTimes(d0);
-          fullRefresh();
+          fullRefresh(false);
         }
         if(id === "dp_day_date"){
           const iso = (e.target.value||"").trim();
@@ -6034,7 +6175,7 @@ items.push({
           d0.date = iso;
           const disp = head.querySelector("#dp_day_date_display");
           if(disp) disp.value = formatDDMMYYYY(iso);
-          fullRefresh();
+          fullRefresh(false);
         }
       });
 
@@ -6061,7 +6202,7 @@ items.push({
             const hid = head.querySelector("#dp_day_date");
             if(hid) hid.value = iso;
             e.target.value = formatDDMMYYYY(iso);
-            fullRefresh();
+            fullRefresh(false);
           }else{
             e.target.value = formatDDMMYYYY(d0.date);
           }
@@ -6069,7 +6210,7 @@ items.push({
         }
 
         if(id === "dp_day_location" || id === "dp_day_label" || id === "dp_day_notes"){
-          fullRefresh();
+          fullRefresh(false);
         }
       });
     }
@@ -6106,7 +6247,7 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
 
     const blocks = items.map((it)=>{
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-      const bg = hexToRgba(col, 0.75);
+      const bg = window.RODA_STUDIO ? '#25282c' : hexToRgba(col, 0.75);
 const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
 const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, dpEndAbs - absStart);
 const absEnd = clamp(absStart + dur, absStart + snapMin, dpEndAbs);
@@ -6146,7 +6287,7 @@ ${
     ? `
       <div class="dpBlockMeta">
         <div class="dpMetaItem"><div class="v">${esc(it.intExt||"—")}</div></div>
-        <div class="dpMetaItem"><div class="v">${esc(it.location||"—")}</div></div>
+        <div class="dpMetaItem"><div class="v">${esc(shootingLocation(getScene(it.id))?.name || it.location||"—")}</div></div>
         <div class="dpMetaItem"><div class="v">${esc(it.timeOfDay||"—")}</div></div>
       </div>
       ${(()=>{ const t = notesOrShortSummary(it.notes, it.summary); return t ? `<div class="dpBlockSummary">${esc(t)}</div>` : ``; })()}
@@ -6167,14 +6308,7 @@ ${
 
     lane.innerHTML = grid.join("") + blocks;
 
-    // Hover preview (igual que Cronograma + Planos)
-    try{
-      lane.querySelectorAll('.dpBlock[data-kind="scene"]').forEach((blk)=>{
-        const sid = blk.dataset.id;
-        const sc = sid ? getScene(sid) : null;
-        if(sc) attachSceneHover(blk, sc, { includeShots:true, maxShots: 12 });
-      });
-    }catch(_e){}
+    // Selected scenes have an inspector; avoid a second floating preview over the timeline.
 
     // Línea roja "ahora" (seguimiento)
     try{ ensureDayplanNowTicker(); updateDayplanNowLine(); }catch(_e){}
@@ -6338,6 +6472,8 @@ ${
         const key = block.dataset.key;
         const kind = block.dataset.kind;
         const id = block.dataset.id;
+        dayplanMetaOpen=false;
+        hideHoverTip();
 
         const actEl = e.target.closest("[data-action]");
         const action = actEl?.dataset.action || "";
@@ -6696,6 +6832,8 @@ dayplanPointer = {
     const dpEndAbs = dayplanEndAbs(d);
 
     const it = dayplanSelectedKey ? items.find(x=>x.key===dayplanSelectedKey) : null;
+    box.hidden=!it;
+    box.closest('.dayplanBody')?.classList.toggle('has-selection',!!it);
     if(!it){
       box.innerHTML = `<div class="muted">Seleccioná una escena o tarea para editarla.</div>`;
       return;
@@ -6714,6 +6852,7 @@ dayplanPointer = {
     const isBlock = it.kind==="block";
 
     box.innerHTML = `
+      <button class="btn small inspector-close" id="dpCloseInspector" type="button" data-ro-allow="1">Cerrar detalle ×</button>
       <div class="row gap" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
         <div><b>${it.kind==="scene" ? "Escena" : "Nota / tarea"}</b> <span class="muted">(${esc(it.title||"")})</span></div>
         <div class="row gap" style="align-items:center">
@@ -6758,6 +6897,7 @@ dayplanPointer = {
             <label>Datos de escena</label>
             <div class="dpSceneTop"><b>#${esc(it.number||"")}</b> ${esc(it.slugline||"")}</div>
             <div class="dpFacts">
+              <div class="dpFact" style="grid-column:1/-1"><div class="k">Lugar de rodaje</div><div class="v">${esc(shootingLocation(getScene(it.id))?.name || 'Sin asignar')}</div></div>
               <div class="dpFact"><div class="k">Int/Ext</div><div class="v">${esc(it.intExt||"—")}</div></div>
               <div class="dpFact"><div class="k">Lugar</div><div class="v">${esc(it.location||"—")}</div></div>
               <div class="dpFact"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
@@ -6782,6 +6922,7 @@ dayplanPointer = {
       box.dataset.bound = "1";
 
       box.addEventListener("click", (e)=>{
+        if(e.target.closest('#dpCloseInspector')){dayplanSelectedKey=null;dayplanSelectedKeys.clear();dayplanPaletteKey=null;renderDayPlan();return;}
         const act = e.target.closest("[data-action]")?.dataset.action || "";
         if(act === "pickColorInspector"){
           const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
@@ -9329,6 +9470,8 @@ el("bdFileInput")?.addEventListener("change", ()=>{
 // Plan del día
     el("dayplanSelect")?.addEventListener("change", ()=>{
       selectedDayplanDayId = el("dayplanSelect").value;
+      dayplanMetaOpen=false;
+      renderSceneBank();
 
       // Sync con Call Diario / Call Sheet / Shotlist
       selectedDayId = selectedDayplanDayId;

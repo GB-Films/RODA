@@ -15,7 +15,7 @@
   </script>
   <link href="css/styles.css?v=20260124-01" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
-  <link rel="stylesheet" href="css/studio.css?v=1.1.1"/>
+  <link rel="stylesheet" href="css/studio.css?v=1.2.0"/>
 </head>
 <body class="roda-studio">
   <header class="studio-global-header">
@@ -49,12 +49,17 @@
       </div>
 
       <nav class="nav">
+        <span class="nav-section">Preparación</span>
         <button class="navBtn" data-view="script"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Guion</span></button>
         <button class="navBtn" data-view="breakdown"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Breakdown</span></button>
+        <button class="navBtn" data-view="locations"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Locaciones</span></button>
+        <button class="navBtn" data-view="cast"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Reparto</span></button>
+        <span class="nav-section">Rodaje</span>
         <button class="navBtn" data-view="shooting"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Call Diario</span></button>
         <button class="navBtn" data-view="dayplan"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Plan de Rodaje</span></button>
         <button class="navBtn" data-view="schedule"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Plan General</span></button>
         <button class="navBtn" data-view="shotlist"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Shotlist</span></button>
+        <span class="nav-section">Producción</span>
         <button class="navBtn" data-view="elements"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Elementos</span></button>
         <button class="navBtn" data-view="crew"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Equipo técnico</span></button>
         <button class="navBtn" data-view="reports"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Filtros</span></button>
@@ -67,6 +72,23 @@
     <main class="main">
       <div class="toast" id="toast" style="display:none;"></div>
       <div class="hoverTip" id="hoverTip" style="display:none;"></div>
+      <section class="view hidden" id="view-locations">
+        <div class="workspace-heading"><div><h1>Locaciones</h1><p>Del espacio del guion al lugar real de filmación.</p></div></div>
+        <div class="overview-stats" id="locationStats"></div>
+        <div class="location-layout">
+          <aside class="card location-directory">
+            <div class="cardHeader"><h2 class="cardTitle">Lugares de rodaje</h2></div>
+            <div class="cardContent"><p class="muted small">Un edificio puede reunir varios espacios del guion.</p><div id="locationDirectory"></div>
+              <details id="locationCreate"><summary class="btn">+ Lugar de rodaje</summary><form id="locationCreateForm" class="stack-form"><label>Nombre<input class="input" name="name" required maxlength="160" placeholder="Ej: Edificio San Martín"/></label><label>Dirección<input class="input" name="address" maxlength="300" placeholder="Calle, número y ciudad"/></label><button class="btn primary" type="submit">Crear lugar</button></form></details>
+            </div>
+          </aside>
+          <div class="card"><div class="cardHeader"><h2 class="cardTitle">Espacios del guion</h2><input class="input" id="locationSearch" data-ro-allow="1" placeholder="Buscar espacio o escena…" aria-label="Buscar espacio o escena"/></div><div class="cardContent"><div id="locationDetail"></div><p class="muted small">Asigná el lugar donde se filma cada espacio. Abrí sus escenas para ver jornadas o asignar una excepción.</p><div id="locationSets"></div></div></div>
+        </div>
+      </section>
+      <section class="view hidden" id="view-cast">
+        <div class="workspace-heading"><div><h1>Reparto</h1><p>Personajes, intérpretes y las escenas en las que participan.</p></div><input class="input" id="castSearch" data-ro-allow="1" aria-label="Buscar personaje o intérprete" placeholder="Buscar personaje o intérprete…"/></div>
+        <div class="overview-stats" id="castStats"></div><div class="cast-grid" id="castDirectory"></div>
+      </section>
 
 
       <section class="view hidden" id="view-script">
@@ -404,9 +426,13 @@
                   <input class="input grow" id="dpBankSearch" placeholder="Buscar…"/>
                   <select class="input compact" id="dpBankFilter">
                     <option value="all">Todas</option>
-                    <option value="unassigned">No asignadas</option>
+                    <option value="unassigned">Pendientes</option>
+                    <option value="assigned">Programadas</option>
+                    <option value="today">En este día</option>
                   </select>
                 </div>
+                <details class="bank-filters" data-ro-allow="1"><summary>Filtrar por locación o personaje</summary><label>Lugar de rodaje<select class="input" id="dpLocationFilter" aria-label="Filtrar lugar de rodaje"></select></label><label>Espacio del guion<select class="input" id="dpSetFilter" aria-label="Filtrar espacio del guion"></select></label><label>Personaje<select class="input" id="dpCastFilter" aria-label="Filtrar personaje"></select></label><button class="btn small" id="dpClearFilters" type="button">Limpiar filtros</button></details>
+                <div class="bank-progress" id="dpBankProgress" role="status"></div>
                 <div class="bankList" id="dpSceneBankList"></div>
               </div>
             </div>
@@ -716,7 +742,7 @@
   <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->
   <script>
   (function(){
-    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.1.1";document.body.append(entry);return;}
+    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.2.0";document.body.append(entry);return;}
     document.querySelector(".shell").hidden=false;document.getElementById("roda-account").hidden=true;
     const v = Date.now().toString(36);
     // CSS: fuerza versión de sesión

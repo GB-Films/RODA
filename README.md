@@ -6,6 +6,18 @@ Los datos de Roda se guardan juntos dentro del proyecto del estudio. Los permiso
 
 La distribución integrada se copia en `roda/` del repositorio `GB-Films/GB-Studio` y se publica con su Hosting. `tests/studio-browser.cjs` comprueba el flujo con una sesión y servidor simulados; requiere Playwright, JSZip y `STUDIO_ROOT` apuntando al checkout de Studio. `node --test tests/screenplay.test.cjs` verifica el análisis de texto sin dependencias.
 
+## Organización de producción · 1.2.0
+
+**Locaciones** separa los espacios del guion (habitación, escalera, oficina) de los lugares reales de rodaje (edificio, casa, estudio). Creá un lugar con nombre y dirección y asignalo a uno o varios espacios. Cada espacio se agrupa por nombre; al abrirlo se pueden asignar excepciones por escena. El directorio muestra cuántas escenas tiene cada lugar, sus jornadas y los espacios pendientes de asignar.
+
+**Reparto** reúne los personajes del desglose con sus escenas y jornadas. El intérprete se guarda en el mismo registro del área Cast del equipo, para que se use también en los calls y reportes. Los enlaces desde Locaciones y Reparto abren el banco del plan con el filtro correspondiente.
+
+El **Plan de Rodaje** distingue pendientes de programadas con texto y color, permite filtrar por estado, lugar real, espacio del guion y personaje, y agrega escenas al final del día con el botón `+` o arrastrándolas al horario. Los datos de la jornada empiezan cerrados; **Editar día** los abre y **Listo · cerrar** devuelve espacio al horario. El detalle de escena también se puede cerrar. La navegación, tipografía y tarjetas se compactaron; los colores elegidos para escenas se conservan como una franja sobre un fondo oscuro legible.
+
+Los lugares se guardan como `shootingLocations` en el núcleo del proyecto; cada escena conserva su `shootingLocationId` al actualizar el guion. No se deducen lugares reales a partir del texto: se asignan desde producción. No hace falta migrar ni volver a cargar guiones existentes. Las pruebas de navegador cubren agrupación, filtros, reparto compartido, permisos de lectura y conservación de estas asignaciones al restaurar una versión del guion.
+
+Referencias de flujo: [locaciones de rodaje en StudioBinder](https://support.studiobinder.com/en/articles/421746-how-to-assign-shooting-locations-to-a-stripboard-scene) y [asignación por escena en Filmustage](https://help.filmustage.com/en/articles/11071711-assign-locations-to-scenes).
+
 ## Guion · 1.1.1
 
 El importador reconoce tanto encabezados tradicionales como `ESCENA 01  EXT. FÁBRICA - DÍA`, rótulos separados del encabezado y escenas de montaje. Los párrafos narrativos que empiezan con «Interior» o «Exterior» no se toman como escenas. El reparto admite nombres numéricos, como 700 y 22. Cada importación guarda la versión del analizador para permitir reprocesar textos cargados con una detección anterior.

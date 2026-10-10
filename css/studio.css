@@ -87,5 +87,145 @@ body.roda-studio{display:flex;flex-direction:column;height:100dvh;overflow:hidde
 .script-message.error{border-color:#aaa;}
 .script-sources .btn:disabled{opacity:.45;cursor:not-allowed;}
 .picker-dialog{z-index:1000!important;}
+/* Production workspace: compact navigation, explicit status and progressive detail. */
+.roda-studio{font-size:13px;line-height:1.45;}
+.roda-studio :is(button,input,select,textarea){font-family:inherit;}
+.roda-studio .main{min-width:0;}
+.roda-studio .sidebar{padding:12px 10px;overflow:hidden;}
+.roda-studio .sidebar .brand{flex:none;}
+.roda-studio .brand{padding:12px;border-color:#2b2b2b;}
+.roda-studio .brandTop{margin-bottom:6px;}
+.roda-studio .brand .sub{font-size:10px;color:#898989;}
+.roda-studio .titleInput{font-size:14px;}
+.roda-studio .nav{gap:4px;min-height:0;overflow:auto;flex:1;}
+.roda-studio .nav>*{flex:none;}
+.roda-studio .scene-plan-action{width:25px;height:25px;padding:0;min-height:0;border-radius:5px;}
+.roda-studio .navBtn{padding:9px 10px;min-height:39px;text-transform:none;letter-spacing:0;font-size:12px;font-weight:550;border-color:transparent;background:transparent;gap:9px;}
+.roda-studio .navBtn:hover{background:#222;}
+.roda-studio .navBtn.active{background:#efefef;color:#111;box-shadow:none;}
+.roda-studio .navIco{width:24px;height:24px;border:0;background:transparent;border-radius:5px;font-size:14px;}
+.roda-studio .cardTitle{font-size:12px;letter-spacing:.05em;font-weight:650;}
+.roda-studio .cardHeader{padding:11px 13px;gap:12px;}
+.roda-studio .cardContent{padding:13px;}
+.roda-studio .btn{font-size:12px;font-weight:550;padding:8px 11px;}
+.roda-studio .input{font-size:12px;padding:8px 10px;min-width:0;}
+.roda-studio .sceneCard{border-radius:7px;padding:10px;border-color:#383838;background:#202020;box-shadow:none;}
+.roda-studio .sceneCard .title{font-size:12px;font-weight:600;line-height:1.4;}
+.roda-studio .sceneCard .meta{font-size:11px;line-height:1.4;color:#a7a7a7;}
+.roda-studio .sceneCard.unassigned{border:1px solid #383838;border-left:3px solid #656565;background:#202020;}
+.roda-studio .sceneCard.assigned{border:1px solid #365d49;border-left:3px solid #66c693;background:#17251e;}
+.scene-status{font-size:10px;line-height:1.5;margin-top:6px;font-weight:600;}
+.text-scheduled,.scene-status.scheduled{color:#8bddb1;}
+.scene-status.pending{color:#bbb;}
+.bank-progress{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#aaa;padding:10px 0 0;}
+.bank-filters{margin-top:10px;color:#bbb;font-size:11px;flex:none;}
+.bank-filters summary{cursor:pointer;padding:3px 0;}
+.bank-filters label{display:block;font-size:10px;margin:8px 0;}
+.bank-filters .input{display:block;width:100%;margin-top:4px;}
+.roda-studio .bankList{gap:7px;}
+.roda-studio .dayplanHeader{gap:12px;margin-bottom:0;}
+.roda-studio .dpRowLine{gap:8px;}
+.roda-studio .dpDayBtn{font-size:16px;font-weight:650;letter-spacing:-.3px;}
+.roda-studio .dpMeta{display:flex;align-items:center;gap:10px;margin-top:5px;}
+.roda-studio .metaPill{font-size:11px;padding:4px 8px;}
+.roda-studio .dayMetaEditor{margin-top:12px;padding:12px;background:#202020;max-height:42vh;overflow:auto;}
+.day-meta-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.day-meta-actions{margin-top:14px;justify-content:space-between;}
+.roda-studio .dayplanHeader{align-items:center;}
+.roda-studio .navIco svg{width:18px;height:18px;}
+.roda-studio .nav-section{font-size:9px;letter-spacing:.12em;color:#858585;padding:16px 10px 4px;text-transform:uppercase;}
+.roda-studio .shell.navCollapsed .nav-section{display:none;}
+.roda-studio .dayMetaEditor .textarea{min-height:64px;height:64px;}
+.roda-studio .dpBlock{border-radius:6px;border-left-width:3px!important;box-shadow:none;padding:6px 8px;}
+.roda-studio .dpBlock.sel{outline:1px solid #ddd;outline-offset:1px;}
+.roda-studio .dpBlockTitle{justify-content:flex-start;text-align:left;font-size:12px;font-weight:600;gap:7px;padding-right:92px;}
+.roda-studio .dpTime{font-size:10px;color:#c3c7ce;opacity:1;font-weight:500;}
+.roda-studio .dpBlockMeta{display:flex;gap:10px;justify-content:flex-start;text-align:left;}
+.roda-studio .dpBlockMeta .v{font-size:10px;color:#c3c7ce;font-weight:500;}
+.roda-studio .dpBlockSummary{font-size:10px;color:#acb0b6;}
+.roda-studio .dpMiniBtn{font-size:10px;padding:3px 5px;border-radius:4px;}
+.roda-studio .dpScroller{border-radius:6px;}
+.roda-studio .dayplanInspector{border-radius:7px;padding:12px;background:#1c1c1c;}
+.inspector-close{display:block;margin:0 0 12px auto;}
+.roda-studio .dpFacts{gap:6px;}
+.roda-studio .dpFact{padding:8px;border-radius:5px;}
+.roda-studio .dpFact .v{font-size:12px;font-weight:550;}
+.roda-studio .script-heading h1,.workspace-heading h1{font-size:25px;font-weight:650;letter-spacing:-.7px;margin:0 0 5px;}
+.roda-studio .scriptSceneItem{font-size:12px;}
+.roda-studio .script-sources{gap:12px;margin-bottom:14px;}
+.workspace-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:4px 0 22px;}
+.workspace-heading p{margin:0;color:#aaa;}
+.workspace-heading>.input,.location-layout .cardHeader>.input{max-width:280px;}
+.overview-stats{display:flex;gap:28px;border-bottom:1px solid #333;padding-bottom:18px;margin-bottom:20px;flex-wrap:wrap;}
+.overview-stats>div{display:flex;flex-direction:column;gap:3px;}
+.overview-stats strong{font-size:24px;font-weight:600;letter-spacing:-.7px;}
+.overview-stats span{font-size:11px;color:#aaa;}
+.location-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:16px;align-items:start;}
+.directory-item{display:flex;width:100%;justify-content:space-between;align-items:center;gap:10px;padding:11px 10px;margin-bottom:4px;border:1px solid transparent;border-radius:6px;background:transparent;color:#ccc;text-align:left;font-size:12px;cursor:pointer;}
+.directory-item.selected{background:#303030;border-color:#555;color:white;}
+.directory-item .count{font-size:10px;color:#aaa;}
+.stack-form{display:grid;gap:12px;padding:14px 0;}
+.stack-form label,.cast-card label{font-size:11px;color:#bbb;display:grid;gap:6px;}
+.stack-form h3{margin:0;font-size:14px;font-weight:600;}
+.location-edit{border-bottom:1px solid #3a3a3a;margin-bottom:16px;}
+.location-set{border:1px solid #333;border-radius:7px;margin-top:10px;background:#1d1d1d;padding:14px;}
+.set-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.set-heading h3{font-size:13px;font-weight:600;margin:0 0 5px;}
+.set-assignment{display:grid;gap:5px;font-size:10px;color:#aaa;min-width:180px;max-width:260px;}
+.location-set summary{cursor:pointer;font-size:11px;color:#bbb;padding:10px 0 0;}
+.set-scene{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:12px;padding:12px 0;border-top:1px solid #333;align-items:center;font-size:11px;}
+.set-scene:first-child{margin-top:10px;}
+.set-scene small{display:block;margin-top:5px;}
+.scene-link{display:inline-flex;margin:2px 4px 2px 0;padding:3px 7px;border:1px solid #484848;background:#282828;color:#eee;border-radius:4px;cursor:pointer;font-size:11px;}
+.scene-link:hover{border-color:#bbb;}
+.scene-links{margin-top:12px;}
+.empty-state{padding:28px 16px;font-size:12px;color:#aaa;line-height:1.6;text-align:center;}
+.cast-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;}
+.cast-title{display:flex;gap:12px;align-items:center;margin-bottom:20px;}
+.cast-title h2{font-size:15px;font-weight:600;margin:0 0 3px;}
+.cast-avatar{display:grid;place-items:center;width:38px;height:38px;background:#303030;border-radius:50%;font-size:12px;color:#bbb;flex:none;}
+@media screen and (min-width:821px){
+  .roda-studio .shell:not(.navCollapsed){grid-template-columns:210px minmax(0,1fr);}
+  .roda-studio #view-dayplan{overflow:hidden;}
+  .roda-studio #dayplanLayout{height:100%;grid-template-columns:270px minmax(0,1fr);gap:12px;align-items:stretch;}
+  .roda-studio #dayplanLayout.bankCollapsed{grid-template-columns:40px minmax(0,1fr);}
+  .roda-studio #dpBankCol{height:100%;align-self:stretch;}
+  .roda-studio #dpBankCol .bankCard{height:100%;max-height:100%;min-height:0;}
+  .roda-studio #dayplanCard>.cardHeader{flex-wrap:wrap;}
+  .roda-studio #dayplanCard>.cardHeader>.cardTitle{width:100%;}
+  .roda-studio .dpToolbar{width:100%;justify-content:space-between;gap:8px;}
+  .roda-studio .dayplanBody{grid-template-columns:minmax(0,1fr);}
+  .roda-studio .dayplanBody.has-selection{grid-template-columns:minmax(0,1fr) 260px;}
+  .roda-studio .dayplanInspector .dpGrid{grid-template-columns:1fr;}
+  .roda-studio #dpSceneBankBody>.row{flex-wrap:wrap;}
+  .roda-studio #dpBankSearch{width:100%;flex-basis:100%;}
+  .roda-studio #dpBankFilter{width:100%;}
+}
+@media screen and (min-width:821px) and (max-width:1200px){
+  .roda-studio #dayplanLayout{grid-template-columns:225px minmax(0,1fr);}
+  .roda-studio .dayplanBody.has-selection{grid-template-columns:minmax(0,1fr);position:relative;}
+  .roda-studio .dayplanBody.has-selection .dayplanInspector{position:absolute;right:0;top:0;bottom:0;width:260px;z-index:12;box-shadow:-10px 0 25px #0008;margin:0;}
+  .location-layout{grid-template-columns:210px minmax(0,1fr);}
+}
+@media screen and (max-width:820px){
+  .roda-studio:is([data-roda-view="script"],[data-roda-view="locations"],[data-roda-view="cast"]) .mDayBar{display:none;}
+  .roda-studio:is([data-roda-view="script"],[data-roda-view="locations"],[data-roda-view="cast"]) .main{padding-top:70px;}
+  .roda-studio #dayplanCard>.cardHeader{flex-wrap:wrap;}
+  .roda-studio #dayplanCard>.cardHeader>.cardTitle{width:100%;}
+  .roda-studio .dpToolbar{width:100%;}
+  .location-layout{grid-template-columns:1fr;}
+  .workspace-heading{align-items:flex-start;flex-direction:column;}
+  .workspace-heading>.input{max-width:none;width:100%;}
+  .set-heading{align-items:stretch;flex-direction:column;gap:10px;}
+  .set-assignment{max-width:none;}
+  .set-scene{grid-template-columns:1fr;}
+  .roda-studio .dayplanBody{display:flex;flex-direction:column;min-height:500px;}
+  .roda-studio .dayplanBody .dpScroller{min-height:440px;max-height:65vh!important;}
+  .roda-studio #dpBankCol .bankCard{height:360px;min-height:0;}
+  .roda-studio .dpBlockTitle{font-size:11px;}
+  .roda-studio .dayplanHeader{flex-wrap:wrap;}
+  .roda-studio .dpRight{width:100%;}
+  .location-layout .cardHeader{flex-wrap:wrap;}
+}
 @media(max-width:1100px){.script-workspace{grid-template-columns:210px minmax(0,1fr);}.script-reader .scriptWrap{grid-template-columns:1fr;}}
 @media(max-width:700px){.script-heading{align-items:flex-start;flex-direction:column;gap:12px;}.script-sources,.script-workspace{grid-template-columns:1fr;}#scriptHistory{max-height:300px;overflow:auto;}.script-reader .scriptRight .row>div{max-width:none!important;width:100%;}.script-heading h1{font-size:26px;}}
