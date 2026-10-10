@@ -6,6 +6,14 @@ Los datos de Roda se guardan juntos dentro del proyecto del estudio. Los permiso
 
 La distribución integrada se copia en `roda/` del repositorio `GB-Films/GB-Studio` y se publica con su Hosting. `tests/studio-browser.cjs` comprueba el flujo con una sesión y servidor simulados; requiere Playwright, JSZip y `STUDIO_ROOT` apuntando al checkout de Studio. `node --test tests/screenplay.test.cjs` verifica el análisis de texto sin dependencias.
 
+## Personas y permisos · 1.5.0
+
+El administrador del proyecto abre **Personas y permisos** dentro de Roda y habilita correos de cuentas Google verificadas. La invitación no crea miembros del estudio ni da permisos en otras apps. Se comparte el enlace del proyecto; no se envían correos automáticamente. Al configurar el equipo por primera vez, Roda queda limitado a esa lista y a los administradores del proyecto/estudio. Los permisos independientes que una persona ya tenga en Studio siguen vigentes.
+
+Cada colaborador tiene acceso oculto, de lectura o edición a Guion, Breakdown/elementos/filtros, Locaciones, Reparto, Planificación/calls, Shotlist y Equipo técnico. Reportes es de lectura y refleja únicamente los datos habilitados. Los encabezados de escena son referencias compartidas entre las herramientas de producción; el texto completo y las versiones pertenecen a Guion. Los perfiles Dirección, Asistencia de dirección, Fotografía y Lectura general son puntos de partida editables. Administrar Roda habilita todas las secciones y la gestión del equipo.
+
+La carga y aplicación de guiones requiere editar Guion y Breakdown. Asistencia puede planificar con Guion en lectura; Fotografía puede consultar sin editar. Los invitados no ven la navegación a otros proyectos. La API revalida permisos en cada operación y dentro de la transacción de guardado, filtra datos ocultos y fusiona solo las secciones autorizadas. Los permisos globales de solo lectura son un límite superior. Los cambios de acceso se revisan al recuperar el foco y cada 45 segundos; la revocación se aplica inmediatamente a nuevas solicitudes del servidor. No se guardan instantáneas locales de los colaboradores con permisos limitados.
+
 ## Lectura y versiones de guion · 1.4.0
 
 La sección **Guion** aprovecha toda la altura para leer. La carga, las versiones, los datos y las acciones quedan en un lateral con desplazamiento propio; en móvil se abre desde una barra compacta. El índice permite elegir una escena o escribir su número. La búsqueda resalta coincidencias, admite acentos opcionales y recorre resultados con las flechas o Enter / Shift+Enter. Los campos de edición de escenas permanecen en Breakdown.

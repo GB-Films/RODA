@@ -70,6 +70,8 @@ function getScriptRawLocalKey(){
   }
 }
 function loadScriptRawLocal(){
+  if(window.RODA_STUDIO && !window.RodaAccess?.canEdit('script'))return '';
+
   try{ return localStorage.getItem(getScriptRawLocalKey()) || ""; }catch(_e){ return ""; }
 }
 function saveScriptRawLocal(txt){
@@ -145,12 +147,12 @@ function sanitizeScriptState(){
 
   editUnlocked = loadEditUnlocked();
 
-  function isReadOnly(){ return !editUnlocked; }
+  function isReadOnly(target){const view=typeof target==='string'?target:target?.closest?.('[data-roda-section]')?.dataset.rodaSection||document.body.dataset.rodaView||'script';return !editUnlocked||!!window.RodaAccess&&!RodaAccess.canEdit(view);}
 
   function updateModeBanner(){
     const pill = document.getElementById("modeBanner");
     if(!pill) return;
-    if(window.RODA_STUDIO){pill.textContent=window.RODA_STUDIO.canEdit?"Edición · GB Studio":"Solo lectura · GB Studio";return;}
+    if(window.RODA_STUDIO){pill.textContent=!isReadOnly()?"Edición · GB Studio":"Solo lectura · GB Studio";return;}
     pill.innerHTML = editUnlocked ? "✏️ Edición (click para bloquear)" : "🔒 Lector (click para editar)";
   }
 
@@ -301,7 +303,7 @@ const shotlistCollapsedSceneIds = new Set();
 
 
   // ===== Read-only hard guard (Lector) =====
-  const RO_EDIT_MSG = "Modo lector 🔒 (desbloqueá con el candado para editar)";
+  const RO_EDIT_MSG = window.RODA_STUDIO?"No tenés permiso para editar esta sección. Pedile acceso al administrador.":"Modo lector 🔒 (desbloqueá con el candado para editar)";
   let _roLastToast = 0;
   function roToast(){
     const now = Date.now();
@@ -323,7 +325,7 @@ const shotlistCollapsedSceneIds = new Set();
       "btnBDTemplateWide","btnBDTemplateLong",
       "btnToggleScriptImport","btnCancelScriptImport","btnScriptDownload","btnScriptGoBreakdown","scriptDocsOpen","scriptHistory",
       "calPrev","calNext","btnShotSceneGoBreakdown",
-      "dpBtnToggleBank","dpBtnToggleBankDock"
+      "dpBtnToggleBank","dpBtnToggleBankDock","dpEditDay","dpCloseMeta","dpCloseInspector"
     ];
     for(const id of ids){
       try{ const n = document.getElementById(id); if(n) n.dataset.roAllow="1"; }catch(_e){}
@@ -348,7 +350,7 @@ const shotlistCollapsedSceneIds = new Set();
 
     // Store original value on focus, so we can restore it if someone types in Lector mode.
     document.addEventListener("focusin", (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
       const ctrl = t?.closest?.('input, textarea, select, [contenteditable="true"]');
@@ -379,7 +381,7 @@ const shotlistCollapsedSceneIds = new Set();
     };
 
     const guardFormEvent = (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
       const ctrl = t?.closest?.('input, textarea, select, [contenteditable="true"]');
@@ -396,7 +398,7 @@ const shotlistCollapsedSceneIds = new Set();
     document.addEventListener("paste", guardFormEvent, true);
 
     document.addEventListener("keydown", (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
       const ctrl = t?.closest?.('input, textarea, select, [contenteditable="true"]');
@@ -407,7 +409,7 @@ const shotlistCollapsedSceneIds = new Set();
     }, true);
 
     const clickGuard = (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
 
@@ -426,7 +428,7 @@ const shotlistCollapsedSceneIds = new Set();
     document.addEventListener("click", clickGuard, true);
 
     const dragGuard = (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
       e.preventDefault();
@@ -545,6 +547,7 @@ const shotlistCollapsedSceneIds = new Set();
 
 
   function saveConflictBackup(binId, snapshot){
+    if(window.RODA_STUDIO?.project.rodaAccess&&!window.RODA_STUDIO.project.rodaAccess.unrestricted)return;
     try{
       const key = `gb_conflict_backup_v1__${String(binId||"")}`;
       const payload = { at: new Date().toISOString(), state: snapshot };
@@ -642,6 +645,7 @@ const shotlistCollapsedSceneIds = new Set();
   let autosyncPending = false;
 
   async function autosyncRun(){
+    if(window.RODA_STUDIO&&!window.RODA_UNSAVED)return;
     if(autosyncInFlight){
       autosyncPending = true;
       return;
@@ -2255,8 +2259,11 @@ function setupScheduleWheelScroll(){
 }
 
   function showView(name){
+    if(window.RodaAccess&&!RodaAccess.canView(name))name=views.find(v=>RodaAccess.canView(v));
+    if(!name)return;
     dayplanMetaOpen = false;
     document.body.dataset.rodaView=name;
+    document.body.classList.toggle('readOnly',isReadOnly(name));updateModeBanner();window.RodaAccess?.apply();
     // Reset print-only mode if a browser skipped the afterprint event.
     try{ clearPrintOrientation(); }catch(_e){}
     try{ cleanupGbPrintRoot(); }catch(_e){}
@@ -2384,14 +2391,14 @@ function setupScheduleWheelScroll(){
   }
   function scriptVersionText(v){return v.rawText||(v.scenes||[]).map(sc=>`${sc.number}. ${sc.slugline}\n\n${sc.body||""}`).join("\n\n");}
   async function runScriptLoad(task){
-    if(isReadOnly()||scriptLoading)return;
+    if(isReadOnly('script')||scriptLoading)return;
     scriptLoading=true;renderScriptUI();scriptStatus("Cargando guion…");
     try{await task();}
     catch(error){scriptStatus(error.message||"No pudimos cargar el guion. Intentá de nuevo.",true);}
     finally{scriptLoading=false;renderScriptUI();}
   }
   async function importScriptText(text, source, force=false, documentFormat=null){
-    if(isReadOnly())throw Error("Necesitás permiso de edición en este proyecto.");
+    if(isReadOnly('script'))throw Error("Necesitás permiso de edición del guion.");
     const rawText=String(text||"").trim();if(!rawText)throw Error("Cargá un archivo o pegá el texto del guion.");
     if(new TextEncoder().encode(rawText).length>250000)throw Error("El texto del guion es demasiado largo para cargarlo junto al historial. Dividilo en capítulos.");
     const latest=state.script.versions.filter(v=>!v.draft).at(-1);
@@ -2425,7 +2432,7 @@ function setupScheduleWheelScroll(){
   }
 
   function useScriptVersion(version){
-    if(isReadOnly()||!version?.scenes?.length)return;
+    if(isReadOnly('script')||!version?.scenes?.length)return;
     const previous=state,selection=selectedSceneId;
     state=JSON.parse(JSON.stringify(state));
     try{
@@ -2670,9 +2677,9 @@ function setupScheduleWheelScroll(){
     const table = el("shotsTable");
     const btnAdd = el("btnAddShot");
     if(btnAdd){
-      btnAdd.disabled = !selectedSceneId || isReadOnly();
+      btnAdd.disabled = !selectedSceneId || isReadOnly('shotlist');
       btnAdd.onclick = ()=>{
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
         if(!s) return;
         ensureSceneExtras(s);
@@ -2705,20 +2712,20 @@ function setupScheduleWheelScroll(){
       tr.innerHTML = `
         <td>${i+1}</td>
         <td>
-          <select class="input compact shotTypeSel" ${isReadOnly()?"disabled":""}>
+          <select class="input compact shotTypeSel" ${isReadOnly('shotlist')?"disabled":""}>
             ${shotTypes.map(t=>`<option value="${esc(t)}"${(normalizeShotType(sh.type)===t)?" selected":""}>${esc(t)}</option>`).join("")}
           </select>
         </td>
-        <td><input class="input shotDescInput" ${isReadOnly()?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
+        <td><input class="input shotDescInput" ${isReadOnly('shotlist')?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
         <td class="shotThumbTd">
           <div class="shotThumbDrop ${hasThumb?"has":""} ${uploading?"uploading":""}" title="Arrastrá una imagen o click para cargar">${thumbInner}</div>
           <div class="row gap" style="justify-content:center; margin-top:6px;">
-            <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly()?"disabled":""}>📷</button>
-            <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly()||!hasThumb)?"disabled":""}>×</button>
+            <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly('shotlist')?"disabled":""}>📷</button>
+            <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly('shotlist')||!hasThumb)?"disabled":""}>×</button>
           </div>
           <input type="file" accept="image/*" class="shotThumbFile" style="display:none" />
         </td>
-        <td><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly()?"disabled":""}>×</button></td>
+        <td><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly('shotlist')?"disabled":""}>×</button></td>
       `;
 
       const sel = tr.querySelector(".shotTypeSel");
@@ -2726,18 +2733,18 @@ function setupScheduleWheelScroll(){
       const del = tr.querySelector(".shotDelBtn");
 
       sel?.addEventListener("change", ()=>{
-        if(isReadOnly()) return;
+        if(isReadOnly('shotlist')) return;
         sh.type = sel.value;
         touch();
       });
       inp?.addEventListener("input", ()=>{
-        if(isReadOnly()) return;
+        if(isReadOnly('shotlist')) return;
         sh.desc = inp.value;
         touch();
       });
       del?.addEventListener("click", (e)=>{
         e.preventDefault();
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         s.shots = (s.shots||[]).filter(x=>x.id!==sh.id);
         touch();
         renderShotsEditor();
@@ -2751,7 +2758,7 @@ function setupScheduleWheelScroll(){
       const fileIn = tr.querySelector(".shotThumbFile");
 
       const openPicker = ()=>{
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         fileIn && fileIn.click();
       };
       drop?.addEventListener("click", openPicker);
@@ -2763,7 +2770,7 @@ function setupScheduleWheelScroll(){
       });
       clear?.addEventListener("click", (e)=>{
         e.preventDefault();
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         sh.thumbUrl = "";
         delete sh.thumbUpdatedAt;
         touch();
@@ -2772,13 +2779,13 @@ function setupScheduleWheelScroll(){
       });
 
       const prevent = (e)=>{ e.preventDefault(); e.stopPropagation(); };
-      drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
-      drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
+      drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly('shotlist')) drop.classList.add("drag"); });
+      drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly('shotlist')) drop.classList.add("drag"); });
       drop?.addEventListener("dragleave", (e)=>{ prevent(e); drop.classList.remove("drag"); });
       drop?.addEventListener("drop", (e)=>{
         prevent(e);
         drop.classList.remove("drag");
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         const f = e.dataTransfer?.files?.[0];
         if(f) setShotThumb(sh, f);
       });
@@ -2810,10 +2817,10 @@ function setupScheduleWheelScroll(){
     RodaScriptDocument.update(v,hasScenes?scriptVersionText(v):'');
     el('scriptBaseLabel').textContent=inUse?'Base de producción':active?'Producción basada en '+active.name:'Sin versión de producción';
     el('scriptBaseHint').textContent=inUse?'Esta versión guía el desglose, las locaciones y el reparto.':hasScenes?'Usá esta versión para actualizar el desglose. Se conservan notas, planos, lugares asignados y jornadas.':'Cargá el guion y elegí una versión para preparar la producción.';
-    const apply=el('btnScriptApply');apply.disabled=!hasScenes||isReadOnly()||scriptLoading||inUse;
+    const apply=el('btnScriptApply');apply.disabled=!hasScenes||isReadOnly('script')||scriptLoading||inUse;
     apply.textContent=inUse?'Versión en uso':'Usar esta versión para producción';
     el('btnScriptDownload').disabled=!hasScenes;
-    for(const id of ['btnScriptUpload','scriptFileInput','btnParseScript','scriptImportText','scriptVersionName','scriptKeywords','scriptDocsURL','btnScriptLinkDocs','btnScriptImportDocs']){const node=el(id);if(node)node.disabled=isReadOnly()||scriptLoading;}
+    for(const id of ['btnScriptUpload','scriptFileInput','btnParseScript','scriptImportText','scriptVersionName','scriptKeywords','scriptDocsURL','btnScriptLinkDocs','btnScriptImportDocs']){const node=el(id);if(node)node.disabled=isReadOnly('script')||scriptLoading;}
     const source=state.script.googleDoc,open=el('scriptDocsOpen');
     if(open){open.hidden=!source?.url;if(source?.url){try{open.href=RodaScreenplay.docsLink(source.url).url;}catch{open.hidden=true;}}}
     if(!el('scriptUploadDialog').open && document.activeElement!==el('scriptDocsURL'))el('scriptDocsURL').value=source?.url||'';

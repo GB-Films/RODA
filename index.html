@@ -15,7 +15,7 @@
   </script>
   <link href="css/styles.css?v=20260124-01" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
-  <link rel="stylesheet" href="css/studio.css?v=1.4.1"/>
+  <link rel="stylesheet" href="css/studio.css?v=1.5.0"/>
 </head>
 <body class="roda-studio">
   <header class="studio-global-header">
@@ -26,6 +26,7 @@
   <main class="roda-home" id="roda-home" hidden><div class="roda-home-heading"><img src="https://gbstudio.com.ar/assets/studio-roda-symbol.svg?v=1" alt=""/><div><h1>Roda</h1><p>Del guion al rodaje. Escenas, jornadas, equipo y reportes en tu proyecto de GB Studio.</p></div></div><div id="roda-projects"></div><a id="roda-legacy-link" class="roda-project-change" href="https://gb-films.github.io/RODA/?legacy=1" hidden>Abrir proyectos de la versión anterior</a></main>
   <aside id="roda-sync-message" class="roda-sync-message" role="alert" hidden></aside>
   <dialog id="roda-account-dialog" class="roda-account-dialog"><h2>Tu cuenta de GB Studio</h2><p id="roda-account-email"></p><div class="row gap"><button class="btn" id="roda-signout">Cerrar sesión</button><button class="btn" id="roda-account-close">Volver</button></div></dialog>
+  <dialog class="roda-access-dialog" id="rodaAccessDialog" aria-labelledby="rodaAccessTitle" data-ro-allow="1"><div class="script-modal-heading"><h2 id="rodaAccessTitle">Personas y permisos</h2><button class="btn" type="button" id="rodaAccessClose">Cerrar ×</button></div><div id="rodaAccessContent"></div></dialog>
   <div class="shell" hidden>
     <aside class="sidebar">
       <div class="brand">
@@ -49,6 +50,7 @@
         <div class="sub">Guardado: <span id="savedAtText">-</span></div>
       </div>
 
+      <button class="btn roda-access-open" id="btnRodaAccess" data-ro-allow="1" hidden>Personas y permisos</button>
       <nav class="nav">
         <span class="nav-section">Preparación</span>
         <button class="navBtn" data-view="script"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Guion</span></button>
@@ -715,7 +717,7 @@
   <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->
   <script>
   (function(){
-    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.4.1";document.body.append(entry);return;}
+    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.5.0";document.body.append(entry);return;}
     document.querySelector(".shell").hidden=false;document.getElementById("roda-account").hidden=true;
     const v = Date.now().toString(36);
     // CSS: fuerza versión de sesión
