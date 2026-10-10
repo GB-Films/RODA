@@ -512,7 +512,7 @@ const shotlistCollapsedSceneIds = new Set();
       if(shell) shell.classList.toggle("navCollapsed", !!collapsed);
       const title = el("projectTitle")?.value || state?.meta?.title || cfg?.projectName || "Proyecto";
       if(pill) pill.textContent = projectInitials(title);
-      if(btn) btn.textContent = collapsed ? "⟩" : "⟨";
+      if(btn){btn.textContent = collapsed ? "⟩" : "⟨";btn.setAttribute("aria-label",collapsed?"Expandir navegación":"Comprimir navegación");btn.setAttribute("aria-expanded",String(!collapsed));}
       try{ localStorage.setItem(navCollapsedKey, collapsed ? "1" : "0"); }catch{}
     }
 

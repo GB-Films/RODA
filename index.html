@@ -15,7 +15,7 @@
   </script>
   <link href="css/styles.css?v=20260124-01" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
-  <link rel="stylesheet" href="css/studio.css?v=1.4.0"/>
+  <link rel="stylesheet" href="css/studio.css?v=1.4.1"/>
 </head>
 <body class="roda-studio">
   <header class="studio-global-header">
@@ -34,9 +34,10 @@
           <button class="btn icon ghost small" id="btnNavCollapse" type="button" title="Colapsar/Expandir">⟨</button>
         </div>
 
+        <div class="project-identity-cover" id="projectIdentityCover"><img id="projectIdentityImage" alt="" hidden/><span id="projectIdentityInitials" aria-hidden="true"></span></div>
+        <h1 class="project-identity-title" id="projectIdentityTitle"></h1>
         <input class="titleInput" id="projectTitle" placeholder="Proyecto"/>
         <select class="input projectSwitch" id="projectSwitch" title="Proyecto"></select>
-        <a class="roda-project-change" href="https://gbstudio.com.ar/roda/">← Cambiar proyecto</a>
         <div class="projectActions">
           <button class="btn small primary" id="btnNewProject" type="button">+ Proyecto</button>
           <button class="btn small ghost" id="btnRefreshProjects" type="button" title="Actualizar proyecto desde Firebase">Actualizar</button>
@@ -714,7 +715,7 @@
   <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->
   <script>
   (function(){
-    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.4.0";document.body.append(entry);return;}
+    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.4.1";document.body.append(entry);return;}
     document.querySelector(".shell").hidden=false;document.getElementById("roda-account").hidden=true;
     const v = Date.now().toString(36);
     // CSS: fuerza versión de sesión

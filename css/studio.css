@@ -186,6 +186,20 @@ body.roda-studio{display:flex;flex-direction:column;height:100dvh;overflow:hidde
 .roda-studio .sidebar .brand{flex:none;}
 .roda-studio .brand{padding:12px;border-color:#2b2b2b;}
 .roda-studio .brandTop{margin-bottom:6px;}
+.project-identity-cover,.project-identity-title{display:none;}
+.roda-studio .brand{position:relative;overflow:hidden;padding:0;}
+.roda-studio .brand .brandTop{position:absolute;top:7px;right:7px;margin:0;z-index:1;}
+.roda-studio .brand #btnNavCollapse{display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;background:#151515d9;border:1px solid #ffffff40;color:#fff;}
+.roda-studio .brand :is(.syncMeta,.sub,.projPill,#projectTitle){display:none;}
+.roda-studio .project-identity-cover{display:flex;align-items:center;justify-content:center;height:100px;overflow:hidden;}
+.roda-studio .project-identity-cover img{width:100%;height:100%;object-fit:cover;}
+.roda-studio #projectIdentityInitials{font-size:28px;font-weight:650;color:#fff;text-shadow:0 1px 4px #0008;}
+.roda-studio .project-identity-title{display:block;margin:0;padding:11px 12px 13px;font-size:13px;line-height:1.4;font-weight:650;overflow-wrap:anywhere;}
+.roda-studio .shell.navCollapsed .brand{padding:0;}
+.roda-studio .shell.navCollapsed .brandTop{position:static;justify-content:center;padding:6px;}
+.roda-studio .shell.navCollapsed .project-identity-title{display:none;}
+.roda-studio .shell.navCollapsed .project-identity-cover{height:42px;}
+.roda-studio .shell.navCollapsed #projectIdentityInitials{font-size:16px;}
 .roda-studio .brand .sub{font-size:10px;color:#898989;}
 .roda-studio .titleInput{font-size:14px;}
 .roda-studio .nav{gap:4px;min-height:0;overflow:auto;flex:1;}
