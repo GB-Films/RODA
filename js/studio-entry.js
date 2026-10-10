@@ -11,12 +11,12 @@ const [{initializeApp,getApps,getApp},{getAuth,GoogleAuthProvider,signInWithPopu
   import(asset('firebase-config.js'))
 ]);
 const auth=getAuth(getApps().length?getApp():initializeApp(window.STORYBOARD_FIREBASE_CONFIG));
-const {createGoogleDocsImporter}=await import('./google-docs.mjs?v=1.3.0');
+const {createGoogleDocsImporter}=await import('./google-docs.mjs?v=1.4.0');
 window.RODA_IMPORT_GOOGLE_DOC=createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticateWithPopup,config:window.STORYBOARD_FIREBASE_CONFIG});
 const [{createSubscriptionGate},{createAccessController},{watchStaffRole}]=await Promise.all([
   import(asset('studio-subscription-gate.mjs?v=2')),import(asset('compi/access.mjs?v=4')),import(asset('reviews-cloud.js?v=16'))
 ]);
-await import(asset('studio-projects.js?v=roda-1.3.0'));
+await import(asset('studio-projects.js?v=roda-1.4.0'));
 const projects=window.GBStudioProjects,home=document.getElementById('roda-home'),workspace=document.querySelector('.shell');
 const account=document.getElementById('roda-account');
 const login=()=>signInWithPopup(auth,new GoogleAuthProvider());
@@ -29,7 +29,7 @@ async function start(user){
     const project=projects.context();
     if(!project){home.hidden=false;workspace.hidden=true;projects.show(document.getElementById('roda-projects'),'roda');return;}
     window.RODA_STUDIO={canEdit:project.role!=='viewer',project,userName:user.displayName||user.email};
-    await script('js/studio-storage.js?v=1.3.0');
+    await script('js/studio-storage.js?v=1.4.0');
     window.StorageLayer=window.createRodaStorage({projects,project,user});
     // Fail closed before boot: never create or edit a placeholder after a failed pull.
     await StorageLayer.init();
@@ -38,8 +38,9 @@ async function start(user){
     const back=new URL('roda/',base);document.getElementById('roda-back').href=back.href;
     document.getElementById('projectTitle').readOnly=true;
     await script('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js').catch(()=>{});
-    await script('js/screenplay.js?v=1.3.0');
-    await script('js/utils.js?v=1');await script('js/app.js?v=1.3.0');
+    await script('js/script-document.js?v=1.4.0');
+    await script('js/screenplay.js?v=1.4.0');
+    await script('js/utils.js?v=1');await script('js/app.js?v=1.4.0');
   }catch(error){workspace.hidden=true;home.hidden=false;document.getElementById('roda-projects').textContent=error.message;}
   finally{starting=false;}
 }

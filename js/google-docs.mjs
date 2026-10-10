@@ -55,8 +55,8 @@ export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticate
       if([403,404].includes(response.status)){granted.delete(authorizedUid+'|'+id);throw Error('Tu cuenta no puede leer ese documento. Revisá los permisos en Google Docs y elegilo nuevamente.');}
       throw Error('Google no pudo entregar el guion. Intentá de nuevo o cargá una copia Word.');
     }
-    const doc=await response.json(),text=window.RodaScreenplay.docsText(doc);
+    const doc=await response.json(),formatted=window.RodaScriptDocument.docsFormat(doc),text=formatted.text;
     if(!text.trim())throw Error('El documento no contiene texto de guion.');
-    return {id,url:'https://docs.google.com/document/d/'+id+'/edit',title:doc.title||'Google Docs',revisionId:doc.revisionId||'',text};
+    return {id,url:'https://docs.google.com/document/d/'+id+'/edit',title:doc.title||'Google Docs',revisionId:doc.revisionId||'',text,format:formatted.format};
   };
 }

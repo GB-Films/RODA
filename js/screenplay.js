@@ -41,7 +41,7 @@
       return standard(title)?{number:numbered?canonical(numbered[1]):null,title,explicit:false}:null;
     }
     const scenes=[];let current=null,chapter='',autoNumber=1;
-    function finish(){if(!current)return;const body=current.lines.join('\n').trim();const meta=headingMetadata(current.slugline);scenes.push({number:current.number,chapter:current.chapter,slugline:current.slugline,...meta,body,summary:body.replace(/\s+/g,' ').slice(0,220)});current=null;}
+    function finish(){if(!current)return;const body=current.lines.join('\n').trim();const meta=headingMetadata(current.slugline);scenes.push({number:current.number,chapter:current.chapter,sourceLine:current.sourceLine,slugline:current.slugline,...meta,body,summary:body.replace(/\s+/g,' ').slice(0,220)});current=null;}
     for(let i=0;i<lines.length;i++){
       const line=lines[i].replace(/\s+$/,'');
       const ch=line.trim().match(/^(?:CAP[ÍI]TULO|EPISODIO|EP\.?|CHAPTER)\s*[:.\-]?\s*(\d{1,3})\b/i);
@@ -49,9 +49,10 @@
       const h=heading(line);
       if(h){
         finish();
+        const sourceLine=i;
         if(h.explicit&&!h.title){let j=i+1;while(j<lines.length&&!lines[j].trim())j++;if(j<lines.length&&standard(lines[j].trim())){h.title=lines[j].trim();i=j;}}
         const number=h.number||String(autoNumber);autoNumber=Math.max(autoNumber+1,parseInt(number,10)+1);
-        current={number,chapter,slugline:h.title||'ESCENA '+number,lines:[]};
+        current={number,chapter,sourceLine,slugline:h.title||'ESCENA '+number,lines:[]};
       }else if(current)current.lines.push(line);
     }
     finish();return scenes;
@@ -118,20 +119,22 @@
   }
   const libraries={};
   function script(url){return libraries[url]||(libraries[url]=new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=url;s.onload=resolve;s.onerror=()=>{delete libraries[url];s.remove();reject(Error('No pudimos abrir el archivo. Revisá tu conexión e intentá de nuevo.'));};document.head.append(s);}));}
-  async function readFile(file){
+  async function readFile(file,withFormat=false){
     if(file.size>20*1024*1024)throw Error('El archivo supera los 20 MB. Exportá una copia más liviana.');
-    const ext=file.name.split('.').pop().toLowerCase();let text;
+    const ext=file.name.split('.').pop().toLowerCase();let text,format;
     if(['txt','fountain'].includes(ext))text=await file.text();
     else if(ext==='docx'){
+      if(root.RodaScriptDocument){const result=await root.RodaScriptDocument.readWord(await file.arrayBuffer());text=result.text;format=result.format;}else {
       await script('js/vendor/mammoth.browser.js');
       text=(await root.mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()})).value;
-    }else if(ext==='pdf'){
+    }}else if(ext==='pdf'){
       const pdf=await import('./vendor/pdf.mjs');pdf.GlobalWorkerOptions.workerSrc=new URL('js/vendor/pdf.worker.mjs',document.baseURI).href;
       const task=pdf.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false});
       try{const doc=await task.promise;if(doc.numPages>500)throw Error('El PDF supera las 500 páginas.');const pages=[];for(let n=1;n<=doc.numPages;n++){const page=await doc.getPage(n);pages.push(pdfLines((await page.getTextContent()).items));}text=pages.join('\n\n');}finally{await task.destroy();}
     }else throw Error('Usá un PDF con texto, DOCX, TXT o Fountain.');
     if(!text?.trim())throw Error('No encontramos texto en el archivo. Si el PDF está escaneado, cargá una copia con texto seleccionable.');
-    return text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+    text=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+    return withFormat?{text,format}:text;
   }
   const api={parserVersion,parse,headingMetadata,categories,labels,breakdown,docsLink,docsText,sceneKey,pdfLines,readFile};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;

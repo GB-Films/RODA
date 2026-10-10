@@ -2390,13 +2390,13 @@ function setupScheduleWheelScroll(){
     catch(error){scriptStatus(error.message||"No pudimos cargar el guion. Intentá de nuevo.",true);}
     finally{scriptLoading=false;renderScriptUI();}
   }
-  async function importScriptText(text, source, force=false){
+  async function importScriptText(text, source, force=false, documentFormat=null){
     if(isReadOnly())throw Error("Necesitás permiso de edición en este proyecto.");
     const rawText=String(text||"").trim();if(!rawText)throw Error("Cargá un archivo o pegá el texto del guion.");
     if(new TextEncoder().encode(rawText).length>250000)throw Error("El texto del guion es demasiado largo para cargarlo junto al historial. Dividilo en capítulos.");
     const latest=state.script.versions.filter(v=>!v.draft).at(-1);
     const comparable=value=>String(value).replace(/[ \t]+$/gm,'').replace(/\n\s*\n+/g,'\n').trim();
-    if(!force&&latest?.parserVersion===RodaScreenplay.parserVersion&&latest?.scenes?.length&&comparable(scriptVersionText(latest))===comparable(rawText)){scriptStatus("El guion no tiene cambios desde la última carga.");return false;}
+    if(!force&&(!documentFormat||JSON.stringify(documentFormat)===JSON.stringify(latest?.documentFormat))&&latest?.parserVersion===RodaScreenplay.parserVersion&&latest?.scenes?.length&&comparable(scriptVersionText(latest))===comparable(rawText)){scriptStatus("El guion no tiene cambios desde la última carga.");return false;}
     const keywords=el("scriptKeywords")?.value||"";
     const scenes=parseScreenplayToScriptScenes(rawText,keywords);
     if(!scenes.length)throw Error("No encontramos encabezados de escena. Usá INT. o EXT. al comienzo de cada escena; también podés indicar otros encabezados en Opciones de detección.");
@@ -2407,7 +2407,7 @@ function setupScheduleWheelScroll(){
     next.script.versions=next.script.versions.filter(v=>!v.draft||v.scenes?.length);
     const now=new Date().toISOString(),number=next.script.versions.length+1;
     const custom=source.type==='text'?(el("scriptVersionName")?.value||"").trim():"";
-    const version={id:uid("scrVer"),name:`V${number}`+(custom?" · "+custom:""),createdAt:now,updatedAt:now,keywords,scenes,rawText,source,parserVersion:RodaScreenplay.parserVersion,authorName:window.RODA_STUDIO?.userName||"",draft:false};
+    const version={id:uid("scrVer"),name:`V${number}`+(custom?" · "+custom:""),createdAt:now,updatedAt:now,keywords,scenes,rawText,source,...(documentFormat?{documentFormat}:{}),parserVersion:RodaScreenplay.parserVersion,authorName:window.RODA_STUDIO?.userName||"",draft:false};
     next.script.versions.push(version);
     // Construct and size the complete next snapshot before replacing any project data.
     state=next;
@@ -2807,10 +2807,7 @@ function setupScheduleWheelScroll(){
     el('scriptEmptyHint').hidden=hasScenes;
     el('scriptCurrentTitle').textContent=hasScenes?v.name:'Tu guion';
     el('scriptVerMeta').textContent=hasScenes?new Date(v.createdAt||v.updatedAt).toLocaleString('es-AR')+' · '+(v.source?.name||'Texto cargado')+(v.authorName?' · '+v.authorName:''):'';
-    const text=hasScenes?scriptVersionText(v):'',documentText=el('scriptFullText');
-    if(documentText.dataset.version!==v?.id || documentText.textContent!==text){
-      documentText.textContent=text;documentText.dataset.version=v?.id||'';el('scriptDocumentScroll').scrollTop=0;
-    }
+    RodaScriptDocument.update(v,hasScenes?scriptVersionText(v):'');
     el('scriptBaseLabel').textContent=inUse?'Base de producción':active?'Producción basada en '+active.name:'Sin versión de producción';
     el('scriptBaseHint').textContent=inUse?'Esta versión guía el desglose, las locaciones y el reparto.':hasScenes?'Usá esta versión para actualizar el desglose. Se conservan notas, planos, lugares asignados y jornadas.':'Cargá el guion y elegí una versión para preparar la producción.';
     const apply=el('btnScriptApply');apply.disabled=!hasScenes||isReadOnly()||scriptLoading||inUse;
@@ -9667,10 +9664,11 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
       toggleScriptImportPanel(open);
     });
 
+    RodaScriptDocument.bind();
     el("btnParseScript")?.addEventListener("click",()=>runScriptLoad(()=>importScriptText(el("scriptImportText")?.value||"",{type:"text",name:"Texto pegado"})));
     el("scriptFileInput")?.addEventListener("change",async event=>{
       const file=event.target.files?.[0];if(!file)return;
-      await runScriptLoad(async()=>importScriptText(await RodaScreenplay.readFile(file),{type:"file",name:file.name}));event.target.value="";
+      await runScriptLoad(async()=>{const result=await RodaScreenplay.readFile(file,true);return importScriptText(result.text,{type:"file",name:file.name},false,result.format);});event.target.value="";
     });
     el("btnScriptLinkDocs")?.addEventListener("click",()=>{
       if(isReadOnly())return;
@@ -9683,7 +9681,7 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
       const entered=(el('scriptDocsURL').value||'').trim();
       const linked=entered?RodaScreenplay.docsLink(entered):null;
       const result=await window.RODA_IMPORT_GOOGLE_DOC(linked);if(!result){scriptStatus('Importación cancelada. El guion cargado se conserva.');return;}
-      const changed=await importScriptText(result.text,{type:"google-doc",name:result.title||"Google Docs",url:result.url,documentId:result.id,revisionId:result.revisionId});
+      const changed=await importScriptText(result.text,{type:"google-doc",name:result.title||"Google Docs",url:result.url,documentId:result.id,revisionId:result.revisionId},false,result.format);
       state.script.googleDoc={id:result.id,url:result.url,title:result.title,lastImportedAt:new Date().toISOString()};touch();
       if(!changed)scriptStatus('El documento no tiene cambios desde la última carga.');
     }));

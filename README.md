@@ -6,9 +6,13 @@ Los datos de Roda se guardan juntos dentro del proyecto del estudio. Los permiso
 
 La distribución integrada se copia en `roda/` del repositorio `GB-Films/GB-Studio` y se publica con su Hosting. `tests/studio-browser.cjs` comprueba el flujo con una sesión y servidor simulados; requiere Playwright, JSZip y `STUDIO_ROOT` apuntando al checkout de Studio. `node --test tests/screenplay.test.cjs` verifica el análisis de texto sin dependencias.
 
-## Lectura y versiones de guion · 1.3.0
+## Lectura y versiones de guion · 1.4.0
 
-La sección **Guion** muestra el texto completo de la versión seleccionada en una hoja de lectura con desplazamiento propio. Conserva el texto importado y sus saltos de línea; no intenta reproducir la maquetación original de Word o Google Docs. Las versiones quedan al costado (en una tira horizontal en móvil). Los campos de edición de escenas permanecen en Breakdown.
+La sección **Guion** aprovecha toda la altura para leer. La carga, las versiones, los datos y las acciones quedan en un lateral con desplazamiento propio; en móvil se abre desde una barra compacta. El índice permite elegir una escena o escribir su número. La búsqueda resalta coincidencias, admite acentos opcionales y recorre resultados con las flechas o Enter / Shift+Enter. Los campos de edición de escenas permanecen en Breakdown.
+
+Las nuevas cargas Word y Google Docs conservan párrafos, alineación, sangrías, espaciado, familia y tamaño de letra, negrita, cursiva y subrayado. Se guardan como texto y estilos estructurados (`documentFormat`), sin HTML importado. La vista adapta las sangrías al ancho disponible: no reproduce paginación, tablas, imágenes, fuentes no instaladas ni otros detalles de impresión. Las versiones antiguas, los PDF y el texto pegado usan un formato de lectura; para recuperar estilos de una carga anterior hay que reimportar el documento original. Un cambio de formato también permite guardar una nueva versión aunque el texto sea idéntico.
+
+El lector de Word extrae los XML de documento y estilos desde ZIP STORE o DEFLATE, con límites de tamaño y propiedades visuales permitidas. Google Docs utiliza los mismos permisos existentes. La navegación y la búsqueda son locales y están disponibles con permisos de solo lectura.
 
 **Cargar guion** abre una ventana para archivo, Google Docs o texto pegado. Una carga válida se guarda como versión y no cambia la producción. **Usar esta versión para producción** elige explícitamente la base del desglose; reutiliza la versión seleccionada sin crear una copia y conserva notas, planos, lugares asignados y jornadas. La versión vigente se identifica en el historial. Los proyectos anteriores mantienen su versión en uso y no necesitan migración.
 

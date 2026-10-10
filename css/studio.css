@@ -130,6 +130,54 @@ body.roda-studio{display:flex;flex-direction:column;height:100dvh;overflow:hidde
  .roda-studio .script-production-bar p{display:none;}
  .roda-studio .script-reader #scriptVerMeta{font-size:10px;margin:4px 0;}
 }
+/* Reader controls occupy the side rail so the manuscript starts at the top. */
+.roda-studio .script-workspace{grid-template-columns:244px minmax(0,1fr);gap:12px;}
+.roda-studio .script-reader-tools>.cardContent{padding:14px;}
+.script-side-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.script-side-heading h1{font-size:21px;letter-spacing:-.5px;margin:0;}
+.script-reader-tools #btnScriptUpload{width:100%;}
+.script-side-section{border-top:1px solid #333;margin-top:18px;padding-top:16px;}
+.script-side-section>label{display:block;font-size:11px;font-weight:600;margin:0 0 7px;color:#ccc;}
+.script-side-section>.input{width:100%;}
+.script-search-nav{display:flex;align-items:center;gap:5px;margin:6px 0 16px;min-height:26px;}
+.script-search-nav>span{flex:1;font-size:11px;color:#aaa;}
+.roda-studio .script-search-nav .btn{padding:3px 8px;}
+.script-jump-form{display:flex;gap:6px;margin-bottom:8px;}
+.script-jump-form input{min-width:0;width:100%;}
+.script-jump-form button{flex:none;}
+#scriptJumpStatus{display:block;margin-top:5px;}
+.script-reader-tools .cardTitle{margin:0 0 12px;}
+.roda-studio .script-reader-tools #scriptHistory{display:block;overflow:auto;max-height:210px;padding-right:4px;}
+.roda-studio .script-reader-tools .script-history-item{min-width:0;max-width:none;padding:10px;margin:0 0 7px;gap:3px;}
+.script-history-item span{font-size:10px;}
+.script-version-details strong{font-size:11px;}
+.script-version-details p{font-size:10px;line-height:1.5;overflow-wrap:anywhere;}
+.script-version-details #btnScriptApply{width:100%;white-space:normal;margin:8px 0;line-height:1.4;}
+.script-side-actions{display:flex;flex-wrap:wrap;gap:6px;}
+.roda-studio .script-side-actions .btn{font-size:10px;padding:6px 8px;}
+.script-reader-tools .script-message{font-size:11px;padding:9px;}
+.script-document-scroll{padding:16px 20px;border-radius:9px;}
+.script-paper{padding:44px clamp(24px,4vw,64px);}
+.script-manuscript{white-space:normal;font-size:14px;line-height:1.55;}
+.script-paragraph{white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 10pt;min-height:1em;}
+.script-paragraph.script-blank{min-height:0;margin:0;height:0;}
+.script-slugline{font-weight:700;margin-top:22pt;}
+.script-scene-anchor{display:inline;scroll-margin-top:36px;}
+.script-manuscript mark{background:#f6dc76;color:inherit;border-radius:2px;}
+.script-manuscript mark.current{background:#ffb54d;outline:1px solid #a7630d;}
+.script-tools-toggle{display:none;}
+@media(max-width:700px){
+ .roda-studio #view-script{position:relative;}
+ .roda-studio .script-workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);}
+ .roda-studio .script-tools-toggle{display:block;flex:none;text-align:left;margin-bottom:8px;}
+ .roda-studio .script-reader-tools{display:none;position:absolute;z-index:30;top:42px;bottom:8px;left:0;width:min(290px,calc(100% - 20px));box-shadow:12px 8px 30px #0009;border-color:#666;}
+ .roda-studio .script-reader-tools.is-open{display:flex;}
+ .roda-studio .script-reader-tools>.cardContent{overflow:auto;}
+ .script-document-scroll{padding:8px;}
+ .script-paper{padding:28px 18px;}
+ .script-paragraph{max-width:100%;}
+ .script-manuscript{font-size:12px;}
+}
 /* Production workspace: compact navigation, explicit status and progressive detail. */
 .roda-studio{font-size:13px;line-height:1.45;}
 .roda-studio :is(button,input,select,textarea){font-family:inherit;}

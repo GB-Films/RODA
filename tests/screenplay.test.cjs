@@ -28,3 +28,9 @@ test('Scene identity includes chapter; PDF text follows page coordinates instead
  assert.notEqual(sceneKey({chapter:1,number:'2a'}),sceneKey({chapter:2,number:'2A'}));
  assert.equal(pdfLines([{str:'DÍA',transform:[1,0,0,1,100,500]},{str:'Hola.',transform:[1,0,0,1,30,450]},{str:'INT. CASA -',transform:[1,0,0,1,30,500]}]),'INT. CASA - DÍA\nHola.');
 });
+test('Reader anchors use the original heading line, including split labels and repeated chapter numbering',()=>{
+ const text='Título\n\nCAPÍTULO 1\nESCENA 01\n\nINT. CASA - DÍA\nANA\nHola.\nCAPÍTULO 2\nESCENA 01 INT. CASA - DÍA\nAdiós.';
+ const scenes=parse(text);
+ assert.deepEqual(scenes.map(s=>s.sourceLine),[3,9]);
+ assert.notEqual(sceneKey(scenes[0]),sceneKey(scenes[1]));
+});

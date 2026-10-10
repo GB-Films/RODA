@@ -15,7 +15,7 @@
   </script>
   <link href="css/styles.css?v=20260124-01" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
-  <link rel="stylesheet" href="css/studio.css?v=1.3.0"/>
+  <link rel="stylesheet" href="css/studio.css?v=1.4.0"/>
 </head>
 <body class="roda-studio">
   <header class="studio-global-header">
@@ -92,13 +92,28 @@
 
 
       <section class="view hidden" id="view-script">
-        <div class="script-heading"><div><h1>Guion</h1><p>Leé el documento completo y elegí la versión que guía la producción.</p></div><button class="btn primary" id="btnScriptUpload">+ Cargar guion</button></div>
-        <p class="script-message" id="scriptLoadStatus" role="status" aria-live="polite" hidden></p>
+        <button class="btn script-tools-toggle" id="scriptToolsToggle" aria-expanded="false" aria-controls="scriptReaderTools" data-ro-allow="1">Guion · Buscar, escenas y versiones ☰</button>
         <div class="script-workspace">
-          <aside class="card script-history"><div class="cardHeader"><h2 class="cardTitle">Versiones</h2></div><div class="cardContent"><p class="muted small">Seleccioná una versión para leerla.</p><div id="scriptHistory" data-ro-allow="1"></div></div></aside>
-          <div class="card script-reader"><div class="cardHeader"><div><h2 class="cardTitle" id="scriptCurrentTitle">Tu guion</h2><p class="muted small" id="scriptVerMeta"></p></div><button class="btn" id="btnScriptDownload" data-ro-allow="1">Descargar texto</button></div>
-            <div class="script-production-bar"><div><strong id="scriptBaseLabel"></strong><p class="muted small" id="scriptBaseHint"></p></div><div class="row gap"><button class="btn" id="btnScriptGoBreakdown" data-ro-allow="1">Ver desglose →</button><button class="btn primary" id="btnScriptApply">Usar esta versión para producción</button></div></div>
-            <div class="script-document-scroll" id="scriptDocumentScroll" tabindex="0" data-ro-allow="1" aria-label="Guion completo"><div class="empty-state" id="scriptEmptyHint">Cargá un guion para empezar. Sus versiones y el texto completo aparecerán acá.</div><article class="script-paper" id="scriptVersionUI" hidden><pre id="scriptFullText" class="script-manuscript"></pre></article></div>
+          <aside class="card script-history script-reader-tools" id="scriptReaderTools">
+            <div class="cardContent">
+              <div class="script-side-heading"><h1>Guion</h1><span id="scriptSceneTotal" class="muted small"></span></div>
+              <button class="btn primary" id="btnScriptUpload">+ Cargar guion</button>
+              <section class="script-side-section" aria-label="Navegación del guion" data-ro-allow="1">
+                <label for="scriptSearch">Buscar en el guion</label>
+                <input class="input" id="scriptSearch" type="search" placeholder="Palabra o frase…" autocomplete="off" data-ro-allow="1">
+                <div class="script-search-nav"><span id="scriptSearchCount" role="status" aria-live="polite"></span><button class="btn" id="scriptSearchPrev" aria-label="Resultado anterior" data-ro-allow="1" disabled>↑</button><button class="btn" id="scriptSearchNext" aria-label="Resultado siguiente" data-ro-allow="1" disabled>↓</button></div>
+                <label for="scriptSceneNumber">Ir a escena</label>
+                <form id="scriptJumpForm" class="script-jump-form" data-ro-allow="1"><input class="input" id="scriptSceneNumber" type="text" placeholder="Nº, ej. 14" aria-label="Número de escena" data-ro-allow="1"><button class="btn" id="scriptJump" type="submit" data-ro-allow="1">Ir →</button></form>
+                <select class="input" id="scriptSceneSelect" aria-label="Índice de escenas" data-ro-allow="1"><option value="">Ir a una escena…</option></select>
+                <span class="muted small" id="scriptJumpStatus" role="status" aria-live="polite"></span>
+              </section>
+              <section class="script-side-section"><h2 class="cardTitle">Versiones</h2><div id="scriptHistory" data-ro-allow="1"></div></section>
+              <section class="script-side-section script-version-details"><h2 class="cardTitle" id="scriptCurrentTitle">Tu guion</h2><p class="muted small" id="scriptVerMeta"></p><strong id="scriptBaseLabel"></strong><p class="muted small" id="scriptBaseHint"></p><button class="btn primary" id="btnScriptApply">Usar esta versión para producción</button><div class="script-side-actions"><button class="btn" id="btnScriptGoBreakdown" data-ro-allow="1">Ver desglose →</button><button class="btn" id="btnScriptDownload" data-ro-allow="1">Descargar texto</button></div><p class="muted small" id="scriptFormatHint"></p></section>
+              <p class="script-message" id="scriptLoadStatus" role="status" aria-live="polite" hidden></p>
+            </div>
+          </aside>
+          <div class="card script-reader">
+            <div class="script-document-scroll" id="scriptDocumentScroll" tabindex="0" data-ro-allow="1" aria-label="Guion completo"><div class="empty-state" id="scriptEmptyHint">Cargá un guion para empezar. Sus versiones y el texto completo aparecerán acá.</div><article class="script-paper" id="scriptVersionUI" hidden><div id="scriptFullText" class="script-manuscript"></div></article></div>
           </div>
         </div>
         <dialog class="script-upload-dialog" id="scriptUploadDialog" aria-labelledby="scriptUploadTitle">
@@ -699,7 +714,7 @@
   <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->
   <script>
   (function(){
-    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.3.0";document.body.append(entry);return;}
+    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.4.0";document.body.append(entry);return;}
     document.querySelector(".shell").hidden=false;document.getElementById("roda-account").hidden=true;
     const v = Date.now().toString(36);
     // CSS: fuerza versión de sesión
@@ -720,7 +735,7 @@
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
     ];
-    const appFiles = ["js/firebase-config.js","js/screenplay.js","js/utils.js","js/storage.js","js/app.js"];
+    const appFiles = ["js/firebase-config.js","js/script-document.js","js/screenplay.js","js/utils.js","js/storage.js","js/app.js"];
 
     function loadScript(src){
       return new Promise((res)=>{
