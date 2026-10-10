@@ -82,7 +82,7 @@ function sanitizeScriptState(){
     const now=new Date().toISOString();
     state.script.versions.push({id:uid("scrVer"),name:"V1",createdAt:now,updatedAt:now,keywords:"",scenes:[],draft:true});
   }
-  if(!state.script.versions.some(v=>v.id===state.script.activeVersionId))state.script.activeVersionId=state.script.versions.at(-1)?.id||null;
+  if(!state.script.versions.some(v=>v.id===state.script.activeVersionId))state.script.activeVersionId=null;
 }
 
 
@@ -2379,8 +2379,8 @@ function setupScheduleWheelScroll(){
 
 
   function scriptStatus(message, error=false){
-    const node=el("scriptLoadStatus");if(!node)return;
-    node.hidden=false;node.textContent=message;node.classList.toggle("error",error);
+    for(const id of ['scriptLoadStatus','scriptImportStatus']){const node=el(id);if(!node)continue;
+      node.hidden=false;node.textContent=message;node.classList.toggle("error",error);}
   }
   function scriptVersionText(v){return v.rawText||(v.scenes||[]).map(sc=>`${sc.number}. ${sc.slugline}\n\n${sc.body||""}`).join("\n\n");}
   async function runScriptLoad(task){
@@ -2394,7 +2394,7 @@ function setupScheduleWheelScroll(){
     if(isReadOnly())throw Error("Necesitás permiso de edición en este proyecto.");
     const rawText=String(text||"").trim();if(!rawText)throw Error("Cargá un archivo o pegá el texto del guion.");
     if(new TextEncoder().encode(rawText).length>250000)throw Error("El texto del guion es demasiado largo para cargarlo junto al historial. Dividilo en capítulos.");
-    const latest=state.script.versions.find(v=>v.id===state.script.activeVersionId);
+    const latest=state.script.versions.filter(v=>!v.draft).at(-1);
     const comparable=value=>String(value).replace(/[ \t]+$/gm,'').replace(/\n\s*\n+/g,'\n').trim();
     if(!force&&latest?.parserVersion===RodaScreenplay.parserVersion&&latest?.scenes?.length&&comparable(scriptVersionText(latest))===comparable(rawText)){scriptStatus("El guion no tiene cambios desde la última carga.");return false;}
     const keywords=el("scriptKeywords")?.value||"";
@@ -2408,11 +2408,10 @@ function setupScheduleWheelScroll(){
     const now=new Date().toISOString(),number=next.script.versions.length+1;
     const custom=source.type==='text'?(el("scriptVersionName")?.value||"").trim():"";
     const version={id:uid("scrVer"),name:`V${number}`+(custom?" · "+custom:""),createdAt:now,updatedAt:now,keywords,scenes,rawText,source,parserVersion:RodaScreenplay.parserVersion,authorName:window.RODA_STUDIO?.userName||"",draft:false};
-    next.script.versions.push(version);next.script.activeVersionId=version.id;
+    next.script.versions.push(version);
     // Construct and size the complete next snapshot before replacing any project data.
-    state=next;let result;
+    state=next;
     try{
-      result=applyScriptToProject(version,false);
       const {core,pack}=splitStateForBins(next);
       if([core,pack].some(part=>new TextEncoder().encode(JSON.stringify(part)).length>760000))throw Error("El proyecto llegó al límite de espacio para su historial. La nueva carga no se guardó y las versiones anteriores se conservan.");
     }catch(error){state=previous;selectedSceneId=previousSelection;throw error;}
@@ -2420,9 +2419,26 @@ function setupScheduleWheelScroll(){
     saveScriptRawLocal("");if(el("scriptImportText"))el("scriptImportText").value="";if(el("scriptVersionName"))el("scriptVersionName").value="";
     touch();
     renderScenesTable();renderSceneEditor();renderSceneBank();renderDaysBoard();renderDayDetail();renderElementsExplorer();renderReports();renderScheduleBoard();renderReportsDetail();renderScriptUI();
-    const retained=state.scenes.filter(sc=>!keys.has(RodaScreenplay.sceneKey(sc))).length;
-    scriptStatus(`${version.name} cargada · ${scenes.length} escenas · ${result.added} nuevas y ${result.updated} actualizadas. Desglose generado para revisar.`+(retained?` Se conservan ${retained} escenas anteriores o manuales; revisalas en Breakdown.`:""));
+    scriptStatus(`${version.name} guardada · ${scenes.length} escenas. Elegí «Usar esta versión para producción» para generar el desglose a partir de este guion.`);
+    el('scriptUploadDialog')?.close();
     return true;
+  }
+
+  function useScriptVersion(version){
+    if(isReadOnly()||!version?.scenes?.length)return;
+    const previous=state,selection=selectedSceneId;
+    state=JSON.parse(JSON.stringify(state));
+    try{
+      const chosen=state.script.versions.find(v=>v.id===version.id);
+      const result=applyScriptToProject(chosen,false);
+      const {core,pack}=splitStateForBins(state);
+      if([core,pack].some(part=>new TextEncoder().encode(JSON.stringify(part)).length>760000))throw Error('No hay espacio suficiente para aplicar esta versión. La producción anterior se conserva.');
+      touch();
+      const keys=new Set(chosen.scenes.map(sc=>RodaScreenplay.sceneKey(sc)));
+      const retained=state.scenes.filter(sc=>!keys.has(RodaScreenplay.sceneKey(sc))).length;
+      scriptStatus(`${chosen.name} es la base de producción · ${result.added} escenas nuevas y ${result.updated} actualizadas. Revisá el desglose y organizá las jornadas en el plan.`+(retained?` Se conservan ${retained} escenas anteriores o manuales; revisalas en Breakdown.`:''));
+    }catch(error){state=previous;selectedSceneId=selection;throw error;}
+    renderScenesTable();renderSceneEditor();renderSceneBank();renderDaysBoard();renderDayDetail();renderElementsExplorer();renderScheduleBoard();renderReports();renderReportsDetail();renderScriptUI();
   }
 
   // ======= Script parser (INT/EXT) =======
@@ -2450,7 +2466,7 @@ function setupScheduleWheelScroll(){
       const button=document.createElement('button');button.type='button';button.className='script-history-item'+(current?.id===v.id?' selected':'');
       button.setAttribute('aria-pressed',String(current?.id===v.id));
       const source=v.source?.name||'Texto cargado';
-      button.innerHTML='<strong>'+esc(v.name)+'</strong><span>'+esc(new Date(v.createdAt||v.updatedAt).toLocaleString('es-AR'))+'</span><span>'+esc(source)+' · '+(v.scenes||[]).length+' escenas'+(v.id===state.script.activeVersionId?' · En uso':'')+'</span>';
+      button.innerHTML='<strong>'+esc(v.name)+'</strong><span>'+esc(new Date(v.createdAt||v.updatedAt).toLocaleString('es-AR'))+'</span><span>'+esc(source)+' · '+(v.scenes||[]).length+' escenas'+(v.id===state.script.activeVersionId?' · Base de producción':'')+'</span>';
       button.onclick=()=>{selectedScriptVersionId=v.id;selectedScriptSceneId=null;renderScriptUI();};list.append(button);
     }
   }
@@ -2782,61 +2798,30 @@ function setupScheduleWheelScroll(){
 
 
   function renderScriptUI(){
-    const wrap = el("scriptVersionUI");
-    sanitizeScriptState({ migrateRawToLocal:true });
-
-    renderScriptVersionSelect();
-    const v = getActiveScriptVersion();
-
-    if(!wrap) return;
-    if(!v){
-      wrap.style.display = "none";
-      return;
+    sanitizeScriptState();renderScriptVersionSelect();
+    const v=getActiveScriptVersion(),hasScenes=!!v?.scenes?.length;
+    const active=state.script.versions.find(x=>x.id===state.script.activeVersionId && !x.draft);
+    const inUse=hasScenes && v.id===active?.id;
+    const wrap=el('scriptVersionUI');if(!wrap)return;
+    wrap.hidden=!hasScenes;
+    el('scriptEmptyHint').hidden=hasScenes;
+    el('scriptCurrentTitle').textContent=hasScenes?v.name:'Tu guion';
+    el('scriptVerMeta').textContent=hasScenes?new Date(v.createdAt||v.updatedAt).toLocaleString('es-AR')+' · '+(v.source?.name||'Texto cargado')+(v.authorName?' · '+v.authorName:''):'';
+    const text=hasScenes?scriptVersionText(v):'',documentText=el('scriptFullText');
+    if(documentText.dataset.version!==v?.id || documentText.textContent!==text){
+      documentText.textContent=text;documentText.dataset.version=v?.id||'';el('scriptDocumentScroll').scrollTop=0;
     }
-    wrap.style.display = "";
-
-    // pick selected script scene
-    if(!selectedScriptSceneId || !(v.scenes||[]).some(s=>s.id===selectedScriptSceneId)){
-      selectedScriptSceneId = v.scenes?.[0]?.id || null;
-    }
-
-    renderScriptSceneList(v);
-    renderScriptSceneEditor(v);
-    const meta=el("scriptVerMeta");
-    const hasScenes=!!v.scenes?.length;
-    wrap.style.display=hasScenes?"":"none";
-    if(el("scriptCurrentTitle"))el("scriptCurrentTitle").textContent=hasScenes?v.name:"Tu guion";
-    if(el("scriptEmptyHint"))el("scriptEmptyHint").hidden=hasScenes;
-    if(meta)meta.textContent=hasScenes?new Date(v.createdAt||v.updatedAt).toLocaleString("es-AR")+" · "+(v.source?.name||"Texto cargado")+(v.authorName?" · "+v.authorName:""):"Todavía no hay un guion cargado.";
-    const apply=el("btnScriptApply");if(apply){apply.disabled=!hasScenes||isReadOnly();apply.textContent=v.id===state.script.activeVersionId?"Actualizar desglose con esta versión":"Restaurar como nueva actualización";}
-    if(el("btnScriptDownload"))el("btnScriptDownload").disabled=!hasScenes;
-    for(const id of ['scriptFileInput','btnParseScript','scriptImportText','scriptVersionName','scriptKeywords','scriptDocsURL','btnScriptLinkDocs','btnScriptImportDocs']){const node=el(id);if(node)node.disabled=isReadOnly()||scriptLoading;}
-    const source=state.script.googleDoc;
-    const open=el("scriptDocsOpen");if(open){open.hidden=!source?.url;if(source?.url){try{open.href=RodaScreenplay.docsLink(source.url).url;}catch{open.hidden=true;}}}
-    if(el("scriptDocsURL")&&document.activeElement!==el("scriptDocsURL"))el("scriptDocsURL").value=source?.url||"";
-    if(el("btnScriptImportDocs"))el("btnScriptImportDocs").textContent=source?.id?"Importar últimos cambios":"Elegir e importar de Google Docs";
-    if(el("scriptDocsStatus"))el("scriptDocsStatus").textContent=source?.lastImportedAt?"Última importación: "+new Date(source.lastImportedAt).toLocaleString('es-AR')+". Los cambios del documento se traen al tocar Importar últimos cambios.":"Para importar, Google te pedirá elegir y autorizar ese documento. La copia y el desglose se comparten con quienes tienen acceso al proyecto de Roda.";
-    const summary=el("scriptBreakdownSummary");
-    if(summary){const totals=Object.fromEntries(cats.map(c=>[c,new Set()]));for(const sc of v.scenes||[])for(const [cat,items] of Object.entries(RodaScreenplay.breakdown(sc)))for(const item of items)totals[cat].add(item);summary.textContent=hasScenes?(v.scenes.length+" escenas · "+totals.cast.size+" personajes · "+Object.entries(totals).filter(([c])=>c!=='cast').reduce((n,[,set])=>n+set.size,0)+" elementos sugeridos"):"";}
-
-    // Botón "+ Escena (6A)" dinámico según selección
-    const btnIns = el("btnScriptInsertAfter");
-    if(btnIns){
-      const scenes = (v.scenes||[]);
-      if(!scenes.length){
-        btnIns.textContent = "+ Escena (1)";
-      }else{
-        const idx = scenes.findIndex(s=>s.id===selectedScriptSceneId);
-        if(idx>=0){
-          const after = scenes[idx];
-          const nextNum = nextInsertedNumber(after.number, scenes.map(s=>s.number));
-          btnIns.textContent = nextNum ? `+ Escena (${nextNum})` : "+ Escena";
-        }else{
-          btnIns.textContent = "+ Escena";
-        }
-      }
-    }
-
+    el('scriptBaseLabel').textContent=inUse?'Base de producción':active?'Producción basada en '+active.name:'Sin versión de producción';
+    el('scriptBaseHint').textContent=inUse?'Esta versión guía el desglose, las locaciones y el reparto.':hasScenes?'Usá esta versión para actualizar el desglose. Se conservan notas, planos, lugares asignados y jornadas.':'Cargá el guion y elegí una versión para preparar la producción.';
+    const apply=el('btnScriptApply');apply.disabled=!hasScenes||isReadOnly()||scriptLoading||inUse;
+    apply.textContent=inUse?'Versión en uso':'Usar esta versión para producción';
+    el('btnScriptDownload').disabled=!hasScenes;
+    for(const id of ['btnScriptUpload','scriptFileInput','btnParseScript','scriptImportText','scriptVersionName','scriptKeywords','scriptDocsURL','btnScriptLinkDocs','btnScriptImportDocs']){const node=el(id);if(node)node.disabled=isReadOnly()||scriptLoading;}
+    const source=state.script.googleDoc,open=el('scriptDocsOpen');
+    if(open){open.hidden=!source?.url;if(source?.url){try{open.href=RodaScreenplay.docsLink(source.url).url;}catch{open.hidden=true;}}}
+    if(!el('scriptUploadDialog').open && document.activeElement!==el('scriptDocsURL'))el('scriptDocsURL').value=source?.url||'';
+    el('btnScriptImportDocs').textContent=source?.id?'Importar últimos cambios':'Elegir e importar de Google Docs';
+    el('scriptDocsStatus').textContent=source?.lastImportedAt?'Última importación: '+new Date(source.lastImportedAt).toLocaleString('es-AR')+'. Importá otra vez para cargar una nueva versión.':'Google te pedirá autorizar el documento elegido. Sus permisos de edición se mantienen en Google Docs.';
   }
 
   function renderScriptSceneList(version){
@@ -9668,6 +9653,13 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
 
     el("btnCancelScriptImport")?.addEventListener("click", ()=> toggleScriptImportPanel(false));
 
+    const uploadDialog=el('scriptUploadDialog');
+    el('btnScriptUpload')?.addEventListener('click',()=>{
+      if(isReadOnly())return;
+      el('scriptImportStatus').hidden=true;uploadDialog.showModal();
+    });
+    el('btnScriptUploadClose')?.addEventListener('click',()=>uploadDialog.close());
+    uploadDialog?.addEventListener('click',e=>{if(e.target!==uploadDialog)return;const r=uploadDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)uploadDialog.close();});
     el("btnToggleScriptImport")?.addEventListener("click", ()=>{
       sanitizeScriptState({ migrateRawToLocal:true });
       const panel = el("scriptImportPanel");
@@ -9686,7 +9678,11 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
     });
     el("btnScriptImportDocs")?.addEventListener("click",()=>runScriptLoad(async()=>{
       if(!window.RODA_IMPORT_GOOGLE_DOC)throw Error('La importación de Google Docs está disponible en GB Studio. También podés cargar una copia Word o pegar el texto.');
-      const result=await window.RODA_IMPORT_GOOGLE_DOC(state.script.googleDoc||null);if(!result){scriptStatus('Importación cancelada. El guion cargado se conserva.');return;}
+      // Google Picker lives outside the native dialog's top layer.
+      uploadDialog.close();
+      const entered=(el('scriptDocsURL').value||'').trim();
+      const linked=entered?RodaScreenplay.docsLink(entered):null;
+      const result=await window.RODA_IMPORT_GOOGLE_DOC(linked);if(!result){scriptStatus('Importación cancelada. El guion cargado se conserva.');return;}
       const changed=await importScriptText(result.text,{type:"google-doc",name:result.title||"Google Docs",url:result.url,documentId:result.id,revisionId:result.revisionId});
       state.script.googleDoc={id:result.id,url:result.url,title:result.title,lastImportedAt:new Date().toISOString()};touch();
       if(!changed)scriptStatus('El documento no tiene cambios desde la última carga.');
@@ -9749,8 +9745,7 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
 
     el("btnScriptApply")?.addEventListener("click",()=>runScriptLoad(async()=>{
       const v=getActiveScriptVersion();if(!v?.scenes?.length)return;
-      if(v.id!==state.script.activeVersionId)await importScriptText(scriptVersionText(v),{type:"restore",name:"Restaurada de "+v.name},true);
-      else{applyScriptToProject(v);scriptStatus('Desglose actualizado. Revisá los elementos sugeridos en Breakdown.');}
+      useScriptVersion(v);
     }));
 
     el("btnImportScenes")?.addEventListener("click", ()=>{
