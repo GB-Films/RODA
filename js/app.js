@@ -152,7 +152,7 @@ function sanitizeScriptState(){
   function updateModeBanner(){
     const pill = document.getElementById("modeBanner");
     if(!pill) return;
-    if(window.RODA_STUDIO){pill.textContent=!isReadOnly()?"Edición · GB Studio":"Solo lectura · GB Studio";return;}
+    if(window.RODA_STUDIO){pill.remove();return;}
     pill.innerHTML = editUnlocked ? "✏️ Edición (click para bloquear)" : "🔒 Lector (click para editar)";
   }
 
@@ -164,6 +164,7 @@ function sanitizeScriptState(){
   }
 
   function mountModeBanner(){
+    if(window.RODA_STUDIO)return;
     let pill = document.getElementById("modeBanner");
     if(pill) { updateModeBanner(); return pill; }
     pill = document.createElement("div");

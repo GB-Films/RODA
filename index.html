@@ -15,7 +15,7 @@
   </script>
   <link href="css/styles.css?v=20260124-01" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
-  <link rel="stylesheet" href="css/studio.css?v=1.5.0"/>
+  <link rel="stylesheet" href="css/studio.css?v=1.5.1"/>
 </head>
 <body class="roda-studio">
   <header class="studio-global-header">
@@ -717,7 +717,7 @@
   <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->
   <script>
   (function(){
-    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.5.0";document.body.append(entry);return;}
+    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.5.1";document.body.append(entry);return;}
     document.querySelector(".shell").hidden=false;document.getElementById("roda-account").hidden=true;
     const v = Date.now().toString(36);
     // CSS: fuerza versión de sesión
