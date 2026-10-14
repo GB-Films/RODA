@@ -5,12 +5,31 @@
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
-  <title>GB Production Board</title>
+  <title>GB Studio · Roda</title>
+  <meta name="theme-color" content="#101010"/>
+  <link rel="icon" type="image/svg+xml" href="assets/roda-icon.svg?v=1.5.2"/>
+  <link rel="stylesheet" href="https://gbstudio.com.ar/assets/studio-header.css"/>
+  <script>
+    window.RODA_STUDIO_BASE = new URL(location.pathname.startsWith("/roda/") ? "../" : "https://gbstudio.com.ar/", location.href).href;
+    window.RODA_LEGACY = new URLSearchParams(location.search).get("legacy") === "1";
+    if(location.hostname === "gb-films.github.io" && !window.RODA_LEGACY){ const url=new URL("roda/", window.RODA_STUDIO_BASE); url.search=location.search; url.hash=location.hash; location.replace(url.href); }
+  </script>
+  <link rel="stylesheet" href="../assets/studio-tool-access.css?v=5"/>
   <link href="css/styles.css?v=20260124-01" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/studio.css?v=1.5.2"/>
 </head>
-<body>
-  <div class="shell">
+<body class="roda-studio studio-tool-locked"><script>if(window.RODA_LEGACY)document.body.classList.remove("studio-tool-locked");</script>
+  <header class="studio-global-header">
+    <a class="studio-global-brand" data-studio-home href="https://gbstudio.com.ar/" aria-label="Inicio de GB Studio"><span class="brand-logo-frame"><img class="brand-logo-studio" data-studio-logo src="https://gbstudio.com.ar/assets/gb-studio-icon.svg?v=2" alt="GB Studio"/></span><span class="brand-divider"></span><span class="brand-product">GB<br/>STUDIO</span></a>
+    <span class="studio-global-context" id="roda-context">RODA · PRODUCCIÓN</span>
+    <div class="studio-global-actions"><a class="roda-back" id="roda-back" href="https://gbstudio.com.ar/roda/">← Proyectos</a><button class="studio-global-account" id="roda-account" type="button">Iniciar sesión</button></div>
+  </header>
+  <main class="roda-home" id="roda-home" hidden><div class="roda-home-heading"><img src="assets/roda-icon.svg?v=1.5.2" alt=""/><div><h1>Roda</h1><p>Del guion al rodaje. Escenas, jornadas, equipo y reportes en tu proyecto de GB Studio.</p></div></div><div id="roda-projects"></div><a id="roda-legacy-link" class="roda-project-change" href="https://gb-films.github.io/RODA/?legacy=1" hidden>Abrir proyectos de la versión anterior</a></main>
+  <aside id="roda-sync-message" class="roda-sync-message" role="alert" hidden></aside>
+  <dialog id="roda-account-dialog" class="roda-account-dialog"><h2>Tu cuenta de GB Studio</h2><p id="roda-account-email"></p><div class="row gap"><button class="btn" id="roda-signout">Cerrar sesión</button><button class="btn" id="roda-account-close">Volver</button></div></dialog>
+  <dialog class="roda-access-dialog" id="rodaAccessDialog" aria-labelledby="rodaAccessTitle" data-ro-allow="1"><div class="script-modal-heading"><h2 id="rodaAccessTitle">Personas y permisos</h2><button class="btn" type="button" id="rodaAccessClose">Cerrar ×</button></div><div id="rodaAccessContent"></div></dialog>
+  <div class="shell" hidden>
     <aside class="sidebar">
       <div class="brand">
         <div class="brandTop">
@@ -18,6 +37,8 @@
           <button class="btn icon ghost small" id="btnNavCollapse" type="button" title="Colapsar/Expandir">⟨</button>
         </div>
 
+        <div class="project-identity-cover" id="projectIdentityCover"><img id="projectIdentityImage" alt="" hidden/><span id="projectIdentityInitials" aria-hidden="true"></span></div>
+        <h1 class="project-identity-title" id="projectIdentityTitle"></h1>
         <input class="titleInput" id="projectTitle" placeholder="Proyecto"/>
         <select class="input projectSwitch" id="projectSwitch" title="Proyecto"></select>
         <div class="projectActions">
@@ -31,24 +52,102 @@
         <div class="sub">Guardado: <span id="savedAtText">-</span></div>
       </div>
 
+      <button class="btn roda-access-open" id="btnRodaAccess" data-ro-allow="1" hidden>Personas y permisos</button>
       <nav class="nav">
+        <span class="nav-section">Preparación</span>
+        <button class="navBtn" data-view="script"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Guion</span></button>
         <button class="navBtn" data-view="breakdown"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Breakdown</span></button>
+        <button class="navBtn" data-view="locations"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Locaciones</span></button>
+        <button class="navBtn" data-view="cast"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Reparto</span></button>
+        <span class="nav-section">Rodaje</span>
         <button class="navBtn" data-view="shooting"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Call Diario</span></button>
         <button class="navBtn" data-view="dayplan"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Plan de Rodaje</span></button>
         <button class="navBtn" data-view="schedule"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Plan General</span></button>
         <button class="navBtn" data-view="shotlist"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Shotlist</span></button>
+        <span class="nav-section">Producción</span>
         <button class="navBtn" data-view="elements"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Elementos</span></button>
         <button class="navBtn" data-view="crew"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Equipo técnico</span></button>
         <button class="navBtn" data-view="reports"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Filtros</span></button>
         <button class="navBtn" data-view="callsheet"><span class="navIco" aria-hidden="true"></span><span class="navLbl">REPORTES</span></button>
       </nav>
 
-      
+
     </aside>
 
     <main class="main">
       <div class="toast" id="toast" style="display:none;"></div>
       <div class="hoverTip" id="hoverTip" style="display:none;"></div>
+      <section class="view hidden" id="view-locations">
+        <div class="workspace-heading"><div><h1>Locaciones</h1><p>Del espacio del guion al lugar real de filmación.</p></div></div>
+        <div class="overview-stats" id="locationStats"></div>
+        <div class="location-layout">
+          <aside class="card location-directory">
+            <div class="cardHeader"><h2 class="cardTitle">Lugares de rodaje</h2></div>
+            <div class="cardContent"><p class="muted small">Un edificio puede reunir varios espacios del guion.</p><div id="locationDirectory"></div>
+              <details id="locationCreate"><summary class="btn">+ Lugar de rodaje</summary><form id="locationCreateForm" class="stack-form"><label>Nombre<input class="input" name="name" required maxlength="160" placeholder="Ej: Edificio San Martín"/></label><label>Dirección<input class="input" name="address" maxlength="300" placeholder="Calle, número y ciudad"/></label><button class="btn primary" type="submit">Crear lugar</button></form></details>
+            </div>
+          </aside>
+          <div class="card"><div class="cardHeader"><h2 class="cardTitle">Espacios del guion</h2><input class="input" id="locationSearch" data-ro-allow="1" placeholder="Buscar espacio o escena…" aria-label="Buscar espacio o escena"/></div><div class="cardContent"><div id="locationDetail"></div><p class="muted small">Asigná el lugar donde se filma cada espacio. Abrí sus escenas para ver jornadas o asignar una excepción.</p><div id="locationSets"></div></div></div>
+        </div>
+      </section>
+      <section class="view hidden" id="view-cast">
+        <div class="workspace-heading"><div><h1>Reparto</h1><p>Personajes, intérpretes y las escenas en las que participan.</p></div><input class="input" id="castSearch" data-ro-allow="1" aria-label="Buscar personaje o intérprete" placeholder="Buscar personaje o intérprete…"/></div>
+        <div class="overview-stats" id="castStats"></div><div class="cast-grid" id="castDirectory"></div>
+      </section>
+
+
+      <section class="view hidden" id="view-script">
+        <button class="btn script-tools-toggle" id="scriptToolsToggle" aria-expanded="false" aria-controls="scriptReaderTools" data-ro-allow="1">Guion · Buscar, escenas y versiones ☰</button>
+        <div class="script-workspace">
+          <aside class="card script-history script-reader-tools" id="scriptReaderTools">
+            <div class="cardContent">
+              <div class="script-side-heading"><h1>Guion</h1><span id="scriptSceneTotal" class="muted small"></span></div>
+              <button class="btn primary" id="btnScriptUpload">+ Cargar guion</button>
+              <section class="script-side-section" aria-label="Navegación del guion" data-ro-allow="1">
+                <label for="scriptSearch">Buscar en el guion</label>
+                <input class="input" id="scriptSearch" type="search" placeholder="Palabra o frase…" autocomplete="off" data-ro-allow="1">
+                <div class="script-search-nav"><span id="scriptSearchCount" role="status" aria-live="polite"></span><button class="btn" id="scriptSearchPrev" aria-label="Resultado anterior" data-ro-allow="1" disabled>↑</button><button class="btn" id="scriptSearchNext" aria-label="Resultado siguiente" data-ro-allow="1" disabled>↓</button></div>
+                <label for="scriptSceneNumber">Ir a escena</label>
+                <form id="scriptJumpForm" class="script-jump-form" data-ro-allow="1"><input class="input" id="scriptSceneNumber" type="text" placeholder="Nº, ej. 14" aria-label="Número de escena" data-ro-allow="1"><button class="btn" id="scriptJump" type="submit" data-ro-allow="1">Ir →</button></form>
+                <select class="input" id="scriptSceneSelect" aria-label="Índice de escenas" data-ro-allow="1"><option value="">Ir a una escena…</option></select>
+                <span class="muted small" id="scriptJumpStatus" role="status" aria-live="polite"></span>
+              </section>
+              <section class="script-side-section"><h2 class="cardTitle">Versiones</h2><div id="scriptHistory" data-ro-allow="1"></div></section>
+              <section class="script-side-section script-version-details"><h2 class="cardTitle" id="scriptCurrentTitle">Tu guion</h2><p class="muted small" id="scriptVerMeta"></p><strong id="scriptBaseLabel"></strong><p class="muted small" id="scriptBaseHint"></p><button class="btn primary" id="btnScriptApply">Usar esta versión para producción</button><div class="script-side-actions"><button class="btn" id="btnScriptGoBreakdown" data-ro-allow="1">Ver desglose →</button><button class="btn" id="btnScriptDownload" data-ro-allow="1">Descargar texto</button></div><p class="muted small" id="scriptFormatHint"></p></section>
+              <p class="script-message" id="scriptLoadStatus" role="status" aria-live="polite" hidden></p>
+            </div>
+          </aside>
+          <div class="card script-reader">
+            <div class="script-document-scroll" id="scriptDocumentScroll" tabindex="0" data-ro-allow="1" aria-label="Guion completo"><div class="empty-state" id="scriptEmptyHint">Cargá un guion para empezar. Sus versiones y el texto completo aparecerán acá.</div><article class="script-paper" id="scriptVersionUI" hidden><div id="scriptFullText" class="script-manuscript"></div></article></div>
+          </div>
+        </div>
+        <dialog class="script-upload-dialog" id="scriptUploadDialog" aria-labelledby="scriptUploadTitle">
+          <div class="script-modal-heading"><div><h2 id="scriptUploadTitle">Cargar guion</h2><p>Guardá una versión. Después podés elegirla como base de producción.</p></div><button class="btn" id="btnScriptUploadClose" type="button" data-ro-allow="1" aria-label="Cerrar carga de guion">Cerrar ×</button></div>
+          <p class="script-message" id="scriptImportStatus" role="status" aria-live="polite" hidden></p>
+        <div class="script-sources">
+          <div class="card"><div class="cardHeader"><h2 class="cardTitle">Cargar una actualización</h2></div><div class="cardContent">
+            <label class="script-file-label" for="scriptFileInput">Seleccionar archivo</label>
+            <input class="input" type="file" id="scriptFileInput" accept=".pdf,.docx,.txt,.fountain"/>
+            <p class="muted small">PDF con texto, Word (.docx), TXT o Fountain · hasta 20 MB.</p>
+            <button class="btn" id="btnToggleScriptImport" data-ro-allow="1">Pegar texto del guion</button>
+            <div class="scriptImportPanel hidden" id="scriptImportPanel">
+              <label for="scriptImportText">Texto del guion</label><textarea class="input" id="scriptImportText" placeholder="1. INT. CASA - DÍA&#10;&#10;ANA&#10;Hola, ¿cómo estás?" rows="8"></textarea>
+              <label for="scriptVersionName">Nombre de la actualización (opcional)</label><input class="input" id="scriptVersionName" placeholder="Ej: Revisión de dirección" maxlength="120"/>
+              <details><summary class="muted small">Opciones de detección</summary><label for="scriptKeywords">Otros encabezados de escena (separados por coma)</label><input class="input" id="scriptKeywords" placeholder="Ej: SECUENCIA"/></details>
+              <div class="row gap"><button class="btn primary" id="btnParseScript">Guardar versión</button><button class="btn ghost" id="btnCancelScriptImport" data-ro-allow="1">Ocultar</button></div>
+            </div>
+          </div></div>
+          <div class="card"><div class="cardHeader"><h2 class="cardTitle">Google Docs</h2></div><div class="cardContent">
+            <label for="scriptDocsURL">Enlace al documento</label><input class="input" id="scriptDocsURL" type="url" placeholder="https://docs.google.com/document/d/…/edit"/>
+            <div class="row gap script-actions"><button class="btn" id="btnScriptLinkDocs">Vincular enlace</button><button class="btn" id="btnScriptImportDocs">Elegir e importar de Google Docs</button></div>
+            <a class="btn script-docs-open" id="scriptDocsOpen" target="_blank" rel="noopener noreferrer" data-ro-allow="1" hidden>Abrir y editar en Google Docs ↗</a>
+            <p class="muted small">La edición se hace en Google Docs con los permisos del documento. Importá sus últimos cambios para crear una actualización en Roda.</p>
+            <p class="muted small" id="scriptDocsStatus">Para importar, Google te pedirá elegir y autorizar ese documento. La copia y el desglose se comparten con quienes tienen acceso al proyecto de Roda.</p>
+          </div></div>
+        </div>
+
+        </dialog>
+      </section>
 
       <!-- ================= BREAKDOWN ================= -->
       <section class="view" id="view-breakdown">
@@ -190,7 +289,7 @@
         </div>
 
         <!-- ABAJO: importación (secundaria) + colapsable -->
-        
+
           <div class="grid2">
 
             <div class="card span2" id="bdImportCard">
@@ -233,85 +332,6 @@
               </div>
             </div>
 
-            <div class="card collapsible collapsed span2" data-collapse-key="bd_script">
-              <div class="cardHeader">
-                <div class="cardTitle">GUION EN EL BREAKDOWN <span class="keepcase">(V1 · escenas y planos)</span></div>
-                <div class="collapseToggle" title="Expandir/Colapsar">▸</div>
-              </div>
-              <div class="cardContent">
-                <div class="row gap">
-                  <span class="pill">V1</span>
-                  <button class="btn ghost" id="btnToggleScriptImport">Pegar / Procesar</button>
-                  <span class="pill" id="scriptVerMeta">—</span>
-                </div>
-
-                <div class="scriptWrap" id="scriptVersionUI" style="display:none">
-                  <div class="scriptLeft">
-                    <div class="muted small">Escenas de la versión (doble click = editar en el proyecto)</div>
-                    <div class="scriptList" id="scriptSceneList"></div>
-                    <div class="row gap">
-                      <button class="btn" id="btnScriptInsertAfter">+ Escena (6A)</button>
-                      <button class="btn" id="btnScriptApply">Incorporar cambios al proyecto</button>
-                    </div>
-                  </div>
-
-                  <div class="scriptRight">
-                    <div class="muted small">Editor de escena (versión)</div>
-                    <div class="row gap">
-                      <div class="grow">
-                        <label class="small">Título</label>
-                        <input class="input" id="scriptSceneSlugline" placeholder="INT. CASA - DÍA"/>
-                      </div>
-                      <div style="max-width:120px">
-                        <label class="small">Nº</label>
-                        <input class="input" id="scriptSceneNumber" placeholder="6A"/>
-                      </div>
-                    </div>
-                    <div class="row gap">
-                      <div class="grow">
-                        <label class="small">Lugar</label>
-                        <input class="input" id="scriptSceneLocation" placeholder="LIVING"/>
-                      </div>
-                      <div style="max-width:140px">
-                        <label class="small">Momento</label>
-                        <select class="input" id="scriptSceneTOD">
-                          <option>Día</option><option>Noche</option><option>Atardecer</option><option>Amanecer</option>
-                        </select>
-                      </div>
-                    </div>
-                    <label class="small">Texto de escena</label>
-                    <textarea class="input" id="scriptSceneBody" placeholder="Escribí o pegá acá el texto de la escena…" rows="16"></textarea>
-
-                    <div class="row gap" style="justify-content:flex-end">
-                      <button class="btn" id="btnScriptSaveScene">Guardar cambios</button>
-                    </div>
-
-                    <div class="scriptImportPanel hidden" id="scriptImportPanel">
-                      <div class="muted small">Pegá el guion completo acá y lo proceso a escenas (reemplaza la versión actual).</div>
-                      <textarea class="input" id="scriptImportText" placeholder="INT./EXT. por línea, como guion tradicional…" rows="8"></textarea>
-                      <div class="row gap" style="align-items:flex-end">
-                        <div class="grow">
-                          <label class="small">Palabras clave (opcional)</label>
-                          <input class="input" id="scriptKeywords" placeholder="Ej: lluvia, persecución, dron…"/>
-                        </div>
-                        <button class="btn" id="btnParseScript">Procesar</button>
-                        <button class="btn ghost" id="btnCancelScriptImport">Ocultar</button>
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-
-                <div class="divider"></div>
-                <div class="muted small">Cómo usarlo</div>
-                <ol class="small">
-                  <li>Pegá el guion completo y tocá “Procesar” (reemplaza V1).</li>
-                  <li>Insertá escenas intermedias: 6 → 6A → 6B…</li>
-                  <li>Cuando esté OK, incorporá al proyecto (se sincroniza).</li>
-                </ol>
-                <div class="muted small">Tip: en el guion, el buscador de escenas funciona si el slugline arranca con INT./EXT.</div>
-              </div>
-            </div>
           </div>
 
       </section>
@@ -339,7 +359,7 @@
                     <div class="miniLbl">Notas</div>
                     <textarea class="textarea smallArea" id="callDayNotes" placeholder="Notas del día…"></textarea>
                   </div>
-                  
+
                   <div class="dayDetail3col">
   <!-- Col 1 -->
   <div class="col">
@@ -383,9 +403,13 @@
                   <input class="input grow" id="dpBankSearch" placeholder="Buscar…"/>
                   <select class="input compact" id="dpBankFilter">
                     <option value="all">Todas</option>
-                    <option value="unassigned">No asignadas</option>
+                    <option value="unassigned">Pendientes</option>
+                    <option value="assigned">Programadas</option>
+                    <option value="today">En este día</option>
                   </select>
                 </div>
+                <details class="bank-filters" data-ro-allow="1"><summary>Filtrar por locación o personaje</summary><label>Lugar de rodaje<select class="input" id="dpLocationFilter" aria-label="Filtrar lugar de rodaje"></select></label><label>Espacio del guion<select class="input" id="dpSetFilter" aria-label="Filtrar espacio del guion"></select></label><label>Personaje<select class="input" id="dpCastFilter" aria-label="Filtrar personaje"></select></label><button class="btn small" id="dpClearFilters" type="button">Limpiar filtros</button></details>
+                <div class="bank-progress" id="dpBankProgress" role="status"></div>
                 <div class="bankList" id="dpSceneBankList"></div>
               </div>
             </div>
@@ -449,7 +473,7 @@
               <div class="dpLane" id="dpLane"></div>
             </div>
 
-            
+
 <div class="dayplanInspector noPrint" id="dayplanInspector"></div>
             </div>
 
@@ -663,11 +687,11 @@
       </div></section>
 
       <!-- ================= SETTINGS ================= -->
-      
+
 
     </main>
   </div>
-  
+
   <!-- Schedule: selector de días (Plan General) -->
   <dialog id="schedDayPicker" class="dlg">
     <div class="dlgHead">
@@ -695,6 +719,8 @@
   <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->
   <script>
   (function(){
+    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.5.2";document.body.append(entry);return;}
+    document.querySelector(".shell").hidden=false;document.getElementById("roda-account").hidden=true;
     const v = Date.now().toString(36);
     // CSS: fuerza versión de sesión
     try{
@@ -714,7 +740,7 @@
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
     ];
-    const appFiles = ["js/firebase-config.js","js/utils.js","js/storage.js","js/app.js"];
+    const appFiles = ["js/firebase-config.js","js/script-document.js","js/screenplay.js","js/utils.js","js/storage.js","js/app.js"];
 
     function loadScript(src){
       return new Promise((res)=>{

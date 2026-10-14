@@ -1,6 +1,6 @@
 (function(){
   const el = (id)=>document.getElementById(id);
-  const views = ["breakdown","shooting","dayplan","schedule","shotlist","elements","crew","reports","callsheet"];
+  const views = ["script","breakdown","locations","cast","shooting","dayplan","schedule","shotlist","elements","crew","reports","callsheet"];
 
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
@@ -58,9 +58,7 @@
     return found || s;
   }
 
-  const MAX_SCRIPT_VERSIONS = 1; // Solo V1 (un único guion)
-
-// Guion: el texto crudo NO se guarda en remoto (solo local)
+// Unprocessed pasted text stays local; loaded versions are shared in the project.
 const SCRIPT_RAW_LOCAL_PREFIX = "gb_script_raw_local_v1__";
 function getScriptRawLocalKey(){
   try{
@@ -72,77 +70,21 @@ function getScriptRawLocalKey(){
   }
 }
 function loadScriptRawLocal(){
+  if(window.RODA_STUDIO && !window.RodaAccess?.canEdit('script'))return '';
+
   try{ return localStorage.getItem(getScriptRawLocalKey()) || ""; }catch(_e){ return ""; }
 }
 function saveScriptRawLocal(txt){
   try{ localStorage.setItem(getScriptRawLocalKey(), String(txt||"")); }catch(_e){}
 }
 
-function sanitizeScriptState(opts={}){
-  const migrateRawToLocal = !!opts.migrateRawToLocal;
+function sanitizeScriptState(){
   ensureScriptState();
-
-  let changed = false;
-
-  // Si hay varias versiones viejas, nos quedamos con la más nueva (solo V1)
-  try{
-    if(Array.isArray(state.script.versions) && state.script.versions.length > MAX_SCRIPT_VERSIONS){
-      state.script.versions = state.script.versions
-        .slice()
-        .sort((a,b)=>{
-          const ta = Date.parse(a?.updatedAt || a?.createdAt || "") || 0;
-          const tb = Date.parse(b?.updatedAt || b?.createdAt || "") || 0;
-          return ta - tb;
-        })
-        .slice(-MAX_SCRIPT_VERSIONS);
-      changed = true;
-    }
-  }catch(_e){}
-
-  // Asegurar que exista una versión
-  if(!Array.isArray(state.script.versions) || !state.script.versions.length){
-    const now = new Date().toISOString();
-    state.script.versions = [{
-      id: uid("scrVer"),
-      name: "V1",
-      createdAt: now,
-      updatedAt: now,
-      keywords: "",
-      scenes: [],
-      draft: true
-    }];
-    changed = true;
+  if(!state.script.versions.length){
+    const now=new Date().toISOString();
+    state.script.versions.push({id:uid("scrVer"),name:"V1",createdAt:now,updatedAt:now,keywords:"",scenes:[],draft:true});
   }
-
-  // Forzar V1 y versión activa única
-  const v0 = state.script.versions[0];
-  if(v0 && v0.name !== "V1"){ v0.name = "V1"; changed = true; }
-  if(state.script.activeVersionId !== (v0?.id || null)){
-    state.script.activeVersionId = v0?.id || null;
-    changed = true;
-  }
-
-  // Nunca guardar rawText en el estado (lo migramos a local si hace falta)
-  for(const v of (state.script.versions||[])){
-    if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){
-      if(migrateRawToLocal){
-        const cur = loadScriptRawLocal();
-        if(!cur && v.rawText) saveScriptRawLocal(v.rawText);
-      }
-      try{ delete v.rawText; }catch(_e){}
-      changed = true;
-    }
-  }
-
-  // Si migramos algo, lo empujamos una sola vez para limpiar el BIN (sin texto crudo)
-  if(changed && !sanitizeScriptState._autoTouched){
-    sanitizeScriptState._autoTouched = true;
-    try{ state.meta.updatedAt = new Date().toISOString(); }catch(_e){}
-    try{
-      if(!syncReady) sanitizeScriptState._needsRemoteClean = true;
-      touch();
-    }catch(_e){}
-  }
+  if(!state.script.versions.some(v=>v.id===state.script.activeVersionId))state.script.activeVersionId=null;
 }
 
 
@@ -177,6 +119,7 @@ function sanitizeScriptState(opts={}){
   }
 
   function loadEditUnlocked(){
+    if(window.RODA_STUDIO)return window.RODA_STUDIO.canEdit;
     try{
       const k = getEditUnlockKey();
       const v = sessionStorage.getItem(k);
@@ -204,22 +147,24 @@ function sanitizeScriptState(opts={}){
 
   editUnlocked = loadEditUnlocked();
 
-  function isReadOnly(){ return !editUnlocked; }
+  function isReadOnly(target){const view=typeof target==='string'?target:target?.closest?.('[data-roda-section]')?.dataset.rodaSection||document.body.dataset.rodaView||'script';return !editUnlocked||!!window.RodaAccess&&!RodaAccess.canEdit(view);}
 
   function updateModeBanner(){
     const pill = document.getElementById("modeBanner");
     if(!pill) return;
+    if(window.RODA_STUDIO){pill.remove();return;}
     pill.innerHTML = editUnlocked ? "✏️ Edición (click para bloquear)" : "🔒 Lector (click para editar)";
   }
 
   function setEditUnlocked(v){
-    editUnlocked = !!v;
+    editUnlocked = window.RODA_STUDIO ? window.RODA_STUDIO.canEdit : !!v;
     try{ sessionStorage.setItem(getEditUnlockKey(), editUnlocked ? "1" : "0"); }catch(_e){}
     try{ document.body.classList.toggle("readOnly", !editUnlocked); }catch(_e){}
     updateModeBanner();
   }
 
   function mountModeBanner(){
+    if(window.RODA_STUDIO)return;
     let pill = document.getElementById("modeBanner");
     if(pill) { updateModeBanner(); return pill; }
     pill = document.createElement("div");
@@ -228,6 +173,7 @@ function sanitizeScriptState(opts={}){
     try{ pill.dataset.roAllow = "1"; }catch(_e){}
     pill.title = "Click para alternar edición";
     pill.addEventListener("click", ()=>{
+      if(window.RODA_STUDIO)return;
       if(editUnlocked){
         const ok = confirm("¿Volver a modo lector?");
         if(ok) setEditUnlocked(false);
@@ -283,6 +229,8 @@ const shotlistCollapsedSceneIds = new Set();
 
   // Guion versionado (Breakdown)
   let selectedScriptSceneId = null;
+  let selectedScriptVersionId = null;
+  let scriptLoading = false;
 
   // Sync safety:
   // - We do an initial pull from remote when possible (especially on first run)
@@ -356,7 +304,7 @@ const shotlistCollapsedSceneIds = new Set();
 
 
   // ===== Read-only hard guard (Lector) =====
-  const RO_EDIT_MSG = "Modo lector 🔒 (desbloqueá con el candado para editar)";
+  const RO_EDIT_MSG = window.RODA_STUDIO?"No tenés permiso para editar esta sección. Pedile acceso al administrador.":"Modo lector 🔒 (desbloqueá con el candado para editar)";
   let _roLastToast = 0;
   function roToast(){
     const now = Date.now();
@@ -370,15 +318,15 @@ const shotlistCollapsedSceneIds = new Set();
       "modeBanner",
       "btnNavCollapse","projectSwitch","btnNewProject","btnRefreshProjects",
       "sceneSearch","sceneFilterTOD",
-      "dpBankSearch","shootDaySelect","dayplanSelect","shotDaySelect",
+      "dpBankSearch","dpBankFilter","dpLocationFilter","dpSetFilter","dpCastFilter","dpClearFilters","shootDaySelect","dayplanSelect","shotDaySelect",
       "dayplanSnap","dayplanZoom",
       "schedSearch","schedZoom","schedSnap","btnSchedDays","btnSchedPrint","schedDayPicker","schedDayPickerClose","schedCalPrev","schedCalNext","schedCalAll","schedCalNone","schedCalDone","schedCalGrid",
       "elxSearch","crewSearch","reportsSearch",
       "btnOpenCallSheet","btnDayplanPrint","btnShotPrint","btnPrintCallSheet",
       "btnBDTemplateWide","btnBDTemplateLong",
-      "btnToggleScriptImport","btnCancelScriptImport",
+      "btnToggleScriptImport","btnCancelScriptImport","btnScriptDownload","btnScriptGoBreakdown","scriptDocsOpen","scriptHistory",
       "calPrev","calNext","btnShotSceneGoBreakdown",
-      "dpBtnToggleBank","dpBtnToggleBankDock"
+      "dpBtnToggleBank","dpBtnToggleBankDock","dpEditDay","dpCloseMeta","dpCloseInspector"
     ];
     for(const id of ids){
       try{ const n = document.getElementById(id); if(n) n.dataset.roAllow="1"; }catch(_e){}
@@ -403,7 +351,7 @@ const shotlistCollapsedSceneIds = new Set();
 
     // Store original value on focus, so we can restore it if someone types in Lector mode.
     document.addEventListener("focusin", (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
       const ctrl = t?.closest?.('input, textarea, select, [contenteditable="true"]');
@@ -434,7 +382,7 @@ const shotlistCollapsedSceneIds = new Set();
     };
 
     const guardFormEvent = (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
       const ctrl = t?.closest?.('input, textarea, select, [contenteditable="true"]');
@@ -451,7 +399,7 @@ const shotlistCollapsedSceneIds = new Set();
     document.addEventListener("paste", guardFormEvent, true);
 
     document.addEventListener("keydown", (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
       const ctrl = t?.closest?.('input, textarea, select, [contenteditable="true"]');
@@ -462,7 +410,7 @@ const shotlistCollapsedSceneIds = new Set();
     }, true);
 
     const clickGuard = (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
 
@@ -481,7 +429,7 @@ const shotlistCollapsedSceneIds = new Set();
     document.addEventListener("click", clickGuard, true);
 
     const dragGuard = (e)=>{
-      if(!isReadOnly()) return;
+      if(!isReadOnly(e.target)) return;
       const t = e.target;
       if(isAllowed(t)) return;
       e.preventDefault();
@@ -509,7 +457,10 @@ const shotlistCollapsedSceneIds = new Set();
     const pill = el("projPill");
 
     const iconMap = {
+      script:"▤",
       breakdown:"🧩",
+      locations:"⌖",
+      cast:"♙",
       shooting:"🕒",
       dayplan:"📋",
       schedule:"🗓️",
@@ -520,6 +471,20 @@ const shotlistCollapsedSceneIds = new Set();
       callsheet:"🧾"
     };
 
+    const iconPaths={
+      script:'M6 3h9l3 3v15H6z M9 10h6 M9 14h6 M9 18h4',
+      breakdown:'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z',
+      locations:'M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0z M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+      cast:'M15 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M5 21v-3a7 7 0 0 1 14 0v3',
+      shooting:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M12 7v5l3 2',
+      dayplan:'M5 4h14v17H5z M9 2v4 M15 2v4 M8 10h8 M8 14h8 M8 18h5',
+      schedule:'M3 5h18v16H3z M3 10h18 M9 10v11 M15 10v11 M7 3v4 M17 3v4',
+      shotlist:'M3 6h18v14H3z M3 10h18 M7 6l3 4 M14 6l3 4 M10 14l5 2-5 2z',
+      elements:'M4 8h16v13H4z M8 8V4h8v4 M4 13h16 M10 13v3h4v-3',
+      crew:'M10 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M2 20v-2a5 5 0 0 1 10 0v2 M19 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M14 13a5 5 0 0 1 8 5v2',
+      reports:'M4 6h16 M7 12h10 M10 18h4',
+      callsheet:'M5 3h14v18H5z M8 17v-4 M12 17V9 M16 17v-6'
+    };
     // Ensure icon + label structure
     document.querySelectorAll(".navBtn").forEach(nb=>{
       const view = nb.dataset.view || "";
@@ -543,13 +508,14 @@ const shotlistCollapsedSceneIds = new Set();
         glyph = ((t[0]||"") + (t[1]||"")).toUpperCase();
       }
       ico.textContent = glyph;
+      if(iconPaths[view])ico.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${iconPaths[view]}"/></svg>`;
     });
 
     function apply(collapsed){
       if(shell) shell.classList.toggle("navCollapsed", !!collapsed);
       const title = el("projectTitle")?.value || state?.meta?.title || cfg?.projectName || "Proyecto";
       if(pill) pill.textContent = projectInitials(title);
-      if(btn) btn.textContent = collapsed ? "⟩" : "⟨";
+      if(btn){btn.textContent = collapsed ? "⟩" : "⟨";btn.setAttribute("aria-label",collapsed?"Expandir navegación":"Comprimir navegación");btn.setAttribute("aria-expanded",String(!collapsed));}
       try{ localStorage.setItem(navCollapsedKey, collapsed ? "1" : "0"); }catch{}
     }
 
@@ -582,6 +548,7 @@ const shotlistCollapsedSceneIds = new Set();
 
 
   function saveConflictBackup(binId, snapshot){
+    if(window.RODA_STUDIO?.project.rodaAccess&&!window.RODA_STUDIO.project.rodaAccess.unrestricted)return;
     try{
       const key = `gb_conflict_backup_v1__${String(binId||"")}`;
       const payload = { at: new Date().toISOString(), state: snapshot };
@@ -661,6 +628,7 @@ const shotlistCollapsedSceneIds = new Set();
       if(st) st.textContent = "Lector";
       return;
     }
+    if(window.RODA_STUDIO)window.RODA_UNSAVED=true;
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
     const saved = el("savedAtText");
@@ -678,6 +646,7 @@ const shotlistCollapsedSceneIds = new Set();
   let autosyncPending = false;
 
   async function autosyncRun(){
+    if(window.RODA_STUDIO&&!window.RODA_UNSAVED)return;
     if(autosyncInFlight){
       autosyncPending = true;
       return;
@@ -724,6 +693,7 @@ const shotlistCollapsedSceneIds = new Set();
 
         // Si el remoto cambio desde la ultima vez que lo vimos, solo lo absorbemos
         // cuando es mas nuevo que lo local. Un cambio recien cargado no se borra.
+        if(window.RODA_STUDIO && changedByStamp){saveConflictBackup(cfg.binId,state);window.dispatchEvent(new CustomEvent("roda-sync-error",{detail:"Otra persona actualizó este Roda. Tus cambios quedan en una copia local. Actualizá antes de continuar."}));updateSyncPill("Cambios pendientes");return;}
         if(changedByStamp && tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)){
           saveConflictBackup(cfg.binId, state); // copia local por si hay conflicto
           state = remoteCombined;
@@ -787,6 +757,7 @@ const shotlistCollapsedSceneIds = new Set();
         StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
       }
 
+      if(window.RODA_STUDIO && String(state.meta.updatedAt)===pushStamp)window.RODA_UNSAVED=false;
       updateSyncPill(remoteSyncLabel());
     }catch(err){
       updateSyncPill("Local");
@@ -895,28 +866,7 @@ const shotlistCollapsedSceneIds = new Set();
     const pack = makeEmptyScriptPack(snap?.meta?.title, snap?.meta?.updatedAt);
     pack.scenes = Array.isArray(snap.scenes) ? snap.scenes : [];
     pack.script = (snap.script && Array.isArray(snap.script.versions)) ? snap.script : { versions: [], activeVersionId: null };
-    // Sanitizar guion: NO guardar texto crudo y permitir solo V1
-    try{
-      pack.script = JSON.parse(JSON.stringify(pack.script));
-      if(Array.isArray(pack.script.versions)){
-        // quitar rawText si viene de versiones viejas
-        for(const v of pack.script.versions){
-          if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){ try{ delete v.rawText; }catch(_e){} }
-          if(v) v.name = "V1";
-        }
-        if(pack.script.versions.length>1){
-          pack.script.versions = pack.script.versions
-            .slice()
-            .sort((a,b)=>{
-              const ta = Date.parse(a?.updatedAt || a?.createdAt || "") || 0;
-              const tb = Date.parse(b?.updatedAt || b?.createdAt || "") || 0;
-              return ta - tb;
-            })
-            .slice(-1);
-        }
-        pack.script.activeVersionId = pack.script.versions[0]?.id || null;
-      }
-    }catch(_e){}
+    // Preserve shared screenplay history, including its source text.
     // Mantener el mismo updatedAt que el core (sirve como "stamp" consistente entre bins)
     pack.meta.updatedAt = String(snap?.meta?.updatedAt || pack.meta.updatedAt);
 
@@ -933,13 +883,6 @@ const shotlistCollapsedSceneIds = new Set();
 
     out.scenes = Array.isArray(scenes) ? scenes : [];
     out.script = (script && Array.isArray(script.versions)) ? script : { versions: [], activeVersionId: null };
-    // Limpieza por compat: no persistir rawText en el estado
-    try{
-      if(Array.isArray(out.script.versions)){
-        for(const v of out.script.versions){ if(v && Object.prototype.hasOwnProperty.call(v,"rawText")){ try{ delete v.rawText; }catch(_e){} } }
-      }
-    }catch(_e){}
-
     // safety
     if(!out.meta) out.meta = { version: 14, title: "Proyecto", updatedAt: new Date().toISOString() };
     if(!Array.isArray(out.shootDays)) out.shootDays = [];
@@ -1159,19 +1102,7 @@ const shotlistCollapsedSceneIds = new Set();
   }
 
 
-function enforceScriptVersionsLimit(notify=false){
-  ensureScriptState();
-  const vers = state?.script?.versions || [];
-  if(vers.length <= MAX_SCRIPT_VERSIONS) return false;
-  vers.sort((a,b)=> Date.parse(a.createdAt||a.updatedAt||0) - Date.parse(b.createdAt||b.updatedAt||0));
-  const removed = vers.length - MAX_SCRIPT_VERSIONS;
-  state.script.versions = vers.slice(-MAX_SCRIPT_VERSIONS);
-  if(!state.script.versions.some(v=>v.id===state.script.activeVersionId)){
-    state.script.activeVersionId = state.script.versions[state.script.versions.length-1]?.id || null;
-  }
-  if(notify) toast(`Se limitaron las versiones de guion a ${MAX_SCRIPT_VERSIONS} (se borraron ${removed}).`);
-  return true;
-}
+function enforceScriptVersionsLimit(){return false;}
 
 
   function canonSceneNumber(n){
@@ -1259,86 +1190,8 @@ function enforceScriptVersionsLimit(notify=false){
     return makeUniqueSceneNumber(String(maxBase + 1), null);
   }
 
-  function sluglineToLocTOD(slugline){
-    const s = String(slugline||"").trim();
-    // separa por guiones con o sin espacios (INT. CASA - DÍA / INT-CASA-DÍA)
-    const parts = s.split(/\s*[-–—]\s*/g).map(p=>p.trim()).filter(Boolean);
-    let location = "";
-    let tod = "";
-
-    const stripPrefix = (txt)=>{
-      return String(txt||"")
-        .replace(/^\s*(INT\/EXT|INT\.?\/EXT\.?|I\/E\.?|INT|EXT)\s*[.\-–—:]?\s*/i,"")
-        .replace(/^\s*(INTERIOR|EXTERIOR)\s*[.\-–—:]?\s*/i,"")
-        .trim();
-    };
-
-    const extractTOD = (txt)=>{
-      const raw = String(txt||"")
-        .replace(/\[[^\]]*\]/g, " ")
-        .replace(/\([^\)]*\)/g, " ")
-        .replace(/[.,;:!?]+$/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-      if(!raw) return "";
-      const up = raw.toUpperCase();
-
-      if(/\b(AMANECER|DAWN)\b/.test(up)) return "Amanecer";
-      if(/\b(ATARDECER|TARDE|SUNSET|DUSK)\b/.test(up)) return "Atardecer";
-      if(/\b(NOCHE|NIGHT)\b/.test(up)) return "Noche";
-      if(/\b(D[IÍ]A|DAY|MAÑANA|MORNING)\b/.test(up)) return "Día";
-      return "";
-    };
-
-    if(parts.length >= 2){
-      // Buscar el TOD desde el final (soporta: "... - NOCHE - CONT.")
-      let todIndex = -1;
-      for(let i=parts.length-1;i>=0;i--){
-        const t = extractTOD(parts[i]);
-        if(t){
-          tod = t;
-          todIndex = i;
-          break;
-        }
-      }
-      if(todIndex >= 0){
-        location = stripPrefix(parts.slice(0, todIndex).join(" - "));
-        if(!location){
-          // fallback: si quedó vacío, no rompemos
-          location = stripPrefix(parts.join(" - "));
-        }
-      }else{
-        location = stripPrefix(parts.join(" - "));
-      }
-    }else{
-      // Sin guiones: intentamos detectar TOD al final (p.ej. "INT. CASA NOCHE")
-      const t = extractTOD(s);
-      if(t){
-        tod = t;
-        const loc = s.replace(/\b(AMANECER|DAWN|ATARDECER|TARDE|SUNSET|DUSK|NOCHE|NIGHT|D[IÍ]A|DAY|MAÑANA|MORNING)\b[\s\S]*$/i,"").trim();
-        location = stripPrefix(loc);
-      }else{
-        location = stripPrefix(s);
-      }
-    }
-
-    return { location, timeOfDay: tod };
-  }
-
-  function sluglineToIntExt(slugline){
-    const s = String(slugline||"").trim();
-    if(!s) return "";
-    const up = s.toUpperCase();
-
-    // INT./EXT. y variantes
-    if(/^\s*(INT\/EXT|INT\.?\/EXT\.?|I\/E)\s*[.\-–—:]?\s*/i.test(up)) return "Int";
-    if(/^\s*(EXT\/INT|EXT\.?\/INT\.?|E\/I)\s*[.\-–—:]?\s*/i.test(up)) return "Ext";
-
-    if(/^\s*(INT|INTERIOR)\s*[.\-–—:]?\s*/i.test(up)) return "Int";
-    if(/^\s*(EXT|EXTERIOR)\s*[.\-–—:]?\s*/i.test(up)) return "Ext";
-    return "";
-  }
-
+  function sluglineToLocTOD(slugline){return RodaScreenplay.headingMetadata(slugline);}
+  function sluglineToIntExt(slugline){return RodaScreenplay.headingMetadata(slugline).intExt;}
 
   function normalizeTOD(raw){
     const t = (raw||"").trim().toLowerCase();
@@ -2407,6 +2260,11 @@ function setupScheduleWheelScroll(){
 }
 
   function showView(name){
+    if(window.RodaAccess&&!RodaAccess.canView(name))name=views.find(v=>RodaAccess.canView(v));
+    if(!name)return;
+    dayplanMetaOpen = false;
+    document.body.dataset.rodaView=name;
+    document.body.classList.toggle('readOnly',isReadOnly(name));updateModeBanner();window.RodaAccess?.apply();
     // Reset print-only mode if a browser skipped the afterprint event.
     try{ clearPrintOrientation(); }catch(_e){}
     try{ cleanupGbPrintRoot(); }catch(_e){}
@@ -2422,6 +2280,9 @@ function setupScheduleWheelScroll(){
     try{ if(isMobileUI() && window.MobileChrome?.syncDayBar) window.MobileChrome.syncDayBar(); }catch(_e){}
     try{ if(isMobileUI() && window.MobileChrome?.syncDayBarActive) window.MobileChrome.syncDayBarActive(name); }catch(_e){}
 
+    if(name==="script") renderScriptUI();
+    if(name==="locations") renderLocations();
+    if(name==="cast") renderCastDirectory();
     if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
     if(name==="dayplan"){ renderSceneBank(); renderDayPlan(); applyBankCollapsedUI(); }
@@ -2433,136 +2294,189 @@ function setupScheduleWheelScroll(){
     if(name==="callsheet"){ renderCallSheetCalendar(); applyReportsTabUI(); renderReportsDetail(); }
 }
 
+  function applyScriptToProject(v, persist=true){
+      if(!v) return toast("No hay versión activa.");
+      // Apply (merge) to project scenes by number
+      const byNum = new Map(state.scenes.map(s=>[RodaScreenplay.sceneKey(s), s]));
+      let added = 0, updated = 0;
+
+      for(const sc of (v.scenes||[])){
+        const num = canonSceneNumber(sc.number);
+        if(!num) continue;
+        const key=RodaScreenplay.sceneKey(sc);
+        const existing = byNum.get(key);
+        if(existing){
+          ensureSceneExtras(existing);
+
+          const slug = String(sc.slugline || existing.slugline || "").trim();
+          const locTod = sluglineToLocTOD(slug);
+          const ie = String(sc.intExt || sluglineToIntExt(slug) || existing.intExt || "").trim();
+          const loc = String(sc.location || locTod.location || existing.location || "").trim();
+          const todRaw = String(sc.timeOfDay || locTod.timeOfDay || existing.timeOfDay || "").trim();
+          const tod = normalizeTOD(todRaw);
+
+          const hasChap = (sc.chapter!==undefined && sc.chapter!==null && String(sc.chapter).trim()!=="");
+          const bodyTxt = (sc.body!==undefined && sc.body!==null) ? String(sc.body) : "";
+          const resumen = bodyTxt.trim()
+            ? bodyTxt.trim()
+            : ((sc.summary!==undefined && sc.summary!==null) ? String(sc.summary).trim() : (existing.summary||""));
+
+          existing.number = num;
+          if(slug) existing.slugline = slug;
+          if(ie) existing.intExt = ie;
+          if(loc) existing.location = loc;
+          if(tod) existing.timeOfDay = tod;
+          if(hasChap) existing.chapter = sc.chapter;
+          existing.summary = resumen;
+
+          const detected=RodaScreenplay.breakdown(sc);
+          for(const cat of cats)existing.elements[cat]=union([...(existing.elements[cat]||[]),...detected[cat]]);
+          existing.scriptVersionId=v.id;
+          updated++;
+        }else{
+          const slug = String(sc.slugline || "").trim();
+          const locTod = sluglineToLocTOD(slug);
+          const ie = String(sc.intExt || sluglineToIntExt(slug) || "").trim();
+
+          const bodyTxt = (sc.body!==undefined && sc.body!==null) ? String(sc.body) : "";
+          const resumen = bodyTxt.trim()
+            ? bodyTxt.trim()
+            : ((sc.summary!==undefined && sc.summary!==null) ? String(sc.summary).trim() : "");
+
+          const s = {
+            id: uid("scene"),
+            number: num,
+            chapter: (sc.chapter!==undefined && sc.chapter!==null && String(sc.chapter).trim()!=="") ? sc.chapter : "",
+            slugline: slug,
+            intExt: ie,
+            location: String(sc.location || locTod.location || "").trim(),
+            timeOfDay: normalizeTOD(String(sc.timeOfDay || locTod.timeOfDay || "").trim()),
+            pages: 0,
+            summary: resumen,
+            notes: "",
+            elements: RodaScreenplay.breakdown(sc),
+            scriptVersionId:v.id,
+            shots: []
+          };
+          state.scenes.push(s);
+          byNum.set(key, s);
+          added++;
+        }
+      }
+
+      sortScenesByNumberInPlace();
+      selectedSceneId = state.scenes[0]?.id || null;
+
+      state.script.activeVersionId=v.id;
+      v.appliedAt=new Date().toISOString();
+      if(!persist)return {added,updated};
+      touch();
+      renderScenesTable();
+      renderSceneEditor();
+    renderScriptUI();
+      renderSceneBank();
+      renderDaysBoard();
+      renderDayDetail();
+      renderElementsExplorer();
+      renderReports();
+      renderScheduleBoard();
+      renderReportsDetail();
+    return {added,updated};
+  }
+
+
+
+  function scriptStatus(message, error=false){
+    for(const id of ['scriptLoadStatus','scriptImportStatus']){const node=el(id);if(!node)continue;
+      node.hidden=false;node.textContent=message;node.classList.toggle("error",error);}
+  }
+  function scriptVersionText(v){return v.rawText||(v.scenes||[]).map(sc=>`${sc.number}. ${sc.slugline}\n\n${sc.body||""}`).join("\n\n");}
+  async function runScriptLoad(task){
+    if(isReadOnly('script')||scriptLoading)return;
+    scriptLoading=true;renderScriptUI();scriptStatus("Cargando guion…");
+    try{await task();}
+    catch(error){scriptStatus(error.message||"No pudimos cargar el guion. Intentá de nuevo.",true);}
+    finally{scriptLoading=false;renderScriptUI();}
+  }
+  async function importScriptText(text, source, force=false, documentFormat=null){
+    if(isReadOnly('script'))throw Error("Necesitás permiso de edición del guion.");
+    const rawText=String(text||"").trim();if(!rawText)throw Error("Cargá un archivo o pegá el texto del guion.");
+    if(new TextEncoder().encode(rawText).length>250000)throw Error("El texto del guion es demasiado largo para cargarlo junto al historial. Dividilo en capítulos.");
+    const latest=state.script.versions.filter(v=>!v.draft).at(-1);
+    const comparable=value=>String(value).replace(/[ \t]+$/gm,'').replace(/\n\s*\n+/g,'\n').trim();
+    if(!force&&(!documentFormat||JSON.stringify(documentFormat)===JSON.stringify(latest?.documentFormat))&&latest?.parserVersion===RodaScreenplay.parserVersion&&latest?.scenes?.length&&comparable(scriptVersionText(latest))===comparable(rawText)){scriptStatus("El guion no tiene cambios desde la última carga.");return false;}
+    const keywords=el("scriptKeywords")?.value||"";
+    const scenes=parseScreenplayToScriptScenes(rawText,keywords);
+    if(!scenes.length)throw Error("No encontramos encabezados de escena. Usá INT. o EXT. al comienzo de cada escena; también podés indicar otros encabezados en Opciones de detección.");
+    const keys=new Set();for(const sc of scenes){const key=RodaScreenplay.sceneKey(sc);if(keys.has(key))throw Error("Hay dos escenas con el número "+sc.number+" en el mismo capítulo. Corregí la numeración antes de cargarlo.");keys.add(key);}
+    const previous=state;
+    const previousSelection=selectedSceneId;
+    const next=JSON.parse(JSON.stringify(previous));
+    next.script.versions=next.script.versions.filter(v=>!v.draft||v.scenes?.length);
+    const now=new Date().toISOString(),number=next.script.versions.length+1;
+    const custom=source.type==='text'?(el("scriptVersionName")?.value||"").trim():"";
+    const version={id:uid("scrVer"),name:`V${number}`+(custom?" · "+custom:""),createdAt:now,updatedAt:now,keywords,scenes,rawText,source,...(documentFormat?{documentFormat}:{}),parserVersion:RodaScreenplay.parserVersion,authorName:window.RODA_STUDIO?.userName||"",draft:false};
+    next.script.versions.push(version);
+    // Construct and size the complete next snapshot before replacing any project data.
+    state=next;
+    try{
+      const {core,pack}=splitStateForBins(next);
+      if([core,pack].some(part=>new TextEncoder().encode(JSON.stringify(part)).length>760000))throw Error("El proyecto llegó al límite de espacio para su historial. La nueva carga no se guardó y las versiones anteriores se conservan.");
+    }catch(error){state=previous;selectedSceneId=previousSelection;throw error;}
+    selectedScriptVersionId=version.id;selectedScriptSceneId=scenes[0]?.id||null;
+    saveScriptRawLocal("");if(el("scriptImportText"))el("scriptImportText").value="";if(el("scriptVersionName"))el("scriptVersionName").value="";
+    touch();
+    renderScenesTable();renderSceneEditor();renderSceneBank();renderDaysBoard();renderDayDetail();renderElementsExplorer();renderReports();renderScheduleBoard();renderReportsDetail();renderScriptUI();
+    scriptStatus(`${version.name} guardada · ${scenes.length} escenas. Elegí «Usar esta versión para producción» para generar el desglose a partir de este guion.`);
+    el('scriptUploadDialog')?.close();
+    return true;
+  }
+
+  function useScriptVersion(version){
+    if(isReadOnly('script')||!version?.scenes?.length)return;
+    const previous=state,selection=selectedSceneId;
+    state=JSON.parse(JSON.stringify(state));
+    try{
+      const chosen=state.script.versions.find(v=>v.id===version.id);
+      const result=applyScriptToProject(chosen,false);
+      const {core,pack}=splitStateForBins(state);
+      if([core,pack].some(part=>new TextEncoder().encode(JSON.stringify(part)).length>760000))throw Error('No hay espacio suficiente para aplicar esta versión. La producción anterior se conserva.');
+      touch();
+      const keys=new Set(chosen.scenes.map(sc=>RodaScreenplay.sceneKey(sc)));
+      const retained=state.scenes.filter(sc=>!keys.has(RodaScreenplay.sceneKey(sc))).length;
+      scriptStatus(`${chosen.name} es la base de producción · ${result.added} escenas nuevas y ${result.updated} actualizadas. Revisá el desglose y organizá las jornadas en el plan.`+(retained?` Se conservan ${retained} escenas anteriores o manuales; revisalas en Breakdown.`:''));
+    }catch(error){state=previous;selectedSceneId=selection;throw error;}
+    renderScenesTable();renderSceneEditor();renderSceneBank();renderDaysBoard();renderDayDetail();renderElementsExplorer();renderScheduleBoard();renderReports();renderReportsDetail();renderScriptUI();
+  }
+
   // ======= Script parser (INT/EXT) =======
 
 
   // ======= Guion (versionado) =======
-    function parseScreenplayToScriptScenes(text, extraKeywordsCsv=""){
-    const rawLines = (text||"").split(/\r?\n/);
-    if(!rawLines.length) return [];
-
-    const extra = (extraKeywordsCsv||"")
-      .split(",")
-      .map(s=>s.trim())
-      .filter(Boolean)
-      .map(s=>s.toUpperCase());
-
-    function stripSceneNumber(line){
-      return String(line||"")
-        .replace(/^\s*\(?\s*\d+[A-Za-z]*\s*\)?\s*[.)-:]\s*/, "")
-        .replace(/^\s*\(?\s*\d+[A-Za-z]*\s*\)?\s+/, "");
-    }
-
-    function detectChapterMarker(line){
-      const t = String(line||"").trim();
-      if(!t) return null;
-      const up = t.toUpperCase();
-      // Ej: "CAPÍTULO 1", "CAPITULO 2:", "EPISODIO 3", "EP. 4", "CHAPTER 5"
-      const m1 = up.match(/^(?:CAP[ÍI]TULO|CAPITULO|EPISODIO|EP\.?|CHAPTER)\s*[:.\-]?\s*(\d{1,3})\b/);
-      if(m1) return Number(m1[1]);
-      return null;
-    }
-
-    function isHeading(line){
-      const cleaned = stripSceneNumber(line).trimStart();
-      const up = cleaned.toUpperCase();
-      for(const k of extra){ if(up.startsWith(k)) return true; }
-      const starters = [
-        "INT/EXT.", "INT/EXT ", "INT./EXT.", "INT./EXT ", "I/E.", "I/E ",
-        "INT.", "INT ", "INT-", "INT:",
-        "EXT.", "EXT ", "EXT-", "EXT:",
-        "INTERIOR", "EXTERIOR"
-      ];
-      return starters.some(s=>up.startsWith(s));
-    }
-
-    const out = [];
-    let current = null;
-    let autoN = 1;
-    let currentChapter = "";
-
-    for(const raw of rawLines){
-      const line = String(raw ?? "").replace(/\s+$/, "");
-
-      const chap = detectChapterMarker(line);
-      if(chap !== null){
-        // Cierra la escena anterior (si venía en curso) y setea el capítulo para las siguientes
-        if(current){
-          out.push(finalize(current));
-          current = null;
-        }
-        currentChapter = chap;
-        continue;
-      }
-
-      if(isHeading(line.trim())){
-        if(current) out.push(finalize(current));
-        current = { rawHeading: line.trim(), body:[], autoNumber:autoN++, chapter: currentChapter };
-      }else{
-        if(!current){
-          // skip leading empty lines
-          if(!line.trim()) continue;
-          current = { rawHeading:"ESCENA", body:[], autoNumber:autoN++, chapter: currentChapter };
-        }
-        current.body.push(line);
-      }
-    }
-    if(current) out.push(finalize(current));
-
-    // normalize ids and return
-    return out.map(s=>({
-      id: uid("scrScene"),
-      number: canonSceneNumber(String(s.number)),
-      chapter: s.chapter ?? "",
-      slugline: s.slugline,
-      intExt: s.intExt || sluglineToIntExt(s.slugline),
-      location: s.location,
-      timeOfDay: s.timeOfDay,
-      body: s.body.join("\n").trim(),
-      summary: s.summary
-    }));
-
-    function finalize(s){
-      const heading = s.rawHeading || "";
-      let num = s.autoNumber;
-      // Accept existing numbers like 6A, 6B...
-      const mNum = heading.match(/^\s*(\d+)([A-Za-z]*)\b/);
-      if(mNum) num = canonSceneNumber(mNum[1] + (mNum[2]||""));
-
-      const slugline = stripSceneNumber(heading).trim();
-      const { location, timeOfDay } = sluglineToLocTOD(slugline);
-
-      const bodyText = (s.body||[]).join(" ").trim();
-      const summary = bodyText.slice(0, 220);
-      return { number:num, chapter: s.chapter ?? "", slugline, location, timeOfDay, body: s.body||[], summary };
-    }
+  function parseScreenplayToScriptScenes(text,keywords=""){
+    return RodaScreenplay.parse(text,keywords).map(scene=>({...scene,id:uid("scrScene")}));
   }
-
-
 
   function getActiveScriptVersion(){
     sanitizeScriptState({ migrateRawToLocal:true });
     const id = state.script.activeVersionId;
-    return state.script.versions.find(v=>v.id===id) || state.script.versions[0] || null;
+    return state.script.versions.find(v=>v.id===(selectedScriptVersionId||id)) || state.script.versions.find(v=>v.id===id) || state.script.versions.at(-1) || null;
   }
 
 
   function renderScriptVersionSelect(){
-    const sel = el("scriptVerSelect");
-    if(!sel) return;
-    sanitizeScriptState();
-    const v = state.script.versions[0];
-    if(!v){
-      sel.innerHTML = `<option value="">(sin versión)</option>`;
-      sel.value = "";
-      sel.disabled = true;
-      return;
+    const list=el("scriptHistory");if(!list)return;
+    const current=getActiveScriptVersion();
+    const versions=state.script.versions.filter(v=>(v.scenes||[]).length||!v.draft).slice().reverse();
+    list.replaceChildren();
+    if(!versions.length){list.innerHTML='<p class="muted small">Todavía no hay actualizaciones.</p>';return;}
+    for(const v of versions){
+      const button=document.createElement('button');button.type='button';button.className='script-history-item'+(current?.id===v.id?' selected':'');
+      button.setAttribute('aria-pressed',String(current?.id===v.id));
+      const source=v.source?.name||'Texto cargado';
+      button.innerHTML='<strong>'+esc(v.name)+'</strong><span>'+esc(new Date(v.createdAt||v.updatedAt).toLocaleString('es-AR'))+'</span><span>'+esc(source)+' · '+(v.scenes||[]).length+' escenas'+(v.id===state.script.activeVersionId?' · Base de producción':'')+'</span>';
+      button.onclick=()=>{selectedScriptVersionId=v.id;selectedScriptSceneId=null;renderScriptUI();};list.append(button);
     }
-    sel.innerHTML = `<option value="${esc(v.id)}">V1</option>`;
-    sel.value = v.id;
-    sel.disabled = true;
-    // Si el HTML viejo todavía trae el select, lo escondemos (ya no hay 3 opciones)
-    try{ sel.style.display = "none"; }catch(_e){}
   }
 
   // ======= Cast roster (desde Crew área Cast) =======
@@ -2764,9 +2678,9 @@ function setupScheduleWheelScroll(){
     const table = el("shotsTable");
     const btnAdd = el("btnAddShot");
     if(btnAdd){
-      btnAdd.disabled = !selectedSceneId || isReadOnly();
+      btnAdd.disabled = !selectedSceneId || isReadOnly('shotlist');
       btnAdd.onclick = ()=>{
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
         if(!s) return;
         ensureSceneExtras(s);
@@ -2799,20 +2713,20 @@ function setupScheduleWheelScroll(){
       tr.innerHTML = `
         <td>${i+1}</td>
         <td>
-          <select class="input compact shotTypeSel" ${isReadOnly()?"disabled":""}>
+          <select class="input compact shotTypeSel" ${isReadOnly('shotlist')?"disabled":""}>
             ${shotTypes.map(t=>`<option value="${esc(t)}"${(normalizeShotType(sh.type)===t)?" selected":""}>${esc(t)}</option>`).join("")}
           </select>
         </td>
-        <td><input class="input shotDescInput" ${isReadOnly()?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
+        <td><input class="input shotDescInput" ${isReadOnly('shotlist')?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
         <td class="shotThumbTd">
           <div class="shotThumbDrop ${hasThumb?"has":""} ${uploading?"uploading":""}" title="Arrastrá una imagen o click para cargar">${thumbInner}</div>
           <div class="row gap" style="justify-content:center; margin-top:6px;">
-            <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly()?"disabled":""}>📷</button>
-            <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly()||!hasThumb)?"disabled":""}>×</button>
+            <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly('shotlist')?"disabled":""}>📷</button>
+            <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly('shotlist')||!hasThumb)?"disabled":""}>×</button>
           </div>
           <input type="file" accept="image/*" class="shotThumbFile" style="display:none" />
         </td>
-        <td><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly()?"disabled":""}>×</button></td>
+        <td><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly('shotlist')?"disabled":""}>×</button></td>
       `;
 
       const sel = tr.querySelector(".shotTypeSel");
@@ -2820,18 +2734,18 @@ function setupScheduleWheelScroll(){
       const del = tr.querySelector(".shotDelBtn");
 
       sel?.addEventListener("change", ()=>{
-        if(isReadOnly()) return;
+        if(isReadOnly('shotlist')) return;
         sh.type = sel.value;
         touch();
       });
       inp?.addEventListener("input", ()=>{
-        if(isReadOnly()) return;
+        if(isReadOnly('shotlist')) return;
         sh.desc = inp.value;
         touch();
       });
       del?.addEventListener("click", (e)=>{
         e.preventDefault();
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         s.shots = (s.shots||[]).filter(x=>x.id!==sh.id);
         touch();
         renderShotsEditor();
@@ -2845,7 +2759,7 @@ function setupScheduleWheelScroll(){
       const fileIn = tr.querySelector(".shotThumbFile");
 
       const openPicker = ()=>{
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         fileIn && fileIn.click();
       };
       drop?.addEventListener("click", openPicker);
@@ -2857,7 +2771,7 @@ function setupScheduleWheelScroll(){
       });
       clear?.addEventListener("click", (e)=>{
         e.preventDefault();
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         sh.thumbUrl = "";
         delete sh.thumbUpdatedAt;
         touch();
@@ -2866,13 +2780,13 @@ function setupScheduleWheelScroll(){
       });
 
       const prevent = (e)=>{ e.preventDefault(); e.stopPropagation(); };
-      drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
-      drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
+      drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly('shotlist')) drop.classList.add("drag"); });
+      drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly('shotlist')) drop.classList.add("drag"); });
       drop?.addEventListener("dragleave", (e)=>{ prevent(e); drop.classList.remove("drag"); });
       drop?.addEventListener("drop", (e)=>{
         prevent(e);
         drop.classList.remove("drag");
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         const f = e.dataTransfer?.files?.[0];
         if(f) setShotThumb(sh, f);
       });
@@ -2892,64 +2806,27 @@ function setupScheduleWheelScroll(){
 
 
   function renderScriptUI(){
-    const wrap = el("scriptVersionUI");
-    sanitizeScriptState({ migrateRawToLocal:true });
-
-    renderScriptVersionSelect();
-    const v = getActiveScriptVersion();
-
-    if(!wrap) return;
-    if(!v){
-      wrap.style.display = "none";
-      return;
-    }
-    wrap.style.display = "";
-
-    // pick selected script scene
-    if(!selectedScriptSceneId || !(v.scenes||[]).some(s=>s.id===selectedScriptSceneId)){
-      selectedScriptSceneId = v.scenes?.[0]?.id || null;
-    }
-
-    renderScriptSceneList(v);
-    renderScriptSceneEditor(v);
-    const btnNew = el("btnNewScriptVersion");
-    if(btnNew){
-      btnNew.disabled = true;
-      btnNew.style.display = "none";
-    }
-
-    // Mantener el guion (raw) visible y persistente por versión
-    const panel = el("scriptImportPanel");
-    if(panel) panel.classList.remove("hidden");
-    const ta = el("scriptImportText");
-    const localRaw = loadScriptRawLocal();
-    if(ta && ta.value !== localRaw) ta.value = localRaw;
-    const ki = el("scriptKeywords");
-    if(ki && ki.value !== (v.keywords||"")) ki.value = v.keywords || "";
-    const meta = el("scriptVerMeta");
-    if(meta){
-      const when = v.updatedAt || v.createdAt;
-      meta.textContent = when ? `Actualizado: ${new Date(when).toLocaleString("es-AR")}` : "—";
-    }
-
-    // Botón "+ Escena (6A)" dinámico según selección
-    const btnIns = el("btnScriptInsertAfter");
-    if(btnIns){
-      const scenes = (v.scenes||[]);
-      if(!scenes.length){
-        btnIns.textContent = "+ Escena (1)";
-      }else{
-        const idx = scenes.findIndex(s=>s.id===selectedScriptSceneId);
-        if(idx>=0){
-          const after = scenes[idx];
-          const nextNum = nextInsertedNumber(after.number, scenes.map(s=>s.number));
-          btnIns.textContent = nextNum ? `+ Escena (${nextNum})` : "+ Escena";
-        }else{
-          btnIns.textContent = "+ Escena";
-        }
-      }
-    }
-
+    sanitizeScriptState();renderScriptVersionSelect();
+    const v=getActiveScriptVersion(),hasScenes=!!v?.scenes?.length;
+    const active=state.script.versions.find(x=>x.id===state.script.activeVersionId && !x.draft);
+    const inUse=hasScenes && v.id===active?.id;
+    const wrap=el('scriptVersionUI');if(!wrap)return;
+    wrap.hidden=!hasScenes;
+    el('scriptEmptyHint').hidden=hasScenes;
+    el('scriptCurrentTitle').textContent=hasScenes?v.name:'Tu guion';
+    el('scriptVerMeta').textContent=hasScenes?new Date(v.createdAt||v.updatedAt).toLocaleString('es-AR')+' · '+(v.source?.name||'Texto cargado')+(v.authorName?' · '+v.authorName:''):'';
+    RodaScriptDocument.update(v,hasScenes?scriptVersionText(v):'');
+    el('scriptBaseLabel').textContent=inUse?'Base de producción':active?'Producción basada en '+active.name:'Sin versión de producción';
+    el('scriptBaseHint').textContent=inUse?'Esta versión guía el desglose, las locaciones y el reparto.':hasScenes?'Usá esta versión para actualizar el desglose. Se conservan notas, planos, lugares asignados y jornadas.':'Cargá el guion y elegí una versión para preparar la producción.';
+    const apply=el('btnScriptApply');apply.disabled=!hasScenes||isReadOnly('script')||scriptLoading||inUse;
+    apply.textContent=inUse?'Versión en uso':'Usar esta versión para producción';
+    el('btnScriptDownload').disabled=!hasScenes;
+    for(const id of ['btnScriptUpload','scriptFileInput','btnParseScript','scriptImportText','scriptVersionName','scriptKeywords','scriptDocsURL','btnScriptLinkDocs','btnScriptImportDocs']){const node=el(id);if(node)node.disabled=isReadOnly('script')||scriptLoading;}
+    const source=state.script.googleDoc,open=el('scriptDocsOpen');
+    if(open){open.hidden=!source?.url;if(source?.url){try{open.href=RodaScreenplay.docsLink(source.url).url;}catch{open.hidden=true;}}}
+    if(!el('scriptUploadDialog').open && document.activeElement!==el('scriptDocsURL'))el('scriptDocsURL').value=source?.url||'';
+    el('btnScriptImportDocs').textContent=source?.id?'Importar últimos cambios':'Elegir e importar de Google Docs';
+    el('scriptDocsStatus').textContent=source?.lastImportedAt?'Última importación: '+new Date(source.lastImportedAt).toLocaleString('es-AR')+'. Importá otra vez para cargar una nueva versión.':'Google te pedirá autorizar el documento elegido. Sus permisos de edición se mantienen en Google Docs.';
   }
 
   function renderScriptSceneList(version){
@@ -2986,73 +2863,8 @@ function setupScheduleWheelScroll(){
 
   function renderScriptSceneEditor(version){
     const sc = (version.scenes||[]).find(s=>s.id===selectedScriptSceneId) || null;
-    const inSlug = el("scriptSceneSlugline");
-    const inNum  = el("scriptSceneNumber");
-    const inBody = el("scriptSceneBody");
-    if(inSlug) inSlug.disabled = !sc;
-    if(inBody) inBody.disabled = !sc;
-    if(inSlug) inSlug.value = sc ? (sc.slugline||"") : "";
-    if(inBody) inBody.value = sc ? (sc.body||"") : "";
-    if(inNum) inNum.disabled = !sc;
-    if(inNum) inNum.value = sc ? (canonSceneNumber(sc.number||"")) : "";
-
-    // prevent duplicate handlers
-    if(inNum && !inNum._bound){
-      inNum._bound = true;
-      inNum.addEventListener("blur", ()=>{
-        const v = getActiveScriptVersion();
-        if(!v) return;
-        const scc = (v.scenes||[]).find(s=>s.id===selectedScriptSceneId);
-        if(!scc) return;
-        const cand = canonSceneNumber(inNum.value);
-        if(!cand){
-          inNum.value = canonSceneNumber(scc.number||"");
-          return;
-        }
-        const used = (v.scenes||[]).filter(s=>s.id!==scc.id).map(s=>canonSceneNumber(s.number)).filter(Boolean);
-        let fixed = cand;
-        if(used.includes(fixed)){
-          fixed = nextInsertedNumber(fixed, used);
-          toast(`Número ajustado → ${fixed}`);
-        }
-        scc.number = fixed;
-        v.scenes.sort((a,b)=>sceneNumberCompare(a.number,b.number));
-        v.updatedAt = new Date().toISOString();
-        touch();
-        renderScriptUI();
-      });
-    }
-
-    if(inSlug && !inSlug._bound){
-      inSlug._bound = true;
-      inSlug.addEventListener("input", ()=>{
-        const v = getActiveScriptVersion();
-        if(!v) return;
-        const scc = (v.scenes||[]).find(s=>s.id===selectedScriptSceneId);
-        if(!scc) return;
-        scc.slugline = inSlug.value;
-        const { location, timeOfDay } = sluglineToLocTOD(scc.slugline);
-        scc.location = location;
-        scc.timeOfDay = timeOfDay;
-        scc.intExt = sluglineToIntExt(scc.slugline);
-        v.updatedAt = new Date().toISOString();
-        touch();
-        renderScriptSceneList(v);
-      });
-    }
-    if(inBody && !inBody._bound){
-      inBody._bound = true;
-      inBody.addEventListener("input", ()=>{
-        const v = getActiveScriptVersion();
-        if(!v) return;
-        const scc = (v.scenes||[]).find(s=>s.id===selectedScriptSceneId);
-        if(!scc) return;
-        scc.body = inBody.value;
-        scc.summary = String(scc.body||"").replace(/\s+/g," ").trim().slice(0,220);
-        v.updatedAt = new Date().toISOString();
-        touch();
-        // nothing else to re-render on every key
-      });
+    for(const [id,key] of [['scriptSceneSlugline','slugline'],['scriptSceneNumber','number'],['scriptSceneBody','body'],['scriptSceneLocation','location'],['scriptSceneTOD','timeOfDay']]){
+      const field=el(id);if(!field)continue;field.value=sc?.[key]||'';field.readOnly=true;field.dataset.roAllow='1';if(field.tagName==='SELECT')field.disabled=true;
     }
   }
 
@@ -3179,7 +2991,89 @@ function setupScheduleWheelScroll(){
     }
   }
 
-  function sceneCardNode(scene, mode="bank", dayId=null){
+  function shootingLocations(){ return Array.isArray(state.shootingLocations) ? state.shootingLocations : []; }
+  function shootingLocation(scene){ return shootingLocations().find(l=>l.id===scene?.shootingLocationId) || null; }
+  function sceneDays(scene){ return state.shootDays.filter(d=>(d.sceneIds||[]).includes(scene.id)); }
+  function sceneDayLabel(scene){
+    return sceneDays(scene).map(d=>`${d.label || "Jornada"}${d.date ? " · "+formatDDMMYYYY(d.date) : ""}`).join(" / ");
+  }
+  function locationOptions(value="", mixed=false){
+    return `${mixed ? '<option value="__mixed" selected disabled>Varios lugares</option>' : ''}<option value="">Sin asignar</option>` + shootingLocations().map(l=>`<option value="${esc(l.id)}"${l.id===value ? " selected" : ""}>${esc(l.name)}</option>`).join("");
+  }
+  function sceneLinks(scenes){
+    return scenes.map(s=>`<button class="scene-link" data-scene="${esc(s.id)}" data-ro-allow="1" title="${esc(s.slugline)}">${s.chapter ? esc(s.chapter)+" · " : ""}#${esc(s.number)}</button>`).join("");
+  }
+  function bindSceneLinks(root){
+    root.querySelectorAll("[data-scene]").forEach(b=>b.onclick=()=>jumpToSceneInBreakdown(b.dataset.scene));
+  }
+  let locationFilter = "all";
+  function renderLocations(){
+    const directory=el("locationDirectory"), sets=el("locationSets"), detail=el("locationDetail");
+    if(!directory || !sets) return;
+    const locations=shootingLocations(), assigned=state.scenes.filter(s=>shootingLocation(s)).length;
+    const groups=new Map();
+    for(const s of state.scenes){
+      const label=String(s.location||"").trim() || "Sin espacio en el guion", key=normName(label);
+      if(!groups.has(key)) groups.set(key,{label,scenes:[]});
+      groups.get(key).scenes.push(s);
+    }
+    el("locationStats").innerHTML=`<div><strong>${groups.size}</strong><span>Espacios del guion</span></div><div><strong>${locations.length}</strong><span>Lugares de rodaje</span></div><div><strong>${assigned}/${state.scenes.length}</strong><span>Escenas con lugar asignado</span></div>`;
+    const choices=[{id:"all",name:"Todos los espacios"},{id:"unassigned",name:"Sin lugar asignado"},...locations];
+    if(!choices.some(l=>l.id===locationFilter)) locationFilter="all";
+    const matches=s=>locationFilter==="all" || (locationFilter==="unassigned" ? !shootingLocation(s) : s.shootingLocationId===locationFilter);
+    directory.innerHTML=choices.map(l=>`<button class="directory-item ${l.id===locationFilter?'selected':''}" data-location="${esc(l.id)}" data-ro-allow="1" aria-pressed="${l.id===locationFilter}"><span>${esc(l.name)}</span><span class="count">${state.scenes.filter(s=>l.id==='all' || (l.id==='unassigned' ? !shootingLocation(s) : s.shootingLocationId===l.id)).length}</span></button>`).join("");
+    directory.querySelectorAll("[data-location]").forEach(b=>b.onclick=()=>{locationFilter=b.dataset.location;renderLocations();});
+    const selected=locations.find(l=>l.id===locationFilter);
+    detail.innerHTML=selected ? `<form class="location-edit stack-form"><h3>Datos del lugar</h3><label>Nombre<input class="input" name="name" required maxlength="160" value="${esc(selected.name)}"/></label><label>Dirección<input class="input" name="address" maxlength="300" value="${esc(selected.address||'')}"/></label><label>Notas de producción<textarea class="textarea" name="notes" rows="2" maxlength="3000">${esc(selected.notes||'')}</textarea></label><div><button class="btn" type="submit">Guardar datos</button> <button class="btn" type="button" data-plan-location="${esc(selected.id)}" data-ro-allow="1">Ver en el plan →</button></div></form>` : "";
+    detail.querySelector("form")?.addEventListener("submit",e=>{e.preventDefault();if(isReadOnly())return roToast();const data=new FormData(e.target),name=String(data.get('name')).trim();if(!name)return; if(locations.some(l=>l.id!==selected.id&&normName(l.name)===normName(name)))return toast("Ya existe un lugar con ese nombre.");Object.assign(selected,{name,address:String(data.get('address')).trim(),notes:String(data.get('notes')).trim()});touch();renderLocations();renderSceneBank();toast("Lugar actualizado");});
+    detail.querySelector("[data-plan-location]")?.addEventListener("click",()=>{showView("dayplan");resetPlanFilters();el("dpLocationFilter").value=selected.id;el('dpLocationFilter').closest('details').open=true;renderSceneBank();});
+    const q=normName(el("locationSearch").value);
+    const visible=[...groups.values()].sort((a,b)=>a.label.localeCompare(b.label,'es')).map(g=>({...g,visible:g.scenes.filter(matches)})).filter(g=>g.visible.length && (!q || normName(g.label+' '+g.visible.map(s=>s.number+' '+s.slugline).join(' ')).includes(q)));
+    sets.innerHTML=visible.map((g,i)=>{
+      const ids=union(g.visible.map(s=>shootingLocation(s)?.id || '__none')), mixed=ids.length>1;
+      return `<article class="location-set" data-group="${i}"><div class="set-heading"><div><h3>${esc(g.label)}</h3><span class="muted small">${g.visible.length} escena${g.visible.length===1?'':'s'} · ${g.visible.filter(s=>sceneDays(s).length).length} programadas</span></div><label class="set-assignment">Lugar de rodaje<select class="input" data-assign-group="${i}" aria-label="Lugar de rodaje de ${esc(g.label)}">${locationOptions(ids[0],mixed)}</select></label></div><details><summary data-ro-allow="1">Ver escenas y jornadas</summary><div class="set-scenes">${g.visible.map(s=>`<div class="set-scene"><div>${sceneLinks([s])}<span>${esc(s.slugline)}</span><small class="${sceneDays(s).length?'text-scheduled':'muted'}">${esc(sceneDayLabel(s)||'Pendiente de programar')}</small></div><select class="input" data-assign-scene="${esc(s.id)}" aria-label="Lugar de rodaje de escena ${esc(s.number)}">${locationOptions(shootingLocation(s)?.id)}</select></div>`).join('')}</div></details></article>`;
+    }).join('') || '<div class="empty-state">No hay espacios para este filtro. Cargá tu guion en la sección Guion o elegí otro filtro.</div>';
+    sets.querySelectorAll("[data-assign-group],[data-assign-scene]").forEach(select=>select.onchange=()=>{
+      if(isReadOnly())return roToast();
+      if(select.value && !locations.some(l=>l.id===select.value))return;
+      const targets=select.dataset.assignScene ? [getScene(select.dataset.assignScene)] : visible[Number(select.dataset.assignGroup)].visible;
+      targets.filter(Boolean).forEach(s=>{s.shootingLocationId=select.value;});touch();renderLocations();renderSceneBank();
+    });
+    bindSceneLinks(sets);
+    el("locationSearch").oninput=renderLocations;
+    el("locationCreateForm").onsubmit=e=>{
+      e.preventDefault();if(isReadOnly())return roToast();const data=new FormData(e.target),name=String(data.get('name')).trim();if(!name)return;
+      if(locations.some(l=>normName(l.name)===normName(name)))return toast("Ya existe un lugar con ese nombre.");
+      const location={id:uid('location'),name,address:String(data.get('address')).trim(),notes:''};
+      state.shootingLocations=[...locations,location];locationFilter='all';touch();e.target.reset();el('locationCreate').open=false;renderLocations();renderSceneBank();toast('Lugar creado. Asignalo a los espacios del guion.');
+    };
+    if(isReadOnly())el('view-locations').querySelectorAll('input:not([data-ro-allow]),select,textarea,button:not([data-ro-allow])').forEach(n=>n.disabled=true);
+  }
+  function renderCastDirectory(){
+    const root=el('castDirectory');if(!root)return;
+    const groups=new Map();
+    for(const s of state.scenes)for(const name of s.elements?.cast||[]){const key=normName(name);if(!key)continue;if(!groups.has(key))groups.set(key,{name,scenes:[]});const g=groups.get(key);if(!g.scenes.includes(s))g.scenes.push(s);}
+    for(const name of getCastRoster())if(!groups.has(normName(name)))groups.set(normName(name),{name,scenes:[]});
+    const all=[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    el('castStats').innerHTML=`<div><strong>${all.length}</strong><span>Personajes</span></div><div><strong>${all.filter(g=>findCastCrewEntryByName(g.name)?.name).length}</strong><span>Con intérprete</span></div><div><strong>${state.shootDays.length}</strong><span>Jornadas de rodaje</span></div>`;
+    const q=normName(el('castSearch').value), entries=all.filter(g=>!q||normName(g.name+' '+(findCastCrewEntryByName(g.name)?.name||'')).includes(q));
+    root.innerHTML=entries.map((g,i)=>{
+      const person=findCastCrewEntryByName(g.name),days=state.shootDays.filter(d=>g.scenes.some(s=>(d.sceneIds||[]).includes(s.id)));
+      return `<article class="card cast-card"><div class="cardContent"><div class="cast-title"><span class="cast-avatar">${esc(g.name.slice(0,2))}</span><div><h2>${esc(g.name)}</h2><span class="muted small">${g.scenes.length} escenas · ${days.length} jornadas</span></div></div><label>Intérprete<input class="input" data-cast-entry="${i}" maxlength="160" value="${esc(person?.name||'')}" placeholder="Asignar actor o actriz"/></label><div class="scene-links">${sceneLinks(g.scenes)}</div><p class="muted small">${esc(days.map(d=>(d.label||'Jornada')+(d.date?' · '+formatDDMMYYYY(d.date):'')).join(' / ')||'Sin jornadas programadas')}</p><button class="btn small" data-cast-plan="${i}" data-ro-allow="1">Ver escenas en el plan →</button></div></article>`;
+    }).join('')||'<div class="empty-state">No hay personajes para esta búsqueda. Revisá el reparto detectado en el desglose del guion.</div>';
+    root.querySelectorAll('[data-cast-entry]').forEach(input=>{input.disabled=isReadOnly();input.onchange=()=>{
+      if(isReadOnly())return roToast();const g=entries[Number(input.dataset.castEntry)];let person=findCastCrewEntryByName(g.name);
+      if(!person){if(!input.value.trim())return;person={id:uid('crew'),area:'Cast',role:g.name,name:'',phone:'',email:'',notes:''};state.crew.push(person);}
+      // Preserve legacy entries whose character was stored in name, not role.
+      if(!String(person.role||'').trim())person.role=g.name;
+      person.name=input.value.trim();touch();refreshElementSuggestions();
+      el('castStats').querySelectorAll('strong')[1].textContent=all.filter(g=>findCastCrewEntryByName(g.name)?.name).length;
+    };});
+    root.querySelectorAll('[data-cast-plan]').forEach(b=>b.onclick=()=>{showView('dayplan');resetPlanFilters();el('dpCastFilter').value=normName(entries[Number(b.dataset.castPlan)].name);el('dpCastFilter').closest('details').open=true;renderSceneBank();});
+    bindSceneLinks(root);el('castSearch').oninput=renderCastDirectory;
+  }
+
+  function sceneCardNode(scene, mode="bank", dayId=null, planBank=false){
     const node = document.createElement("div");
     node.className = "sceneCard";
     node.draggable = true;
@@ -3191,10 +3085,21 @@ function setupScheduleWheelScroll(){
       node.innerHTML = `
         <div class="left">
           <div class="title">#${esc(scene.number||"")} — ${esc(scene.slugline||"")}</div>
-          <div class="meta">${esc(scene.location||"")} · ${esc(scene.timeOfDay||"")}</div>
+          <div class="meta">${esc(shootingLocation(scene)?.name || 'Lugar de rodaje sin asignar')}</div>
+          <div class="scene-status ${assigned?'scheduled':'pending'}">${assigned ? '✓ '+esc(sceneDayLabel(scene)) : '○ Pendiente'}</div>
         </div>
-        <div class="right"><span class="dragHandle">⠿</span></div>
+        <div class="right">${planBank ? `<button class="btn icon scene-plan-action" type="button" ${assigned?'data-ro-allow="1"':''} aria-label="${assigned?'Ver jornada de':'Programar'} escena ${esc(scene.number)}" title="${assigned?'Ver en su jornada':'Agregar al final del día seleccionado'}">${assigned?'↗':'+'}</button>` : '<span class="dragHandle">⠿</span>'}</div>
       `;
+      node.querySelector('.scene-plan-action')?.addEventListener('click',e=>{
+        e.stopPropagation();hideHoverTip();
+        const existingDay=sceneAssignedDayId(scene.id);
+        if(existingDay){selectedDayplanDayId=existingDay;selectedDayId=existingDay;dayplanMetaOpen=false;renderDayPlan();renderSceneBank();const block=el('dpLane').querySelector(`[data-id="${scene.id}"]`);block?.scrollIntoView({block:'center'});return;}
+        if(isReadOnly())return roToast();
+        const day=getDay(selectedDayplanDayId);if(!day)return toast('Creá un día de rodaje para programar escenas.');
+        ensureDayTimingMaps(day);const items=buildDayplanItems(day),start=Math.max(0,...items.map(i=>(i.start||0)+(i.dur||0)));
+        if(start+60>dayplanAvailSpan(day))return toast('Este día no tiene una hora libre al final. Ajustá sus horarios o elegí otro día.');
+        day.sceneIds.push(scene.id);day.times[scene.id]=start;day.durations[scene.id]=60;touch();renderSceneBank();renderDayPlan();renderDaysBoard();renderDayDetail();renderScheduleBoard();renderReportsDetail();
+      });
     }else{
       // mode === "day"
       node.innerHTML = `
@@ -3251,6 +3156,19 @@ function setupScheduleWheelScroll(){
   }
 
   function renderSceneBank(){
+    const fillFilter=(id, label, options)=>{
+      const select=el(id);if(!select)return;const value=select.value;
+      select.innerHTML=`<option value="">${label}</option>`+options.map(([value,text])=>`<option value="${esc(value)}">${esc(text)}</option>`).join('');
+      select.value=[...select.options].some(o=>o.value===value)?value:'';
+      select.onchange=renderSceneBank;
+    };
+    fillFilter('dpLocationFilter','Todos los lugares',[['__none','Sin lugar asignado'],...shootingLocations().map(l=>[l.id,l.name])]);
+    const sets=new Map(),cast=new Map();
+    for(const s of state.scenes){if(s.location)sets.set(normName(s.location),s.location);for(const name of s.elements?.cast||[])cast.set(normName(name),name);}
+    for(const name of getCastRoster())if(!cast.has(normName(name)))cast.set(normName(name),name);
+    fillFilter('dpSetFilter','Todos los espacios',[...sets].sort((a,b)=>a[1].localeCompare(b[1],'es')));
+    fillFilter('dpCastFilter','Todos los personajes',[...cast].sort((a,b)=>a[1].localeCompare(b[1],'es')));
+    if(el('dpClearFilters'))el('dpClearFilters').onclick=()=>{resetPlanFilters();renderSceneBank();};
     function renderInto(wrapId, searchId, filterId){
       const wrap = el(wrapId);
       if(!wrap) return;
@@ -3261,19 +3179,34 @@ function setupScheduleWheelScroll(){
 
       let list = state.scenes.slice();
       if(filter==="unassigned") list = list.filter(s=>!sceneAssignedDayId(s.id));
+      if(filter==="assigned") list = list.filter(s=>sceneAssignedDayId(s.id));
+      if(filter==="today") list = list.filter(s=>sceneDays(s).some(d=>d.id===selectedDayplanDayId));
+      if(wrapId==='dpSceneBankList'){
+        const loc=el('dpLocationFilter')?.value,set=el('dpSetFilter')?.value,cast=el('dpCastFilter')?.value;
+        if(loc)list=list.filter(s=>loc==='__none'?!shootingLocation(s):s.shootingLocationId===loc);
+        if(set)list=list.filter(s=>normName(s.location)===set);
+        if(cast)list=list.filter(s=>(s.elements?.cast||[]).some(n=>normName(n)===cast));
+        const assigned=state.scenes.filter(s=>sceneAssignedDayId(s.id)).length;
+        el('dpBankProgress').innerHTML=`<span class="text-scheduled">✓ ${assigned} programadas</span><span>${state.scenes.length-assigned} pendientes</span>`;
+      }
       if(q){
         list = list.filter(s=>{
-          const hay = `${s.number} ${s.slugline} ${s.location} ${s.summary}`.toLowerCase();
+          const hay = `${s.number} ${s.slugline} ${s.location} ${shootingLocation(s)?.name||''} ${(s.elements?.cast||[]).join(' ')} ${s.summary}`.toLowerCase();
           return hay.includes(q);
         });
       }
-      for(const s of list) wrap.appendChild(sceneCardNode(s, "bank"));
+      for(const s of list) wrap.appendChild(sceneCardNode(s, "bank",null,wrapId==='dpSceneBankList'));
+      if(!list.length)wrap.innerHTML='<div class="empty-state">No hay escenas para estos filtros.</div>';
     }
 
     // Call Diario
     renderInto("sceneBankList", "bankSearch", "bankFilter");
     // Plan de Rodaje (vista diaria)
     renderInto("dpSceneBankList", "dpBankSearch", "dpBankFilter");
+  }
+  function resetPlanFilters(){
+    for(const id of ['dpLocationFilter','dpSetFilter','dpCastFilter','dpBankSearch'])if(el(id))el(id).value='';
+    if(el('dpBankFilter'))el('dpBankFilter').value='all';
   }
 
   function addShootDay(){
@@ -5073,7 +5006,7 @@ function bindSchedDayPickerUI(){
 
     const daysToShow = getScheduleDaysFiltered();
 
-    if(!state.shootDays.length){
+    if(!state.shootDays.length && !window.RODA_STUDIO){
       board.innerHTML = `<div class="muted">No hay días cargados.</div>`;
       setupScheduleTopScrollbar();
       return;
@@ -5146,7 +5079,7 @@ function bindSchedDayPickerUI(){
             elemsTxt = parts.join(" ");
           }catch(_e){ elemsTxt = ""; }
 
-          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${s.summary||""} ${elemsTxt}`.toLowerCase();
+          const hay = `${s.number||""} ${s.slugline||""} ${s.location||""} ${shootingLocation(s)?.name||''} ${s.summary||""} ${elemsTxt}`.toLowerCase();
           if(!hay.includes(q)) continue;
         }
 
@@ -5172,6 +5105,7 @@ function bindSchedDayPickerUI(){
           <div class="schedContent">
             <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
             <div class="meta">${esc(startTxt)} - ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
+            ${shootingLocation(s) ? `<div class="meta">⌖ ${esc(shootingLocation(s).name)}</div>` : ''}
             ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
           </div>
           <div class="resize" title="Cambiar duración"></div>
@@ -5640,6 +5574,7 @@ function updateScheduleDayDOM(dayId){
   let dayplanLastTapAt = 0;
 
   let dayplanMetaOpen = false;
+  let dayplanMetaDayId = null;
 
   const DAYPLAN_PPM = 1.2; // px por minuto (altura total ~1728px)
   const DAYPLAN_COLORS = [
@@ -5994,6 +5929,8 @@ items.push({
       timeCol.innerHTML = "";
       lane.innerHTML = "";
       inspector.innerHTML = "";
+      inspector.hidden=true;
+      inspector.closest('.dayplanBody')?.classList.remove('has-selection');
       printWrap.innerHTML = "";
       return;
     }
@@ -6020,6 +5957,7 @@ items.push({
     }
 
 
+    if(dayplanMetaDayId!==d.id){dayplanMetaOpen=false;dayplanMetaDayId=d.id;dayplanSelectedKey=null;dayplanSelectedKeys.clear();}
     // Header (día seleccionado)
     const proj = esc(state.meta?.title || "Proyecto");
     const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
@@ -6028,9 +5966,8 @@ items.push({
     head.innerHTML = `
   <div class="dayplanHeader">
     <div class="dpTitle">
-      <div class="dpProj">${proj}</div>
       <div class="dpRowLine">
-        <button class="dpDayBtn" id="dpDayTitleBtn" type="button" title="Editar detalle del día">${dayTxt}</button>
+        <button class="dpDayBtn" id="dpDayTitleBtn" type="button" title="Editar detalle del día" aria-expanded="${dayplanMetaOpen}" aria-controls="dpDayMetaEditor">${dayTxt}</button>
         <div class="dpBadges" id="dpDayBadges">
           <span class="metaPill"><b>Call</b> ${esc(d.callTime || "—")}</span>
           <span class="metaPill"><b>Locación</b> ${esc(d.location || "—")}</span>
@@ -6040,20 +5977,15 @@ items.push({
     </div>
 
     <div class="dpRight">
-      <div class="dpActions noPrint">
-        <div class="row gap" style="align-items:center; flex-wrap:wrap; justify-content:flex-end;">
-          <div id="dpDayNightMount"></div>
-          <div id="dpDayDeleteMount"></div>
-        </div>
-      </div>
-
       <div class="dpMeta">
-        <div class="muted small">${esc((d.notes||"").trim() ? (d.notes||"").trim() : "Click en el título para editar fecha, call time, locación, nombre y notas.")}</div>
+        <button class="btn small" id="dpEditDay" type="button" aria-expanded="${dayplanMetaOpen}" aria-controls="dpDayMetaEditor">${dayplanMetaOpen?'Cerrar datos':'Editar día'}</button>
+        <span class="muted small">${(d.sceneIds||[]).length} escenas programadas</span>
       </div>
     </div>
   </div>
 
   <div class="dayMetaEditor noPrint" id="dpDayMetaEditor" style="display:${dayplanMetaOpen ? "block" : "none"};">
+    <div class="day-meta-heading"><strong>Datos de la jornada</strong><button class="btn small" id="dpCloseMeta" type="button">Listo · cerrar</button></div>
     <div class="dayMetaGrid">
       <div class="field">
         <label>Fecha</label>
@@ -6075,7 +6007,8 @@ items.push({
 
       <div class="field">
         <label>Locación</label>
-        <input class="input" id="dp_day_location" value="${eattr(d.location||"")}"/>
+        <input class="input" id="dp_day_location" list="dp_location_options" value="${eattr(d.location||"")}"/>
+        <datalist id="dp_location_options">${shootingLocations().map(l=>`<option value="${esc(l.name)}">${esc(l.address||'')}</option>`).join('')}</datalist>
       </div>
 
       <div class="field">
@@ -6088,6 +6021,7 @@ items.push({
         <textarea class="textarea smallArea" id="dp_day_notes">${esc(d.notes||"")}</textarea>
       </div>
     </div>
+    <div class="row gap day-meta-actions"><div id="dpDayNightMount"></div><div id="dpDayDeleteMount"></div></div>
   </div>
 `;
 
@@ -6115,10 +6049,10 @@ items.push({
 
       const liteSave = window.U.debounce(()=>{ touch(); }, 450);
 
-      const fullRefresh = ()=>{
+      const fullRefresh = (redrawPlan=true)=>{
         sortShootDaysInPlace();
         touch();
-        renderDayPlan();
+        if(redrawPlan)renderDayPlan();
         renderDayDetail();
         renderReports();
         renderScheduleBoard();
@@ -6131,11 +6065,10 @@ items.push({
         if(!d0) return;
 
         // Toggle editor (click en el título del día)
-        const titleBtn = e.target?.closest && e.target.closest("#dpDayTitleBtn");
+        const titleBtn = e.target?.closest && e.target.closest("#dpDayTitleBtn,#dpEditDay,#dpCloseMeta");
         if(titleBtn){
-          dayplanMetaOpen = !dayplanMetaOpen;
-          const box = head.querySelector("#dpDayMetaEditor");
-          if(box) box.style.display = dayplanMetaOpen ? "block" : "none";
+          dayplanMetaOpen = titleBtn.id==='dpCloseMeta' ? false : !dayplanMetaOpen;
+          renderDayPlan();
           return;
         }
 
@@ -6225,7 +6158,7 @@ items.push({
           d0.callTime = (e.target.value||"").trim();
           e.target.value = d0.callTime;
           cleanupDayCallTimes(d0);
-          fullRefresh();
+          fullRefresh(false);
         }
         if(id === "dp_day_date"){
           const iso = (e.target.value||"").trim();
@@ -6233,7 +6166,7 @@ items.push({
           d0.date = iso;
           const disp = head.querySelector("#dp_day_date_display");
           if(disp) disp.value = formatDDMMYYYY(iso);
-          fullRefresh();
+          fullRefresh(false);
         }
       });
 
@@ -6260,7 +6193,7 @@ items.push({
             const hid = head.querySelector("#dp_day_date");
             if(hid) hid.value = iso;
             e.target.value = formatDDMMYYYY(iso);
-            fullRefresh();
+            fullRefresh(false);
           }else{
             e.target.value = formatDDMMYYYY(d0.date);
           }
@@ -6268,7 +6201,7 @@ items.push({
         }
 
         if(id === "dp_day_location" || id === "dp_day_label" || id === "dp_day_notes"){
-          fullRefresh();
+          fullRefresh(false);
         }
       });
     }
@@ -6305,7 +6238,7 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
 
     const blocks = items.map((it)=>{
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-      const bg = hexToRgba(col, 0.75);
+      const bg = window.RODA_STUDIO ? '#25282c' : hexToRgba(col, 0.75);
 const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
 const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, dpEndAbs - absStart);
 const absEnd = clamp(absStart + dur, absStart + snapMin, dpEndAbs);
@@ -6345,7 +6278,7 @@ ${
     ? `
       <div class="dpBlockMeta">
         <div class="dpMetaItem"><div class="v">${esc(it.intExt||"—")}</div></div>
-        <div class="dpMetaItem"><div class="v">${esc(it.location||"—")}</div></div>
+        <div class="dpMetaItem"><div class="v">${esc(shootingLocation(getScene(it.id))?.name || it.location||"—")}</div></div>
         <div class="dpMetaItem"><div class="v">${esc(it.timeOfDay||"—")}</div></div>
       </div>
       ${(()=>{ const t = notesOrShortSummary(it.notes, it.summary); return t ? `<div class="dpBlockSummary">${esc(t)}</div>` : ``; })()}
@@ -6366,14 +6299,7 @@ ${
 
     lane.innerHTML = grid.join("") + blocks;
 
-    // Hover preview (igual que Cronograma + Planos)
-    try{
-      lane.querySelectorAll('.dpBlock[data-kind="scene"]').forEach((blk)=>{
-        const sid = blk.dataset.id;
-        const sc = sid ? getScene(sid) : null;
-        if(sc) attachSceneHover(blk, sc, { includeShots:true, maxShots: 12 });
-      });
-    }catch(_e){}
+    // Selected scenes have an inspector; avoid a second floating preview over the timeline.
 
     // Línea roja "ahora" (seguimiento)
     try{ ensureDayplanNowTicker(); updateDayplanNowLine(); }catch(_e){}
@@ -6537,6 +6463,8 @@ ${
         const key = block.dataset.key;
         const kind = block.dataset.kind;
         const id = block.dataset.id;
+        dayplanMetaOpen=false;
+        hideHoverTip();
 
         const actEl = e.target.closest("[data-action]");
         const action = actEl?.dataset.action || "";
@@ -6895,6 +6823,8 @@ dayplanPointer = {
     const dpEndAbs = dayplanEndAbs(d);
 
     const it = dayplanSelectedKey ? items.find(x=>x.key===dayplanSelectedKey) : null;
+    box.hidden=!it;
+    box.closest('.dayplanBody')?.classList.toggle('has-selection',!!it);
     if(!it){
       box.innerHTML = `<div class="muted">Seleccioná una escena o tarea para editarla.</div>`;
       return;
@@ -6913,6 +6843,7 @@ dayplanPointer = {
     const isBlock = it.kind==="block";
 
     box.innerHTML = `
+      <button class="btn small inspector-close" id="dpCloseInspector" type="button" data-ro-allow="1">Cerrar detalle ×</button>
       <div class="row gap" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
         <div><b>${it.kind==="scene" ? "Escena" : "Nota / tarea"}</b> <span class="muted">(${esc(it.title||"")})</span></div>
         <div class="row gap" style="align-items:center">
@@ -6957,6 +6888,7 @@ dayplanPointer = {
             <label>Datos de escena</label>
             <div class="dpSceneTop"><b>#${esc(it.number||"")}</b> ${esc(it.slugline||"")}</div>
             <div class="dpFacts">
+              <div class="dpFact" style="grid-column:1/-1"><div class="k">Lugar de rodaje</div><div class="v">${esc(shootingLocation(getScene(it.id))?.name || 'Sin asignar')}</div></div>
               <div class="dpFact"><div class="k">Int/Ext</div><div class="v">${esc(it.intExt||"—")}</div></div>
               <div class="dpFact"><div class="k">Lugar</div><div class="v">${esc(it.location||"—")}</div></div>
               <div class="dpFact"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
@@ -6981,6 +6913,7 @@ dayplanPointer = {
       box.dataset.bound = "1";
 
       box.addEventListener("click", (e)=>{
+        if(e.target.closest('#dpCloseInspector')){dayplanSelectedKey=null;dayplanSelectedKeys.clear();dayplanPaletteKey=null;renderDayPlan();return;}
         const act = e.target.closest("[data-action]")?.dataset.action || "";
         if(act === "pickColorInspector"){
           const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
@@ -8817,6 +8750,7 @@ async function printPlanGeneral(){
 
   async function createProjectFromUI(){
     if(createProjectFromUI._running) return;
+    if(window.RODA_STUDIO){window.GBStudioProjects.openPicker();return;}
     const name = prompt("Nombre del nuevo proyecto:");
     if(name === null) return;
     const cleanName = String(name || "").trim();
@@ -9527,6 +9461,8 @@ el("bdFileInput")?.addEventListener("change", ()=>{
 // Plan del día
     el("dayplanSelect")?.addEventListener("change", ()=>{
       selectedDayplanDayId = el("dayplanSelect").value;
+      dayplanMetaOpen=false;
+      renderSceneBank();
 
       // Sync con Call Diario / Call Sheet / Shotlist
       selectedDayId = selectedDayplanDayId;
@@ -9722,6 +9658,13 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
 
     el("btnCancelScriptImport")?.addEventListener("click", ()=> toggleScriptImportPanel(false));
 
+    const uploadDialog=el('scriptUploadDialog');
+    el('btnScriptUpload')?.addEventListener('click',()=>{
+      if(isReadOnly())return;
+      el('scriptImportStatus').hidden=true;uploadDialog.showModal();
+    });
+    el('btnScriptUploadClose')?.addEventListener('click',()=>uploadDialog.close());
+    uploadDialog?.addEventListener('click',e=>{if(e.target!==uploadDialog)return;const r=uploadDialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)uploadDialog.close();});
     el("btnToggleScriptImport")?.addEventListener("click", ()=>{
       sanitizeScriptState({ migrateRawToLocal:true });
       const panel = el("scriptImportPanel");
@@ -9729,106 +9672,32 @@ el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
       toggleScriptImportPanel(open);
     });
 
-    // Nueva versión: crea una versión editable (y opcionalmente pegás el guion para procesarla)
-    el("btnNewScriptVersion")?.addEventListener("click", ()=>{
-      toast("Solo existe V1. Reemplazá el guion desde “Pegar / Procesar”.");
-      const panel = el("scriptImportPanel");
-      if(panel) panel.classList.remove("hidden");
-      requestAnimationFrame(()=> el("scriptImportText")?.focus());
+    RodaScriptDocument.bind();
+    el("btnParseScript")?.addEventListener("click",()=>runScriptLoad(()=>importScriptText(el("scriptImportText")?.value||"",{type:"text",name:"Texto pegado"})));
+    el("scriptFileInput")?.addEventListener("change",async event=>{
+      const file=event.target.files?.[0];if(!file)return;
+      await runScriptLoad(async()=>{const result=await RodaScreenplay.readFile(file,true);return importScriptText(result.text,{type:"file",name:file.name},false,result.format);});event.target.value="";
     });
-el("btnParseScript")?.addEventListener("click", ()=>{
-      const txt = el("scriptImportText")?.value || "";
-      const keys = el("scriptKeywords")?.value || "";
-      saveScriptRawLocal(txt);
-      const scenes = parseScreenplayToScriptScenes(txt, keys);
-      if(!scenes.length) return toast("No detecté escenas (revisá INT./EXT. por línea).");
-      // Aviso: si repetís números de escena (p.ej. reiniciás en cada capítulo) el merge por número puede confundirse.
-      try{
-        const seen = new Set();
-        const dup = new Set();
-        for(const s of scenes){
-          const n = canonSceneNumber(s.number);
-          if(!n) continue;
-          if(seen.has(n)) dup.add(n);
-          else seen.add(n);
-        }
-        if(dup.size) toast("⚠️ Números de escena duplicados: " + Array.from(dup).slice(0,6).join(", ") + ". Recomendación: numeración única a lo largo del guion.");
-      }catch(_e){}
-    
-      ensureScriptState();
-
-      const now = new Date().toISOString();
-      let v = getActiveScriptVersion();
-
-      // Si venís de 'Nueva versión' (draft) y está vacía, completamos ESA versión
-      if(v && v.draft && !(v.scenes||[]).length){
-        v.keywords = keys;
-        v.scenes = scenes;
-        v.updatedAt = now;
-        v.draft = false;
-      }else{
-  // Si ya llegamos al límite, re-procesamos la versión activa en lugar de crear otra.
-  if(state.script.versions.length >= MAX_SCRIPT_VERSIONS){
-    v.keywords = keys;
-    v.scenes = scenes;
-    v.updatedAt = now;
-    v.draft = false;
-  }else{
-    v = {
-      id: uid("scrVer"),
-      name: `V${state.script.versions.length + 1}`,
-      createdAt: now,
-      updatedAt: now,
-      keywords: keys,
-      scenes
-    };
-    state.script.versions.push(v);
-    state.script.activeVersionId = v.id;
-  }
-}
-
-      state.script.activeVersionId = v.id;
-      selectedScriptSceneId = v.scenes?.[0]?.id || null;
-      touch();
-      toast(`Guion procesado → ${v.name} ✅`);
-      renderScriptUI();
-      // No ocultamos el panel: el guion debe quedar visible por versión
+    el("btnScriptLinkDocs")?.addEventListener("click",()=>{
+      if(isReadOnly())return;
+      try{const link=RodaScreenplay.docsLink(el("scriptDocsURL").value);const previous=state.script.googleDoc;state.script.googleDoc=previous?.id===link.id?{...previous,...link}:link;touch();renderScriptUI();scriptStatus('Documento vinculado. Podés editarlo en Google Docs o importar su última versión.');}catch(error){scriptStatus(error.message,true);}
     });
-
-    // Guardar también el texto crudo del guion y keywords por versión (editable)
-    const taImport = el("scriptImportText");
-    if(taImport && !taImport._bound){
-      taImport._bound = true;
-      taImport.addEventListener("input", ()=>{
-        saveScriptRawLocal(taImport.value || "");
-      });
-    }
-    const kw = el("scriptKeywords");
-    if(kw && !kw._bound){
-      kw._bound = true;
-      kw.addEventListener("input", ()=>{
-        const v = getActiveScriptVersion();
-        if(!v) return;
-        v.keywords = kw.value || "";
-        v.updatedAt = new Date().toISOString();
-        touch();
-      });
-    }
-
-    
-    el("btnScriptSaveScene")?.addEventListener("click", ()=>{
-      const v = getActiveScriptVersion();
-      if(!v) return;
-      v.updatedAt = new Date().toISOString();
-      touch();
-      toast("Cambios guardados ✅");
-    });
-el("scriptVerSelect")?.addEventListener("change", ()=>{
-      sanitizeScriptState();
-      const v = state.script.versions[0];
-      state.script.activeVersionId = v?.id || null;
-      selectedScriptSceneId = null;
-      renderScriptUI();
+    el("btnScriptImportDocs")?.addEventListener("click",()=>runScriptLoad(async()=>{
+      if(!window.RODA_IMPORT_GOOGLE_DOC)throw Error('La importación de Google Docs está disponible en GB Studio. También podés cargar una copia Word o pegar el texto.');
+      // Google Picker lives outside the native dialog's top layer.
+      uploadDialog.close();
+      const entered=(el('scriptDocsURL').value||'').trim();
+      const linked=entered?RodaScreenplay.docsLink(entered):null;
+      const result=await window.RODA_IMPORT_GOOGLE_DOC(linked);if(!result){scriptStatus('Importación cancelada. El guion cargado se conserva.');return;}
+      const changed=await importScriptText(result.text,{type:"google-doc",name:result.title||"Google Docs",url:result.url,documentId:result.id,revisionId:result.revisionId},false,result.format);
+      state.script.googleDoc={id:result.id,url:result.url,title:result.title,lastImportedAt:new Date().toISOString()};touch();
+      if(!changed)scriptStatus('El documento no tiene cambios desde la última carga.');
+    }));
+    const taImport=el("scriptImportText");if(taImport){taImport.value=loadScriptRawLocal();taImport.addEventListener("input",()=>saveScriptRawLocal(taImport.value));}
+    el("btnScriptGoBreakdown")?.addEventListener("click",()=>showView("breakdown"));
+    el("btnScriptDownload")?.addEventListener("click",()=>{
+      const v=getActiveScriptVersion();if(!v?.scenes?.length)return;
+      const blob=new Blob([scriptVersionText(v)],{type:"text/plain;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='guion-'+v.name.replace(/[^\p{L}\p{N}_-]/gu,'_')+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     });
 
     el("btnScriptInsertAfter")?.addEventListener("click", ()=>{
@@ -9880,89 +9749,10 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       requestAnimationFrame(()=> el("scriptSceneSlugline")?.focus());
     });
 
-    el("btnScriptApply")?.addEventListener("click", ()=>{
-      const v = getActiveScriptVersion();
-      if(!v) return toast("No hay versión activa.");
-      // Apply (merge) to project scenes by number
-      const byNum = new Map(state.scenes.map(s=>[canonSceneNumber(s.number), s]));
-      let added = 0, updated = 0;
-
-      for(const sc of (v.scenes||[])){
-        const num = canonSceneNumber(sc.number);
-        if(!num) continue;
-        const existing = byNum.get(num);
-        if(existing){
-          ensureSceneExtras(existing);
-
-          const slug = String(sc.slugline || existing.slugline || "").trim();
-          const locTod = sluglineToLocTOD(slug);
-          const ie = String(sc.intExt || sluglineToIntExt(slug) || existing.intExt || "").trim();
-          const loc = String(sc.location || locTod.location || existing.location || "").trim();
-          const todRaw = String(sc.timeOfDay || locTod.timeOfDay || existing.timeOfDay || "").trim();
-          const tod = normalizeTOD(todRaw);
-
-          const hasChap = (sc.chapter!==undefined && sc.chapter!==null && String(sc.chapter).trim()!=="");
-          const bodyTxt = (sc.body!==undefined && sc.body!==null) ? String(sc.body) : "";
-          const resumen = bodyTxt.trim()
-            ? bodyTxt.trim()
-            : ((sc.summary!==undefined && sc.summary!==null) ? String(sc.summary).trim() : (existing.summary||""));
-
-          existing.number = num;
-          if(slug) existing.slugline = slug;
-          if(ie) existing.intExt = ie;
-          if(loc) existing.location = loc;
-          if(tod) existing.timeOfDay = tod;
-          if(hasChap) existing.chapter = sc.chapter;
-          existing.summary = resumen;
-
-          updated++;
-        }else{
-          const slug = String(sc.slugline || "").trim();
-          const locTod = sluglineToLocTOD(slug);
-          const ie = String(sc.intExt || sluglineToIntExt(slug) || "").trim();
-
-          const bodyTxt = (sc.body!==undefined && sc.body!==null) ? String(sc.body) : "";
-          const resumen = bodyTxt.trim()
-            ? bodyTxt.trim()
-            : ((sc.summary!==undefined && sc.summary!==null) ? String(sc.summary).trim() : "");
-
-          const s = {
-            id: uid("scene"),
-            number: num,
-            chapter: (sc.chapter!==undefined && sc.chapter!==null && String(sc.chapter).trim()!=="") ? sc.chapter : "",
-            slugline: slug,
-            intExt: ie,
-            location: String(sc.location || locTod.location || "").trim(),
-            timeOfDay: normalizeTOD(String(sc.timeOfDay || locTod.timeOfDay || "").trim()),
-            pages: 0,
-            summary: resumen,
-            notes: "",
-            elements: Object.fromEntries(cats.map(c=>[c,[]])),
-            shots: []
-          };
-          state.scenes.push(s);
-          byNum.set(num, s);
-          added++;
-        }
-      }
-
-      sortScenesByNumberInPlace();
-      selectedSceneId = state.scenes[0]?.id || null;
-
-      touch();
-      toast(`Aplicado ✅ (nuevas: ${added}, actualizadas: ${updated})`);
-      renderScenesTable();
-      renderSceneEditor();
-    renderScriptUI();
-      renderSceneBank();
-      renderDaysBoard();
-      renderDayDetail();
-      renderElementsExplorer();
-      renderReports();
-      renderScheduleBoard();
-      renderReportsDetail();
-    });
-
+    el("btnScriptApply")?.addEventListener("click",()=>runScriptLoad(async()=>{
+      const v=getActiveScriptVersion();if(!v?.scenes?.length)return;
+      useScriptVersion(v);
+    }));
 
     el("btnImportScenes")?.addEventListener("click", ()=>{
       const txt = el("sceneImportText").value || "";
@@ -10151,7 +9941,7 @@ if(_bf) touch();
     el("projectTitle").value = state.meta.title || "Proyecto";
     const _savedAt = el("savedAtText");
     if(_savedAt) _savedAt.textContent = new Date(state.meta.updatedAt).toLocaleString("es-AR");
-if(!state.scenes.length){
+if(!state.scenes.length && !window.RODA_STUDIO){
       state.scenes.push({
         id: uid("scene"),
         number:"1",
@@ -10269,7 +10059,7 @@ if(!state.scenes.length){
     markReadOnlyAllowList();
     setupScheduleWheelScroll();
     hydrateAll();
-    showView(isMobileUI() ? "dayplan" : "breakdown");
+    showView(window.RODA_STUDIO ? "script" : (isMobileUI() ? "dayplan" : "breakdown"));
 
     window.addEventListener("online", ()=>{
       // Cuando vuelve la conexión, refrescamos desde remoto.
@@ -10277,6 +10067,9 @@ if(!state.scenes.length){
     });
 
     try{ document.body.classList.remove("bootLoading"); }catch(_e){}
+    window.RODA_FLUSH=async()=>{const until=Date.now()+30000;while(autosyncInFlight){if(Date.now()>until)throw Error("Todavía estamos guardando. Volvé a intentar.");await new Promise(resolve=>setTimeout(resolve,30));}if(window.RODA_UNSAVED)await autosyncRun();if(window.RODA_UNSAVED)throw Error("Hay cambios pendientes. Actualizá o guardá una copia antes de salir.");};
+    window.addEventListener("beforeunload",event=>{if(window.RODA_STUDIO&&window.RODA_UNSAVED){event.preventDefault();event.returnValue="";}});
+    window.RODA_READY=true;window.dispatchEvent(new Event("roda-ready"));
   }if(document.readyState === "loading") window.addEventListener("DOMContentLoaded", init);
   else init();
 })();
