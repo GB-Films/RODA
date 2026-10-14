@@ -7,23 +7,25 @@
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
   <title>GB Studio · Roda</title>
   <meta name="theme-color" content="#101010"/>
+  <link rel="icon" type="image/svg+xml" href="assets/roda-icon.svg?v=1.5.2"/>
   <link rel="stylesheet" href="https://gbstudio.com.ar/assets/studio-header.css"/>
   <script>
     window.RODA_STUDIO_BASE = new URL(location.pathname.startsWith("/roda/") ? "../" : "https://gbstudio.com.ar/", location.href).href;
     window.RODA_LEGACY = new URLSearchParams(location.search).get("legacy") === "1";
     if(location.hostname === "gb-films.github.io" && !window.RODA_LEGACY){ const url=new URL("roda/", window.RODA_STUDIO_BASE); url.search=location.search; url.hash=location.hash; location.replace(url.href); }
   </script>
+  <link rel="stylesheet" href="../assets/studio-tool-access.css?v=5"/>
   <link href="css/styles.css?v=20260124-01" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
-  <link rel="stylesheet" href="css/studio.css?v=1.5.1"/>
+  <link rel="stylesheet" href="css/studio.css?v=1.5.2"/>
 </head>
-<body class="roda-studio">
+<body class="roda-studio studio-tool-locked"><script>if(window.RODA_LEGACY)document.body.classList.remove("studio-tool-locked");</script>
   <header class="studio-global-header">
     <a class="studio-global-brand" data-studio-home href="https://gbstudio.com.ar/" aria-label="Inicio de GB Studio"><span class="brand-logo-frame"><img class="brand-logo-studio" data-studio-logo src="https://gbstudio.com.ar/assets/gb-studio-icon.svg?v=2" alt="GB Studio"/></span><span class="brand-divider"></span><span class="brand-product">GB<br/>STUDIO</span></a>
     <span class="studio-global-context" id="roda-context">RODA · PRODUCCIÓN</span>
     <div class="studio-global-actions"><a class="roda-back" id="roda-back" href="https://gbstudio.com.ar/roda/">← Proyectos</a><button class="studio-global-account" id="roda-account" type="button">Iniciar sesión</button></div>
   </header>
-  <main class="roda-home" id="roda-home" hidden><div class="roda-home-heading"><img src="https://gbstudio.com.ar/assets/studio-roda-symbol.svg?v=1" alt=""/><div><h1>Roda</h1><p>Del guion al rodaje. Escenas, jornadas, equipo y reportes en tu proyecto de GB Studio.</p></div></div><div id="roda-projects"></div><a id="roda-legacy-link" class="roda-project-change" href="https://gb-films.github.io/RODA/?legacy=1" hidden>Abrir proyectos de la versión anterior</a></main>
+  <main class="roda-home" id="roda-home" hidden><div class="roda-home-heading"><img src="assets/roda-icon.svg?v=1.5.2" alt=""/><div><h1>Roda</h1><p>Del guion al rodaje. Escenas, jornadas, equipo y reportes en tu proyecto de GB Studio.</p></div></div><div id="roda-projects"></div><a id="roda-legacy-link" class="roda-project-change" href="https://gb-films.github.io/RODA/?legacy=1" hidden>Abrir proyectos de la versión anterior</a></main>
   <aside id="roda-sync-message" class="roda-sync-message" role="alert" hidden></aside>
   <dialog id="roda-account-dialog" class="roda-account-dialog"><h2>Tu cuenta de GB Studio</h2><p id="roda-account-email"></p><div class="row gap"><button class="btn" id="roda-signout">Cerrar sesión</button><button class="btn" id="roda-account-close">Volver</button></div></dialog>
   <dialog class="roda-access-dialog" id="rodaAccessDialog" aria-labelledby="rodaAccessTitle" data-ro-allow="1"><div class="script-modal-heading"><h2 id="rodaAccessTitle">Personas y permisos</h2><button class="btn" type="button" id="rodaAccessClose">Cerrar ×</button></div><div id="rodaAccessContent"></div></dialog>
@@ -717,7 +719,7 @@
   <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->
   <script>
   (function(){
-    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.5.1";document.body.append(entry);return;}
+    if(!window.RODA_LEGACY){const entry=document.createElement("script");entry.type="module";entry.src="js/studio-entry.js?v=1.5.2";document.body.append(entry);return;}
     document.querySelector(".shell").hidden=false;document.getElementById("roda-account").hidden=true;
     const v = Date.now().toString(36);
     // CSS: fuerza versión de sesión

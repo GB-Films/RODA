@@ -11,27 +11,27 @@ const [{initializeApp,getApps,getApp},{getAuth,GoogleAuthProvider,signInWithPopu
   import(asset('firebase-config.js'))
 ]);
 const auth=getAuth(getApps().length?getApp():initializeApp(window.STORYBOARD_FIREBASE_CONFIG));
-const {createGoogleDocsImporter}=await import('./google-docs.mjs?v=1.5.1');
+const {createGoogleDocsImporter}=await import('./google-docs.mjs?v=1.5.2');
 window.RODA_IMPORT_GOOGLE_DOC=createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticateWithPopup,config:window.STORYBOARD_FIREBASE_CONFIG});
 const [{createSubscriptionGate},{createAccessController},{watchStaffRole}]=await Promise.all([
-  import(asset('studio-subscription-gate.mjs?v=2')),import(asset('compi/access.mjs?v=4')),import(asset('reviews-cloud.js?v=16'))
+  import(asset('studio-subscription-gate.mjs?v=3')),import(asset('compi/access.mjs?v=4')),import(asset('reviews-cloud.js?v=19'))
 ]);
-await import(asset('studio-projects.js?v=roda-1.5.1'));
+await import(asset('studio-projects.js?v=roda-1.5.2'));
 const projects=window.GBStudioProjects,home=document.getElementById('roda-home'),workspace=document.querySelector('.shell');
 const account=document.getElementById('roda-account');
 const login=()=>signInWithPopup(auth,new GoogleAuthProvider());
 const gate=createSubscriptionGate({appName:'Roda',onLogin:login});
-let bootedUid=null,starting=false;
+let bootedUid=null,starting=false,opening=null,openingUid=null,accessRevision=0;
 async function script(path){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=path;s.onload=resolve;s.onerror=()=>reject(Error('No pudimos cargar Roda. Recargá la página.'));document.body.append(s);});}
 async function start(user){
   if(starting)return;starting=true;
   try{
     const params=new URLSearchParams(location.search),accessPath=params.get('studioProject')?'/api/roda/projects/'+encodeURIComponent(params.get('studioSpace')||'gb-films')+'/'+encodeURIComponent(params.get('studioProject')):null;
     const project=accessPath?await projects.request(accessPath):projects.context();
-    if(!project){home.hidden=false;workspace.hidden=true;projects.show(document.getElementById('roda-projects'),'roda');return;}
+    if(!project){home.hidden=false;workspace.hidden=true;await projects.show(document.getElementById('roda-projects'),'roda');return;}
     window.RODA_STUDIO={accessPath,canEdit:project.role!=='viewer',project,userName:user.displayName||user.email};
-    await script('js/roda-policy.js?v=1.5.1');await script('js/roda-access.js?v=1.5.1');
-    await script('js/studio-storage.js?v=1.5.1');
+    await script('js/roda-policy.js?v=1.5.2');await script('js/roda-access.js?v=1.5.2');
+    await script('js/studio-storage.js?v=1.5.2');
     window.StorageLayer=window.createRodaStorage({projects:{request:projects.request,context:()=>({...project,uid:auth.currentUser?.uid})},project,user,accessPath});
     // Fail closed before boot: never create or edit a placeholder after a failed pull.
     await StorageLayer.init();
@@ -49,9 +49,9 @@ async function start(user){
       image.src=project.coverImage;image.hidden=false;initials.hidden=true;
     }
     await script('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js').catch(()=>{});
-    await script('js/script-document.js?v=1.5.1');
-    await script('js/screenplay.js?v=1.5.1');
-    await script('js/utils.js?v=1');await script('js/app.js?v=1.5.1');
+    await script('js/script-document.js?v=1.5.2');
+    await script('js/screenplay.js?v=1.5.2');
+    await script('js/utils.js?v=1');await script('js/app.js?v=1.5.2');
     RodaAccess.bind();
     let verifying=false,lastCheck=Date.now();
     const verifyAccess=async()=>{if(verifying||document.hidden||Date.now()-lastCheck<30000)return;verifying=true;lastCheck=Date.now();try{const fresh=await projects.request(accessPath);if(JSON.stringify(fresh.rodaAccess)!==JSON.stringify(project.rodaAccess))location.reload();}catch(error){if([401,403,404].includes(error.status)){workspace.hidden=true;workspace.inert=true;gate.deny(error.message,'restricted');}}finally{verifying=false;}};
@@ -65,20 +65,23 @@ const controller=createAccessController({appName:'Roda',allowReadOnly:true,watch
   return watchStaffRole(user,scoped,()=>scoped(null));
  },view:{
   account(user){account.textContent=user?.displayName||user?.email||'Iniciar sesión';},
-  deny(message,reason){gate.deny(message,reason);workspace.inert=true;home.inert=true;},
+  deny(message,reason){accessRevision++;gate.deny(message,reason);workspace.inert=true;home.inert=true;},
   async allow(){
+    const turn=++accessRevision,user=auth.currentUser;
+    if(starting){await opening;if(turn===accessRevision&&auth.currentUser?.uid===user?.uid){gate.allow();workspace.inert=false;home.inert=false;}return;}
     if(bootedUid){if(bootedUid!==auth.currentUser?.uid)location.reload();else{gate.allow();workspace.inert=false;home.inert=false;}return;}
-    gate.allow();workspace.inert=false;home.inert=false;
     try{
       await projects.ready;
       const params=new URLSearchParams(location.search);
 
       document.getElementById('roda-legacy-link').hidden=auth.currentUser?.email?.toLowerCase()!=='info@granbertafilms.com';
-      await start(auth.currentUser);
+      if(turn!==accessRevision||auth.currentUser?.uid!==user?.uid)return;
+      openingUid=user.uid;opening=start(user);await opening;
     }catch(error){home.hidden=false;document.getElementById('roda-projects').textContent=error.message;}
+    if(turn===accessRevision&&auth.currentUser?.uid===user?.uid){gate.allow();workspace.inert=false;home.inert=false;}
   }
 }});
-onAuthStateChanged(auth,user=>{if(bootedUid&&bootedUid!==user?.uid){location.reload();return;}controller.change(user);});
+onAuthStateChanged(auth,user=>{if((bootedUid||openingUid)&&(bootedUid||openingUid)!==user?.uid){location.reload();return;}controller.change(user);});
 account.onclick=()=>{if(!auth.currentUser)return login();const dialog=document.getElementById('roda-account-dialog');document.getElementById('roda-account-email').textContent=auth.currentUser.email;dialog.showModal();};
 document.getElementById('roda-account-close').onclick=()=>document.getElementById('roda-account-dialog').close();
 document.getElementById('roda-signout').onclick=async()=>{
