@@ -217,6 +217,7 @@ function sanitizeScriptState(opts={}){
     try{ sessionStorage.setItem(getEditUnlockKey(), editUnlocked ? "1" : "0"); }catch(_e){}
     try{ document.body.classList.toggle("readOnly", !editUnlocked); }catch(_e){}
     updateModeBanner();
+    if(editUnlocked && syncReady) liveSession?.notify();
   }
 
   function mountModeBanner(){
@@ -290,10 +291,7 @@ const shotlistCollapsedSceneIds = new Set();
   let syncReady = false;
   let bootHadLocal = false;
   let bootHadCachedLocal = false;
-  let bootAppliedRemote = false;
   let sessionPulledRemote = false;
-  let lastRemoteStamp = "";
-  let lastScriptRemoteStamp = "";
 
   // Crew table: which rows are expanded to show assigned shoot days
   let expandedCrewIds = new Set();
@@ -670,166 +668,48 @@ const shotlistCollapsedSceneIds = new Set();
     if(syncReady) autosyncDebounced();
   }
 
-  // ======= Autosync robusto (evita pisadas por respuestas tardías) =======
-  // Bug que te estaba pegando: si un PUT viejo termina después, guardaba un "stamp"
-  // más nuevo del que realmente quedó remoto, y el próximo sync interpretaba
-  // eso como "cambio remoto" y te pisaba el último cambio.
-  let autosyncInFlight = false;
-  let autosyncPending = false;
+  // Collaborative sync uses field-level changes and atomic server commits.
+  let liveSession = null;
+  let livePaintTimer = null;
+  let daySwapDragging = false;
+  let daySwapSourceId = null;
+  let htmlDragging = false;
 
-  async function autosyncRun(){
-    if(autosyncInFlight){
-      autosyncPending = true;
-      return;
-    }
-    autosyncInFlight = true;
-    autosyncPending = false;
-
-    const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey){
-      autosyncInFlight = false;
-      return;
-    }
-
-    // Regla de oro: nunca empujar si no pudimos traer el remoto al menos una vez en esta sesión.
-    // Esto evita el caso "abrí después de días y pisé todo".
-    if(!sessionPulledRemote){
-      await initRemoteSync();
-      if(!sessionPulledRemote){
-        autosyncInFlight = false;
-        return; // seguimos sin remoto (offline/bloqueado)
-      }
-    }
-
-    try{
-      const [remoteCore, remotePackRaw] = await Promise.all([
-        StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
-        cfg.scriptBinId ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
-      ]);
-
-      const coreOK = isValidState(remoteCore);
-      const packOK = isValidScriptPack(remotePackRaw);
-      const remoteCombined = coreOK ? mergeStateFromBins(remoteCore, packOK ? remotePackRaw : null) : null;
-
-      if(coreOK){
-        const coreStamp = String(remoteCore?.meta?.updatedAt || "");
-        const storedCoreStamp = StorageLayer.getRemoteStamp(cfg.binId) || lastRemoteStamp || "";
-
-        const packStamp = cfg.scriptBinId ? String(remotePackRaw?.meta?.updatedAt || "") : "";
-        const storedPackStamp = cfg.scriptBinId ? (StorageLayer.getRemoteStamp(cfg.scriptBinId) || lastScriptRemoteStamp || "") : "";
-
-        const changedByStamp =
-          (storedCoreStamp && coreStamp && coreStamp !== storedCoreStamp) ||
-          (cfg.scriptBinId && storedPackStamp && packStamp && packStamp !== storedPackStamp);
-
-        // Si el remoto cambio desde la ultima vez que lo vimos, solo lo absorbemos
-        // cuando es mas nuevo que lo local. Un cambio recien cargado no se borra.
-        if(changedByStamp && tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)){
-          saveConflictBackup(cfg.binId, state); // copia local por si hay conflicto
-          state = remoteCombined;
-          StorageLayer.saveLocal(state);
-
-          lastRemoteStamp = coreStamp;
-          StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-
-          if(cfg.scriptBinId){
-            lastScriptRemoteStamp = packStamp;
-            StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
-          }
-
-          hydrateAll();
-          toast("Actualicé remoto ✅");
-          updateSyncPill(remoteSyncLabel());
-          return;
-        }
-
-        // Si el remoto es más nuevo que lo local (por updatedAt), absorbemos remoto y listo.
-        if(tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)){
-          saveConflictBackup(cfg.binId, state);
-          state = remoteCombined;
-          StorageLayer.saveLocal(state);
-
-          lastRemoteStamp = coreStamp || String(state?.meta?.updatedAt || "");
-          StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-
-          if(cfg.scriptBinId){
-            lastScriptRemoteStamp = packStamp || String(state?.meta?.updatedAt || "");
-            StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
-          }
-
-          hydrateAll();
-          toast("Actualicé remoto ✅");
-          updateSyncPill(remoteSyncLabel());
-          return;
-        }
-      }else{
-        // Remoto inválido: solo empujar si parece "sin inicializar".
-        if(!isUninitializedRemote(remoteCore)){
-          updateSyncPill("Local");
-          return;
-        }
-      }
-
-      // IMPORTANTÍSIMO: pusheamos un snapshot coherente y guardamos el stamp del snapshot,
-      // no el de "lo que sea" que quedó en state cuando la request vuelve.
-      const snapshot = JSON.parse(JSON.stringify(state));
-      const pushStamp = String(snapshot?.meta?.updatedAt || "");
-
-      const { core, pack } = splitStateForBins(snapshot);
-
-      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
-      lastRemoteStamp = pushStamp;
-      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-
-      if(cfg.scriptBinId){
-        await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
-        lastScriptRemoteStamp = pushStamp;
-        StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
-      }
-
-      updateSyncPill(remoteSyncLabel());
-    }catch(err){
-      updateSyncPill("Local");
-      try{
-        const msg = String(err?.message || err || "");
-        // 403/404: no es conexión, es credenciales/bin
-        if(msg.includes("403")){
-          if(!autosyncRun._warn403){
-            autosyncRun._warn403 = true;
-            toast("Firebase: permiso denegado para actualizar.");
-          }
-        }
-        if(msg.includes("404")){
-          if(!autosyncRun._warn404){
-            autosyncRun._warn404 = true;
-            toast("Firebase: proyecto remoto no encontrado.");
-          }
-        }
-      }catch(_e){}
-    }finally{
-      autosyncInFlight = false;
-      if(autosyncPending){
-        // Reintento rápido para empujar el último estado (sin obligarte a esperar).
-        setTimeout(()=>autosyncRun(), 250);
-      }
-    }
+  function stopLiveSync(){
+    liveSession?.stop();
+    liveSession = null;
+    clearTimeout(livePaintTimer);
   }
 
+  function scheduleLivePaint(){
+    clearTimeout(livePaintTimer);
+    livePaintTimer = setTimeout(()=>{
+      const active = document.activeElement;
+      const editing = active?.matches('input, textarea, select, [contenteditable="true"]');
+      if(editing || schedDrag || dayplanPointer || htmlDragging || document.querySelector('dialog[open]')){
+        scheduleLivePaint();
+        return;
+      }
+      const scrolls = [...document.querySelectorAll('[id]')]
+        .filter(node=>node.scrollTop || node.scrollLeft)
+        .map(node=>[node.id,node.scrollLeft,node.scrollTop]);
+      hydrateAll();
+      renderDayPlan();
+      for(const [id,x,y] of scrolls){ const node = el(id); if(node){ node.scrollLeft=x; node.scrollTop=y; } }
+    },180);
+  }
 
-  const autosyncDebounced = window.U.debounce(autosyncRun, 900);
+  async function autosyncRun(){
+    if(liveSession) await liveSession.flush();
+    else if(syncReady) await initRemoteSync();
+  }
+  function autosyncDebounced(){
+    if(liveSession) liveSession.notify();
+  }
 
   function updateSyncPill(mode){
     const p = el("syncPill");
     if(p) p.textContent = mode;
-  }
-
-  function remoteSyncLabel(){
-    try{
-      const cfg = StorageLayer.loadCfg();
-      return cfg?.syncLabel || cfg?.backendLabel || "Remoto";
-    }catch(_e){
-      return "Remoto";
-    }
   }
 
   function defaultState(title){
@@ -864,14 +744,6 @@ const shotlistCollapsedSceneIds = new Set();
   function isValidState(s){
     return !!(s && s.meta && Array.isArray(s.scenes) && Array.isArray(s.shootDays) && Array.isArray(s.crew));
   }
-  function isEmptyState(s){
-    return !(s?.scenes?.length || s?.shootDays?.length || s?.crew?.length);
-  }
-  function tsUpdatedAt(s){
-    const t = Date.parse(s?.meta?.updatedAt || "");
-    return Number.isFinite(t) ? t : 0;
-  }
-
   function isValidScriptPack(p){
     return !!(p && typeof p === "object" && !Array.isArray(p) && p.meta && Array.isArray(p.scenes) && p.script && Array.isArray(p.script.versions));
   }
@@ -951,187 +823,55 @@ const shotlistCollapsedSceneIds = new Set();
   }
 
 
-  function isUninitializedRemote(remote){
-    if(remote == null) return true;
-    if(typeof remote !== "object") return false;
-    if(Array.isArray(remote)) return false;
-    const keys = Object.keys(remote);
-    if(keys.length === 0) return true;
-    // Common accidental init payload: { "extras": [] }
-    const allowed = new Set(["extras","_meta","schemaVersion"]);
-    const onlyAllowed = keys.every(k=>allowed.has(k));
-    const looksLikeState = !!(remote.meta || remote.scenes || remote.shootDays || remote.crew || remote.script);
-    return onlyAllowed && !looksLikeState;
+  function decodeProjectRecord(record){
+    if(!record?.core && !record?.pack) return null;
+    if(!isValidState(record.core) || (record.pack && !isValidScriptPack(record.pack))){
+      throw new Error("Datos remotos inválidos; se conserva la copia local");
+    }
+    return { state:mergeStateFromBins(record.core,record.pack), revision:record.revision };
   }
-  async function initRemoteSync(opts={}){
-    if(initRemoteSync._running) return;
-    initRemoteSync._running = true;
-    syncReady = false;
-    // Decide whether to adopt remote data, but DO NOT push on init.
+
+  async function initRemoteSync(){
     const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey){
-      syncReady = true;
-      initRemoteSync._running = false;
-      updateSyncPill(cfg?.syncLabel || "Local");
-      return;
-    }
+    if(!cfg.accessKey){ syncReady = true; return; }
+    if(liveSession){ await liveSession.refresh(); return; }
+    const baseline = StorageLayer.loadSyncBaseline(cfg.projectId);
+    if(bootHadCachedLocal && !isValidState(baseline)) saveConflictBackup(cfg.binId,state);
+    liveSession = Collaboration.createSession({
+      baseline:isValidState(baseline) ? baseline : null,
+      allowCreate:!bootHadCachedLocal,
+      getState:()=>state,
+      canWrite:()=>!isReadOnly(),
+      isBusy:()=>!!(schedDrag || dayplanPointer || htmlDragging),
+      saveBaseline:value=>StorageLayer.saveSyncBaseline(cfg.projectId,value),
+      applyState:value=>{
+        const changed = !Collaboration.equal(state,value);
+        Collaboration.reconcile(state,value);
+        StorageLayer.saveLocal(state);
+        sessionPulledRemote = true;
+        if(changed) scheduleLivePaint();
+      },
+      read:async ()=>decodeProjectRecord(await StorageLayer.readProject(cfg.projectId)),
+      commit:async build=>{
+        const record = await StorageLayer.commitProject(cfg.projectId,current=>{
+          const remote = decodeProjectRecord(current);
+          if(!remote && (bootHadCachedLocal || sessionPulledRemote)) throw new Error("Proyecto remoto vacío; se conserva la copia local");
+          return splitStateForBins(build(remote?.state || null));
+        });
+        return decodeProjectRecord(record);
+      },
+      watch:(receive,onError)=>StorageLayer.watchProject(cfg.projectId,record=>{
+        try{ const decoded = decodeProjectRecord(record); if(decoded) receive(decoded); }
+        catch(error){ onError(error); }
+      },onError),
+      onStatus:updateSyncPill,
+      onError:error=>console.warn("Sincronización del proyecto:",error)
+    });
+    await liveSession.start();
+    syncReady = true;
+  }
 
-    // Read last-acknowledged stamps BEFORE fetching remote (critical to detect remote drift).
-    const storedCoreStamp0 = StorageLayer.getRemoteStamp(cfg.binId) || lastRemoteStamp || "";
-    const storedPackStamp0 = cfg.scriptBinId ? (StorageLayer.getRemoteStamp(cfg.scriptBinId) || lastScriptRemoteStamp || "") : "";
-
-    try{
-      const [remoteCore, remotePackRaw] = await Promise.all([
-        StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
-        cfg.scriptBinId ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
-      ]);
-
-      sessionPulledRemote = true;
-
-      const coreOK = isValidState(remoteCore);
-      const packOK = isValidScriptPack(remotePackRaw);
-
-      const remoteCombined = coreOK ? mergeStateFromBins(remoteCore, packOK ? remotePackRaw : null) : null;
-
-      if(coreOK){
-        const coreStamp = String(remoteCore?.meta?.updatedAt || "");
-        const packStamp = cfg.scriptBinId ? String(remotePackRaw?.meta?.updatedAt || "") : "";
-
-        const remoteHasData = !isEmptyState(remoteCombined);
-        const localHasData  = !isEmptyState(state);
-
-        // If remote changed since this device last acknowledged it, we MUST absorb remote first.
-        const remoteChangedByStamp =
-          (storedCoreStamp0 && coreStamp && coreStamp !== storedCoreStamp0) ||
-          (cfg.scriptBinId && storedPackStamp0 && packStamp && packStamp !== storedPackStamp0) ||
-          // Local exists but there's no stamp baseline -> safest is "remote manda".
-          (bootHadLocal && remoteHasData && !storedCoreStamp0) ||
-          (cfg.scriptBinId && bootHadLocal && remoteHasData && !storedPackStamp0);
-
-        let shouldAdoptRemote = false;
-
-        // Hard safety: if remote drift is detected, never push local over it automatically.
-        if(remoteChangedByStamp && remoteHasData){
-          shouldAdoptRemote = true;
-          if(localHasData){
-            try{ saveConflictBackup(cfg.binId, state); }catch(_e){}
-          }
-        }
-
-        // Boot: for Firebase projects, any valid remote state (even an empty one)
-        // is the source of truth. A stale browser cache must never win on load.
-        if(!shouldAdoptRemote && opts && opts.boot && cfg?.backend === "firebase"){
-          shouldAdoptRemote = true;
-          if(localHasData){
-            try{ saveConflictBackup(cfg.binId, state); }catch(_e){}
-          }
-        }
-
-        // Legacy/local backends keep the older behavior: adopt remote on boot
-        // when it actually contains project data.
-        if(!shouldAdoptRemote && opts && opts.boot && remoteHasData){
-          shouldAdoptRemote = true;
-          if(localHasData){
-            try{ saveConflictBackup(cfg.binId, state); }catch(_e){}
-          }
-        }
-
-        // Existing logic: adopt remote if local is empty / first run, or if remote is newer.
-        if(!shouldAdoptRemote && !bootHadLocal && remoteHasData) shouldAdoptRemote = true;
-        if(!shouldAdoptRemote && !localHasData && remoteHasData) shouldAdoptRemote = true;
-        if(!shouldAdoptRemote && tsUpdatedAt(remoteCombined) > tsUpdatedAt(state)) shouldAdoptRemote = true;
-
-        // Mobile safety score (prefers remote when local might be partial)
-        if(!shouldAdoptRemote && isMobileUI()){
-          const rs = scoreMobileCompleteness(remoteCombined);
-          const ls = scoreMobileCompleteness(state);
-          if(rs > ls + 3) shouldAdoptRemote = true;
-        }
-
-        if(shouldAdoptRemote){
-          state = remoteCombined;
-          bootAppliedRemote = true;
-          StorageLayer.saveLocal(state);
-
-          // Acknowledge stamps only when we accept remote as baseline.
-          lastRemoteStamp = coreStamp || String(state?.meta?.updatedAt || "");
-          StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-
-          if(cfg.scriptBinId){
-            lastScriptRemoteStamp = packStamp || String(state?.meta?.updatedAt || "");
-            StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
-          }
-
-          selectedSceneId = null;
-          selectedDayId = null;
-          callSheetDayId = null;
-          hydrateAll();
-          toast("Cargué remoto ✅");
-        }else{
-          // Keep local; do NOT overwrite stamps here (prevents blind overwrites on next autosync).
-          updateSyncPill(remoteSyncLabel());
-        }
-
-        updateSyncPill(remoteSyncLabel());
-      }else{
-        // Remote exists but invalid/uninitialized? Bootstrap only when there was no
-        // previous browser cache for this project. This prevents an old tab/session
-        // from treating stale local data as the first source of truth.
-        if(!bootHadLocal && !bootHadCachedLocal && isUninitializedRemote(remoteCore)){
-          updateSyncPill(remoteSyncLabel());
-          // Init remote with our base state (first ever run)
-          try{
-            const { core, pack } = splitStateForBins(state);
-            await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
-            if(cfg.scriptBinId) await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
-
-            // Pull stamps back
-            const pulled = await StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey);
-            lastRemoteStamp = String(pulled?.meta?.updatedAt || "");
-            StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-
-            if(cfg.scriptBinId){
-              const pulledP = await StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null);
-              lastScriptRemoteStamp = String(pulledP?.meta?.updatedAt || "");
-              StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
-            }
-
-            toast("Inicialicé remoto ✅");
-          }catch(_e){
-            updateSyncPill("Local");
-          }
-        }else{
-          updateSyncPill("Local");
-        }
-      }
-
-    }catch(err){
-      // Offline / 4xx / 5xx
-      try{
-        updateSyncPill("Local");
-        if(!syncErrorToastShown){
-          syncErrorToastShown = true;
-          const msg = String(err && (err.message||err) || "");
-          const extra = " — Revisá la configuración de Firebase.";
-          (function(){
-            if(msg.includes("404")) toast("Firebase: proyecto remoto no encontrado." + extra);
-            else if(msg.includes("403")) toast("Firebase: permiso denegado." + extra);
-            else toast("No pude conectar con Firebase, estoy en modo Local" + extra);
-          })();
-        }
-      }catch(_e){}
-    }finally{
-      syncReady = true;
-      initRemoteSync._running = false;
-    }
-      try{
-        if(sanitizeScriptState._needsRemoteClean){
-          sanitizeScriptState._needsRemoteClean = false;
-          autosyncDebounced();
-        }
-      }catch(_e){}
-
-  }function ensureSceneExtras(s){
+  function ensureSceneExtras(s){
     if(!s) return;
     if(!("intExt" in s)) s.intExt = "";
     if(!("chapter" in s)) s.chapter = "";
@@ -3329,6 +3069,59 @@ function setupScheduleWheelScroll(){
     renderReportsDetail();
   }
 
+  function bindDaySceneSwap(head, container, day){
+    head.classList.add("daySwapHandle");
+    // Mode can be unlocked after rendering; the guard also runs on dragstart.
+    head.draggable = true;
+    head.title = "Arrastrá este encabezado sobre otro día para intercambiar sus escenas";
+    const hint = document.createElement("div");
+    hint.className = "daySwapHint";
+    hint.textContent = "⠿ Arrastrá para intercambiar escenas";
+    head.appendChild(hint);
+    head.addEventListener("dragstart",e=>{
+      if(isReadOnly()){ e.preventDefault(); return; }
+      daySwapDragging = true;
+      daySwapSourceId = day.id;
+      htmlDragging = true;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("application/x-roda-day",day.id);
+      e.dataTransfer.setData("application/json",JSON.stringify({ type:"shoot-day",dayId:day.id }));
+      container.classList.add("daySwapSource");
+      hideHoverTip();
+    });
+    function cleanup(){
+      daySwapDragging = false;
+      daySwapSourceId = null;
+      htmlDragging = false;
+      document.querySelectorAll(".daySwapSource, .daySwapTarget").forEach(node=>{
+        node.classList.remove("daySwapSource","daySwapTarget");
+      });
+    }
+    head.addEventListener("dragend",cleanup);
+    container.addEventListener("dragover",e=>{
+      if(isReadOnly() || !daySwapDragging || daySwapSourceId === day.id) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      container.classList.add("daySwapTarget");
+    });
+    container.addEventListener("dragleave",e=>{
+      if(!container.contains(e.relatedTarget)) container.classList.remove("daySwapTarget");
+    });
+    container.addEventListener("drop",e=>{
+      if(isReadOnly() || !daySwapDragging) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const from = getDay(daySwapSourceId);
+      const to = getDay(day.id);
+      cleanup();
+      if(!Collaboration.swapDayScenes(from,to)) return;
+      touch();
+      hydrateAll();
+      renderDayPlan();
+      toast("Escenas intercambiadas; las fechas mantienen su orden ✅");
+    });
+  }
+
   function renderDaysBoard(){
     const board = el("daysBoard");
     if(!board) return;
@@ -3352,6 +3145,7 @@ function setupScheduleWheelScroll(){
         </div>
         <div class="muted small">${(d.sceneIds||[]).length} escenas</div>
       `;
+      bindDaySceneSwap(head,col,d);
       head.addEventListener("click", ()=>{
         selectedDayId = d.id;
         selectedDayplanDayId = d.id;
@@ -5104,6 +4898,7 @@ function bindSchedDayPickerUI(){
         <div class="t">${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
         <div class="m">Call ${esc(d.callTime||"")} · ${esc(d.location||"")}</div>
       `;
+      bindDaySceneSwap(head,dayWrap,d);
 
       const grid = document.createElement("div");
       grid.className = "schedGrid";
@@ -8808,6 +8603,7 @@ async function printPlanGeneral(){
       if(sw.dataset.boundProjectSwitch !== "1"){
         sw.dataset.boundProjectSwitch = "1";
         sw.addEventListener("change", ()=>{
+          stopLiveSync();
           StorageLayer.setActiveProjectId(sw.value);
           location.reload();
         });
@@ -8827,6 +8623,8 @@ async function printPlanGeneral(){
 
     createProjectFromUI._running = true;
     try{
+      await liveSession?.flush();
+      stopLiveSync();
       const project = await StorageLayer.createProject({
         name: cleanName,
         editPassword: String(pass || "1812").trim() || "1812"
@@ -8852,6 +8650,7 @@ async function printPlanGeneral(){
     }catch(err){
       console.error(err);
       toast("No pude crear el proyecto ❌");
+      await initRemoteSync();
     }finally{
       createProjectFromUI._running = false;
     }
@@ -8912,63 +8711,13 @@ async function printPlanGeneral(){
     }
   }
   async function pullRemote(){
-    const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey) return toast("Firebase no configurado");
-    try{
-      const [core, packRaw] = await Promise.all([
-        StorageLayer.jsonbinGet(cfg.binId, cfg.accessKey),
-        cfg.scriptBinId ? StorageLayer.jsonbinGet(cfg.scriptBinId, cfg.accessKey).catch(()=>null) : Promise.resolve(null)
-      ]);
-
-      if(!core || !core.meta) return toast("Remoto vacío o inválido");
-      if(!isValidState(core)) return toast("Remoto inválido");
-
-      const pack = isValidScriptPack(packRaw) ? packRaw : null;
-      state = mergeStateFromBins(core, pack);
-      sessionPulledRemote = true;
-
-      StorageLayer.saveLocal(state);
-
-      lastRemoteStamp = String(core?.meta?.updatedAt || "");
-      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-
-      if(cfg.scriptBinId){
-        lastScriptRemoteStamp = String(packRaw?.meta?.updatedAt || "");
-        StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
-      }
-
-      toast("Remoto cargado ✅");
-      hydrateAll();
-      updateSyncPill(remoteSyncLabel());
-    }catch(err){
-      console.error(err);
-      toast("No pude traer remoto ❌");
-    }
+    if(!StorageLayer.loadCfg().accessKey) return toast("Firebase no configurado");
+    await initRemoteSync();
   }
   async function pushRemote(){
-    const cfg = StorageLayer.loadCfg();
-    if(!cfg.binId || !cfg.accessKey) return toast("Firebase no configurado");
-    try{
-      const snapshot = JSON.parse(JSON.stringify(state));
-      const pushStamp = String(snapshot?.meta?.updatedAt || "");
-      const { core, pack } = splitStateForBins(snapshot);
-
-      await StorageLayer.jsonbinPut(cfg.binId, cfg.accessKey, core);
-      lastRemoteStamp = pushStamp;
-      StorageLayer.setRemoteStamp(cfg.binId, lastRemoteStamp);
-
-      if(cfg.scriptBinId){
-        await StorageLayer.jsonbinPut(cfg.scriptBinId, cfg.accessKey, pack);
-        lastScriptRemoteStamp = pushStamp;
-        StorageLayer.setRemoteStamp(cfg.scriptBinId, lastScriptRemoteStamp);
-      }
-
-      toast("Estado subido ✅");
-      updateSyncPill(remoteSyncLabel());
-    }catch(err){
-      console.error(err);
-      toast("No pude subir ❌");
-    }
+    if(!StorageLayer.loadCfg().accessKey) return toast("Firebase no configurado");
+    await initRemoteSync();
+    await autosyncRun();
   }
 
 
@@ -10190,11 +9939,11 @@ if(!state.scenes.length){
     sortShootDaysInPlace();
     for(const d of state.shootDays) ensureDayTimingMaps(d);
 
-    selectedSceneId = selectedSceneId || state.scenes[0]?.id || null;
-    selectedDayId   = selectedDayId   || state.shootDays[0]?.id || null;
-    selectedShotlistDayId = selectedShotlistDayId || selectedDayId;
-    selectedDayplanDayId = selectedDayplanDayId || selectedDayId;
-    callSheetDayId  = callSheetDayId  || selectedDayId;
+    selectedSceneId = getScene(selectedSceneId)?.id || state.scenes[0]?.id || null;
+    selectedDayId = getDay(selectedDayId)?.id || state.shootDays[0]?.id || null;
+    selectedShotlistDayId = getDay(selectedShotlistDayId)?.id || selectedDayId;
+    selectedDayplanDayId = getDay(selectedDayplanDayId)?.id || selectedDayId;
+    callSheetDayId = getDay(callSheetDayId)?.id || selectedDayId;
 
     renderScenesTable();
     renderSceneEditor();
@@ -10241,8 +9990,7 @@ if(!state.scenes.length){
 
     const local = StorageLayer.loadLocal();
     bootHadCachedLocal = !!(local && local.meta);
-    const bootFromLocal = cfg?.backend !== "firebase";
-    bootHadLocal = bootFromLocal && bootHadCachedLocal;
+    bootHadLocal = bootHadCachedLocal;
     state = bootHadLocal ? local : defaultState(cfg && cfg.projectName);
 
     if(!bootHadLocal && cfg?.backend !== "firebase"){
@@ -10251,7 +9999,7 @@ if(!state.scenes.length){
     }
 
     // CRÍTICO: cargar remoto primero y recién después habilitar UI + eventos.
-    try{ await initRemoteSync({ boot:true }); }catch(_e){}
+    try{ await initRemoteSync(); }catch(_e){}
 
     selectedSceneId = state.scenes?.[0]?.id || null;
     selectedDayId = state.shootDays?.[0]?.id || null;
@@ -10271,10 +10019,17 @@ if(!state.scenes.length){
     hydrateAll();
     showView(isMobileUI() ? "dayplan" : "breakdown");
 
-    window.addEventListener("online", ()=>{
-      // Cuando vuelve la conexión, refrescamos desde remoto.
-      initRemoteSync();
+    window.addEventListener("online", async ()=>{
+      await StorageLayer.reconnect();
+      await initRemoteSync();
     });
+    document.addEventListener("dragstart",()=>{ htmlDragging = true; });
+    document.addEventListener("dragend",()=>{ htmlDragging = false; });
+    document.addEventListener("drop",()=>{ htmlDragging = false; });
+    document.addEventListener("visibilitychange",()=>{
+      if(document.visibilityState === "visible") initRemoteSync();
+    });
+    window.addEventListener("pagehide",()=>liveSession?.flush());
 
     try{ document.body.classList.remove("bootLoading"); }catch(_e){}
   }if(document.readyState === "loading") window.addEventListener("DOMContentLoaded", init);

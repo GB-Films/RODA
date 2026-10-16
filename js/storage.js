@@ -54,7 +54,9 @@ window.StorageLayer = (function(){
   }
 
   function fallbackProjects(){
-    return requiresFirebase() ? [configuredProjectFallback()] : loadLocalProjects();
+    if(!requiresFirebase()) return loadLocalProjects();
+    const stored = readStoredProjects();
+    return stored.length ? stored : [configuredProjectFallback()];
   }
 
   function firebaseCollectionName(){
@@ -461,6 +463,14 @@ window.StorageLayer = (function(){
     return initPromise;
   }
 
+  async function reconnect(){
+    if(!firebaseReady){
+      initPromise = null;
+      return init();
+    }
+    return loadCfg();
+  }
+
   async function jsonbinGet(id){
     if(!firebaseReady || !fb) throw new Error("Firebase no configurado");
     const parsed = parseRemoteId(id);
@@ -471,6 +481,84 @@ window.StorageLayer = (function(){
     if(!snap.exists()) return null;
     const data = snap.data() || {};
     return data.payload || null;
+  }
+
+  function projectDataRefs(projectId){
+    if(!firebaseReady || !fb) throw new Error("Firebase no configurado");
+    const s = fb.storeMod;
+    const collection = firebaseCollectionName();
+    return {
+      core: s.doc(fb.db, collection, projectId, "data", "core"),
+      script: s.doc(fb.db, collection, projectId, "data", "script"),
+      project: s.doc(fb.db, collection, projectId)
+    };
+  }
+
+  function projectRecord(core, script){
+    const data = core.exists() ? core.data() : {};
+    return {
+      core: data.payload || null,
+      pack: script.exists() ? script.data().payload || null : null,
+      revision: Number(data.revision) || 0
+    };
+  }
+
+  async function readProject(projectId){
+    const refs = projectDataRefs(projectId);
+    // Read both documents from one consistent server snapshot.
+    return fb.storeMod.runTransaction(fb.db, async transaction=>{
+      const core = await transaction.get(refs.core);
+      const script = await transaction.get(refs.script);
+      return projectRecord(core,script);
+    });
+  }
+
+  async function commitProject(projectId, build){
+    const refs = projectDataRefs(projectId);
+    const s = fb.storeMod;
+    return s.runTransaction(fb.db, async transaction=>{
+      const core = await transaction.get(refs.core);
+      const script = await transaction.get(refs.script);
+      const current = projectRecord(core,script);
+      // Firestore repeats this function if another editor commits meanwhile.
+      const next = safeJsonClone(build(current));
+      const revision = current.revision + 1;
+      const clientUpdatedAt = String(next.core?.meta?.updatedAt || nowIso());
+      for(const [ref,payload] of [[refs.core,next.core],[refs.script,next.pack]]){
+        transaction.set(ref, { payload, revision, clientUpdatedAt, updatedAt:s.serverTimestamp() });
+      }
+      transaction.set(refs.project, {
+        name: String(next.core?.meta?.title || "Proyecto"),
+        clientUpdatedAt,
+        updatedAt:s.serverTimestamp()
+      }, { merge:true });
+      return { ...next, revision };
+    });
+  }
+
+  function watchProject(projectId, onRecord, onError){
+    projectDataRefs(projectId);
+    const s = fb.storeMod;
+    const ref = s.collection(fb.db, firebaseCollectionName(), projectId, "data");
+    // One query snapshot keeps core + script from the same atomic commit.
+    return s.onSnapshot(ref, { includeMetadataChanges:true }, snapshot=>{
+      if(snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
+      const docs = new Map(snapshot.docs.map(doc=>[doc.id,doc]));
+      const core = docs.get("core"), script = docs.get("script");
+      if(!core) return;
+      const data = core.data();
+      onRecord({ core:data.payload || null, pack:script?.data()?.payload || null, revision:Number(data.revision)||0 });
+    }, onError);
+  }
+
+  function loadSyncBaseline(projectId){
+    try{ return JSON.parse(localStorage.getItem(KEY_STATE_PREFIX + projectId + "__baseline") || "null"); }
+    catch(_e){ return null; }
+  }
+
+  function saveSyncBaseline(projectId, state){
+    try{ localStorage.setItem(KEY_STATE_PREFIX + projectId + "__baseline", JSON.stringify(state)); }
+    catch(_e){}
   }
 
   async function jsonbinPut(id, _accessKey, record){
@@ -567,6 +655,7 @@ window.StorageLayer = (function(){
 
   return {
     init,
+    reconnect,
     refreshProjects,
     createProject,
     updateActiveProjectMeta,
@@ -576,6 +665,11 @@ window.StorageLayer = (function(){
     saveCfg,
     jsonbinGet,
     jsonbinPut,
+    readProject,
+    commitProject,
+    watchProject,
+    loadSyncBaseline,
+    saveSyncBaseline,
     getRemoteStamp,
     setRemoteStamp,
     hardResetLocal,
