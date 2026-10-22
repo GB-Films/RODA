@@ -53,3 +53,10 @@ node --test tests/*.test.cjs
 
 Las pruebas cubren intercambios, edicion simultanea, conflictos, guardados lentos,
 reconexion y escrituras atomicas con reintentos usando un backend simulado.
+
+
+### Producción compartida en GB Studio
+
+La versión alojada de Roda comparte su guion y sus jornadas con Croki y el PDR por escenas del mismo proyecto de GB Studio. El adaptador `js/studio-live-sync.js` protege las lecturas asíncronas: no aplica respuestas durante una edición ni después de que comenzó una edición nueva. La integración del editor, los permisos por sección y el almacenamiento atómico se mantienen en `GB-Films/GB-Studio` (`roda/js/studio-entry.js`, `studio-storage.js` y `app.js`). El Roda independiente conserva su sincronización propia con `collaboration.js`.
+
+Pruebas del adaptador: `node --test tests/studio-live-sync.test.cjs`.
