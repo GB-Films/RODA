@@ -99,16 +99,7 @@
     return clone(source);
   }
 
-  function swapDayScenes(first, second){
-    if(!first || !second || first.id === second.id) return false;
-    for(const key of ["sceneIds","times","durations","sceneColors","shotsDone"]){
-      const empty = key === "sceneIds" ? [] : {};
-      const value = first[key] || clone(empty);
-      first[key] = second[key] || clone(empty);
-      second[key] = value;
-    }
-    return true;
-  }
+  const {swapDayScenes} = root.RodaDaySwap || (typeof require === "function" ? require("./day-swap.js") : {});
 
   function createSession(options){
     let base = clone(options.baseline) || null;

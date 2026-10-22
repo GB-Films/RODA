@@ -27,6 +27,11 @@ relativos al call, duraciones, colores y planos marcados. Las fechas mantienen s
 orden cronologico; el call, las notas, el equipo y los bloques propios de cada
 fecha permanecen en ese dia. Tambien funciona con dias vacios.
 
+`js/day-swap.js` contiene el intercambio compartido con la integración de GB
+Studio. Su controlador permite arrastrar un encabezado a otro día o elegir
+origen y destino con Enter o Espacio; Escape cancela la selección. Comprueba
+el permiso de edición al iniciar y al soltar, y no cambia la lista de fechas.
+
 ## Trabajo simultaneo
 
 Los proyectos de Firebase reciben cambios en vivo, sin recargar la pagina.
