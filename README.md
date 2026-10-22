@@ -22,7 +22,7 @@ Ver detalles en `docs/firebase.md`.
 
 ## Plan General
 
-Arrastrar el encabezado de un dia sobre otro intercambia sus escenas, horarios
+Arrastrar el encabezado de un dia sobre otro intercambia su locación, escenas y horarios
 relativos al call, duraciones, colores y planos marcados. Las fechas mantienen su
 orden cronologico; el call, las notas, el equipo y los bloques propios de cada
 fecha permanecen en ese dia. Tambien funciona con dias vacios.

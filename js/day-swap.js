@@ -8,6 +8,11 @@
       first[key] = second[key] || empty();
       second[key] = value;
     }
+    if("location" in first || "location" in second){
+      const location = first.location || "";
+      first.location = second.location || "";
+      second.location = location;
+    }
     return true;
   }
 

@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const {swapDayScenes,createDaySwapController}=require('../js/day-swap.js');
 
 function days(){
-  return ['thu','fri','sat'].map((id,i)=>({id,date:`2026-10-${15+i}`,label:id,callTime:`0${8+i}:00`,sceneIds:[id,'shared'],times:{[id]:30,shared:120},durations:{[id]:45,shared:60},sceneColors:{[id]:'red'},shotsDone:{[id]:true},crewIds:[`crew-${id}`],blocks:[{id:`meal-${id}`}],notes:id}));
+  return ['thu','fri','sat'].map((id,i)=>({id,date:`2026-10-${15+i}`,label:id,location:['Fábrica','Hotel','Oficinas'][i],callTime:`0${8+i}:00`,sceneIds:[id,'shared'],times:{[id]:30,shared:120},durations:{[id]:45,shared:60},sceneColors:{[id]:'red'},shotsDone:{[id]:true},crewIds:[`crew-${id}`],blocks:[{id:`meal-${id}`}],notes:id}));
 }
 class Element{
   constructor(){this.children=[];this.listeners={};this.attributes={};this.textContent='Jornada';const classes=new Set();this.classList={add:(...names)=>names.forEach(n=>classes.add(n)),remove:(...names)=>names.forEach(n=>classes.delete(n)),contains:n=>classes.has(n)};this.ownerDocument={createElement:()=>new Element()};}
@@ -22,11 +22,11 @@ function setup(){
   return {state,headers,columns,saved,busy,controller,dataTransfer,revoke:()=>{editable=false;}};
 }
 
-test('Thursday/Saturday exchange moves every scene field while dates, calls and other days stay put',()=>{
+test('Thursday/Saturday exchange moves scenes and location while dates, calls and other days stay put',()=>{
   const state=days(),before=structuredClone(state);
   assert.equal(swapDayScenes(state[0],state[2]),true);
   assert.deepEqual(state.map(d=>[d.id,d.date]),before.map(d=>[d.id,d.date]));
-  for(const key of ['sceneIds','times','durations','sceneColors','shotsDone']){
+  for(const key of ['sceneIds','times','durations','sceneColors','shotsDone','location']){
     assert.deepEqual(state[0][key],before[2][key]);assert.deepEqual(state[2][key],before[0][key]);
   }
   for(const key of ['label','callTime','crewIds','blocks','notes']){
@@ -40,6 +40,7 @@ test('Thursday/Saturday exchange moves every scene field while dates, calls and 
 test('empty destinations receive the scenes and missing or identical days do nothing',()=>{
   const [first]=days(),empty={id:'empty',date:'2026-10-22'};
   assert.equal(swapDayScenes(first,empty),true);assert.deepEqual(first.sceneIds,[]);assert.deepEqual(first.times,{});assert.deepEqual(empty.sceneIds,['thu','shared']);
+  assert.equal(first.location,'');assert.equal(empty.location,'Fábrica');
   const before=structuredClone(empty);
   assert.equal(swapDayScenes(empty,empty),false);assert.equal(swapDayScenes(empty,null),false);assert.deepEqual(empty,before);
 });
@@ -52,6 +53,7 @@ test('header drag highlights destination, swaps once and clears its busy state',
   assert.equal(t.columns[2].classList.contains('daySwapTarget'),true);
   t.columns[2].fire('drop');t.headers[0].fire('dragend');
   assert.deepEqual(t.state[0].sceneIds,before[2].sceneIds);assert.deepEqual(t.state[2].sceneIds,before[0].sceneIds);
+  assert.equal(t.state[0].location,'Oficinas');assert.equal(t.state[2].location,'Fábrica');
   assert.deepEqual(t.saved,[['thu','sat']]);assert.equal(t.busy.at(-1),false);
   for(const column of t.columns){assert.equal(column.classList.contains('daySwapSource'),false);assert.equal(column.classList.contains('daySwapTarget'),false);}
 });

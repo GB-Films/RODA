@@ -3118,7 +3118,7 @@ function setupScheduleWheelScroll(){
       touch();
       hydrateAll();
       renderDayPlan();
-      toast("Escenas intercambiadas; las fechas mantienen su orden ✅");
+      toast("Escenas y locaciones intercambiadas; las fechas mantienen su orden ✅");
     });
   }
 
