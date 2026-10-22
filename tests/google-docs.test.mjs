@@ -2,17 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createGoogleDocsImporter} from '../js/google-docs.mjs';
 function fixture(options={}){
- const user={uid:'user',email:'user@example.test'},auth={currentUser:user},calls=[],progress=[];
+ const user={uid:'user',email:'user@example.test'},auth={currentUser:user},calls=[],progress=[],views=[];
  let authCalls=0,pickerCalls=0,disposed=0,callback;
  class Provider{addScope(value){assert.equal(value,'https://www.googleapis.com/auth/drive.file');}setCustomParameters(){}static credentialFromResult(){return {accessToken:'memory-token'};}}
- class View{setMimeTypes(){return this;}}
+ class View{setMimeTypes(value){this.mime=value;return this;}setMode(value){this.mode=value;return this;}setFileIds(value){assert.equal(this.drives,undefined);this.fileIds=value;return this;}setLabel(value){this.label=value;return this;}setIncludeFolders(value){this.folders=value;return this;}setSelectFolderEnabled(value){this.selectFolders=value;return this;}setOwnedByMe(value){this.owned=value;return this;}setEnableDrives(value){assert.equal(this.fileIds,undefined);assert.equal(this.owned,undefined);this.drives=value;return this;}}
  class Builder{
-  addView(){return this;}setAppId(){return this;}setDeveloperKey(){return this;}setOAuthToken(){return this;}setOrigin(){return this;}setTitle(){return this;}setCallback(fn){callback=fn;return this;}
+  addView(view){views.push(view);return this;}setLocale(value){assert.equal(value,'es');return this;}setAppId(){return this;}setDeveloperKey(){return this;}setOAuthToken(){return this;}setOrigin(){return this;}setTitle(){return this;}setCallback(fn){callback=fn;return this;}
   build(){return {setVisible(){pickerCalls++;queueMicrotask(()=>callback(options.pick||{action:'picked',docs:[{id:'doc'}]}));},dispose(){disposed++;}};}
  }
- const runtime={location:{origin:'https://studio.test'},google:{picker:{PickerBuilder:Builder,DocsView:View,ViewId:{DOCUMENTS:'docs'},Action:{PICKED:'picked',CANCEL:'cancel'}}},RodaScriptDocument:{docsFormat:doc=>({text:doc.text,format:{version:1,blocks:[]}})},fetch:async(url,init)=>{calls.push({url,init});return options.fetch?options.fetch(url,init,calls.length):{ok:true,status:200,json:async()=>({documentId:'doc',title:'Guion',text:'1. INT. CASA - DÍA\nÚltima revisión',revisionId:'latest-revision'})};}};
- const importer=createGoogleDocsImporter({auth,GoogleAuthProvider:Provider,reauthenticateWithPopup:async()=>{authCalls++;return options.authorize?options.authorize():{user};},config:{},runtime,requestTimeout:25,interactionTimeout:40});
- return {importer,auth,calls,progress,get authCalls(){return authCalls;},get pickerCalls(){return pickerCalls;},get disposed(){return disposed;},onProgress:message=>progress.push(message)};
+ const runtime={location:{origin:'https://studio.test'},google:{picker:{PickerBuilder:Builder,DocsView:View,DocsViewMode:{LIST:'list'},ViewId:{DOCUMENTS:'docs'},Action:{PICKED:'picked',CANCEL:'cancel'}}},RodaScriptDocument:{docsFormat:doc=>({text:doc.text,format:{version:1,blocks:[]}})},fetch:async(url,init)=>{calls.push({url,init});return options.fetch?options.fetch(url,init,calls.length):{ok:true,status:200,json:async()=>({documentId:'doc',title:'Guion',text:'1. INT. CASA - DÍA\nÚltima revisión',revisionId:'latest-revision'})};}};
+ const importer=createGoogleDocsImporter({auth,GoogleAuthProvider:Provider,reauthenticateWithPopup:async()=>{authCalls++;return options.authorize?options.authorize():{user};},authorizeOtherAccount:options.authorizeOtherAccount,config:{},runtime,requestTimeout:25,interactionTimeout:40});
+ return {importer,auth,calls,progress,views,get authCalls(){return authCalls;},get pickerCalls(){return pickerCalls;},get disposed(){return disposed;},onProgress:message=>progress.push(message)};
 }
 test('linked document reads latest revision directly, disables cache and requests all tabs with accepted text',async()=>{
  const t=fixture(),result=await t.importer({id:'doc'},{onProgress:t.onProgress});
@@ -22,7 +22,10 @@ test('linked document reads latest revision directly, disables cache and request
 });
 test('permission failure asks for the linked file then retries once',async()=>{
  const t=fixture({fetch:async(_url,_init,n)=>({ok:n>1,status:n===1?403:200,json:async()=>n===1?{error:{}}:{documentId:'doc',text:'Último guion'}})});
- assert.equal((await t.importer({id:'doc'})).id,'doc');assert.equal(t.pickerCalls,1);assert.equal(t.disposed,1);assert.equal(t.calls.length,2);
+ assert.equal((await t.importer({id:'doc'},{onProgress:t.onProgress})).id,'doc');assert.equal(t.pickerCalls,1);assert.equal(t.disposed,1);assert.equal(t.calls.length,2);
+ assert.equal(t.views[0].fileIds,'doc');assert.equal(t.views[0].label,'Guion vinculado');assert.equal(t.views[0].drives,undefined);
+ assert.equal(t.views[1].folders,true);assert.equal(t.views[1].selectFolders,false);assert.equal(t.views[2].owned,false);assert.equal(t.views[3].drives,true);
+ assert.ok(t.views.every(view=>view.mode==='list'));assert.ok(t.progress.some(message=>message.includes('user@example.test')));
 });
 test('selecting another file is rejected and cancellation does not import a document',async()=>{
  const response=async()=>({ok:false,status:403,json:async()=>({error:{}})});
@@ -50,5 +53,24 @@ test('expired credentials are cleared so the next attempt can reauthorize',async
 });
 test('API configuration and changed Google identity return explicit errors',async()=>{
  const t=fixture({fetch:async()=>({ok:false,status:403,json:async()=>({error:{details:[{reason:'SERVICE_DISABLED'}]}})})});await assert.rejects(t.importer({id:'doc'}),/API de Google Docs/);assert.equal(t.pickerCalls,0);
- const wrong=fixture({authorize:async()=>({user:{uid:'other'}})});await assert.rejects(wrong.importer({id:'doc'}),/misma cuenta/);
+ const wrong=fixture({authorize:async()=>({user:{uid:'other'}})});await assert.rejects(wrong.importer({id:'doc'}),/otra cuenta de Google/);
+});
+test('explicit other-account import reads the linked document without changing the Studio identity',async()=>{
+ let otherCalls=0;const t=fixture({authorizeOtherAccount:async()=>{otherCalls++;return {user:{uid:'doc-owner',email:'owner@example.test'}};}});
+ const primary=t.auth.currentUser,result=await t.importer({id:'doc'},{chooseAccount:true});
+ assert.equal(result.accountEmail,'owner@example.test');assert.equal(t.auth.currentUser,primary);assert.equal(t.authCalls,0);assert.equal(otherCalls,1);
+ await t.importer({id:'doc',accountEmail:'owner@example.test'});assert.equal(otherCalls,1);
+});
+test('saved document account is authorized again after reload while Studio keeps its session',async()=>{
+ let otherCalls=0;const t=fixture({authorizeOtherAccount:async()=>{otherCalls++;return {user:{uid:'doc-owner',email:'owner@example.test'}};}});
+ await t.importer({id:'doc',accountEmail:'owner@example.test'});assert.equal(otherCalls,1);assert.equal(t.auth.currentUser.uid,'user');
+});
+test('another account cannot bypass a changed Studio session or import a different document',async()=>{
+ const t=fixture({authorizeOtherAccount:async()=>{t.auth.currentUser={uid:'different-studio-user'};return {user:{uid:'doc-owner',email:'owner@example.test'}};}});
+ await assert.rejects(t.importer({id:'doc'},{chooseAccount:true}),/sesión de GB Studio cambió/);assert.equal(t.calls.length,0);
+ const u=fixture({authorizeOtherAccount:async()=>({user:{uid:'doc-owner',email:'owner@example.test'}}),fetch:async()=>({ok:false,status:403,json:async()=>({error:{}})}),pick:{action:'picked',docs:[{id:'wrong-doc'}]}});
+ await assert.rejects(u.importer({id:'doc'},{chooseAccount:true}),/otro documento/);assert.equal(u.calls.length,1);
+});
+test('a fresh selection shows shared and folder views without an unrelated pinned document',async()=>{
+ const t=fixture();await t.importer(null);assert.equal(t.views.length,3);assert.ok(t.views.every(view=>!view.fileIds));assert.equal(t.views[0].label,'Buscar en Drive');
 });

@@ -1,6 +1,6 @@
 // File-specific Google authorization. Tokens stay in memory for this browser session.
-export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticateWithPopup,config,runtime=globalThis,requestTimeout=30000,interactionTimeout=120000}){
-  let accessToken='',expiresAt=0,authorizedUid='',pickerReady;
+export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticateWithPopup,authorizeOtherAccount,config,runtime=globalThis,requestTimeout=30000,interactionTimeout=120000}){
+  let accessToken='',expiresAt=0,authorizedUid='',documentAccountEmail='',pickerReady;
   function waitFor(promise,signal,ms,message,cleanup=()=>{}){
     return new Promise((resolve,reject)=>{
       let done=false;
@@ -11,21 +11,23 @@ export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticate
       if(signal?.aborted)cancel();else signal?.addEventListener('abort',cancel,{once:true});
     });
   }
-  async function authorize(signal,onProgress){
+  async function authorize(signal,onProgress,chooseAccount=false,expectedEmail=''){
     const user=auth.currentUser;if(!user)throw Error('Iniciá sesión en GB Studio para importar.');
-    if(accessToken&&authorizedUid===user.uid&&Date.now()<expiresAt)return accessToken;
+    if(!chooseAccount&&accessToken&&authorizedUid===user.uid&&Date.now()<expiresAt)return accessToken;
     onProgress('Autorizá la lectura del guion en la ventana de Google. Podés cancelar la carga.');
-    const provider=new GoogleAuthProvider();provider.addScope('https://www.googleapis.com/auth/drive.file');provider.setCustomParameters({login_hint:user.email});
+    const provider=new GoogleAuthProvider();provider.addScope('https://www.googleapis.com/auth/drive.file');provider.setCustomParameters(chooseAccount?{prompt:'select_account',...(expectedEmail?{login_hint:expectedEmail}:{})}:{login_hint:user.email});
     try{
-      const result=await waitFor(reauthenticateWithPopup(user,provider),signal,interactionTimeout,'La autorización de Google no terminó. Volvé a importar y completá la ventana de Google.');
-      if(result.user.uid!==user.uid||auth.currentUser?.uid!==user.uid)throw Error('Elegí la misma cuenta con la que entraste a GB Studio.');
+      if(chooseAccount&&!authorizeOtherAccount)throw Error('La importación con otra cuenta no está disponible. Recargá Roda.');
+      const result=await waitFor(chooseAccount?authorizeOtherAccount(provider):reauthenticateWithPopup(user,provider),signal,interactionTimeout,'La autorización de Google no terminó. Volvé a importar y completá la ventana de Google.');
+      if(auth.currentUser?.uid!==user.uid)throw Error('Tu sesión de GB Studio cambió. Volvé a abrir el proyecto antes de importar.');
+      if(!chooseAccount&&result.user.uid!==user.uid)throw Error('Para usar una cuenta distinta, elegí «Importar con otra cuenta de Google».');
       const credential=GoogleAuthProvider.credentialFromResult(result);
       if(!credential?.accessToken)throw Error('Google no autorizó la lectura del documento.');
-      accessToken=credential.accessToken;expiresAt=Date.now()+50*60*1000;authorizedUid=user.uid;return accessToken;
+      accessToken=credential.accessToken;expiresAt=Date.now()+50*60*1000;authorizedUid=user.uid;documentAccountEmail=result.user.email||user.email;return accessToken;
     }catch(error){
       if(['auth/popup-closed-by-user','auth/cancelled-popup-request'].includes(error.code))return null;
       if(error.code==='auth/popup-blocked')throw Error('Permití la ventana de Google en tu navegador y volvé a intentar.');
-      if(error.code==='auth/user-mismatch')throw Error('Elegí la misma cuenta con la que entraste a GB Studio.');
+      if(error.code==='auth/user-mismatch')throw Error('Para usar una cuenta distinta, elegí «Importar con otra cuenta de Google».');
       throw error;
     }
   }
@@ -41,15 +43,23 @@ export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticate
     });return pickerReady;
   }
   async function choose(token,expected,signal,onProgress){
-    onProgress(expected?'Elegí el documento vinculado en el selector de Google para autorizarlo.':'Elegí el Google Docs de tu guion en el selector de Google.');
+    const account=documentAccountEmail||auth.currentUser?.email||'';
+    onProgress((expected?'Autorizá el documento vinculado en la primera pestaña del selector.':'Elegí el Google Docs de tu guion en el selector de Google.')+(account?' Cuenta: '+account+'. Si no aparece, abrí su enlace y comprobá que esté compartido con esta cuenta.':''));
     await waitFor(loadPicker(),signal,requestTimeout,'El selector de Google no respondió. Volvé a intentar.');
     let picker;
     const selected=new Promise((resolve,reject)=>{
       const p=runtime.google.picker;
       try{
-        picker=new p.PickerBuilder().addView(new p.DocsView(p.ViewId.DOCUMENTS).setMimeTypes('application/vnd.google-apps.document'))
+        const view=()=>new p.DocsView(p.ViewId.DOCUMENTS).setMimeTypes('application/vnd.google-apps.document').setMode(p.DocsViewMode.LIST);
+        const builder=new p.PickerBuilder();
+        // Pin the exact linked file first. Drive filters must use separate views: setEnableDrives overrides setFileIds.
+        if(expected?.id)builder.addView(view().setFileIds(expected.id).setLabel('Guion vinculado'));
+        builder.addView(view().setIncludeFolders(true).setSelectFolderEnabled(false).setLabel('Buscar en Drive'));
+        builder.addView(view().setOwnedByMe(false).setLabel('Compartidos conmigo'));
+        builder.addView(view().setEnableDrives(true).setLabel('Unidades compartidas'));
+        picker=builder.setLocale('es')
           .setAppId(config.messagingSenderId).setDeveloperKey(config.apiKey).setOAuthToken(token).setOrigin(runtime.location.origin)
-          .setTitle(expected?'Elegí el guion vinculado para autorizar su importación':'Elegí el Google Docs de tu guion')
+          .setTitle((expected?'Autorizá el guion vinculado':'Elegí el Google Docs de tu guion')+(account?' · '+account:''))
           .setCallback(data=>{
             if(data.action===p.Action.CANCEL)resolve(null);
             if(data.action===p.Action.PICKED){const doc=data.docs?.[0];if(!doc?.id){reject(Error('Google no devolvió un documento válido.'));return;}if(expected&&doc.id!==expected.id){reject(Error('Elegiste otro documento. Para cambiar el guion, pegá y vinculá su enlace primero.'));return;}resolve(doc);}
@@ -65,9 +75,10 @@ export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticate
       const doc=await response.json();return {response,doc};
     })(),signal,requestTimeout,'Google tardó demasiado en entregar el documento. Volvé a importar; tu guion anterior se conserva.',()=>controller.abort());
   }
-  return async function importDocument(link,{signal,onProgress=()=>{}}={}){
+  return async function importDocument(link,{signal,onProgress=()=>{},chooseAccount=false}={}){
     signal?.throwIfAborted();
-    const token=await authorize(signal,onProgress);if(!token)return null;
+    const savedOtherAccount=link?.accountEmail&&link.accountEmail!==auth.currentUser?.email;
+    const token=await authorize(signal,onProgress,chooseAccount||!!savedOtherAccount&&documentAccountEmail!==link.accountEmail,link?.accountEmail);if(!token)return null;
     let id=link?.id;
     if(!id){const picked=await choose(token,null,signal,onProgress);if(!picked)return null;id=picked.id;}
     const read=()=>{onProgress('Leyendo la última versión del documento de Google…');return readDocument(id,token,signal);};
@@ -82,7 +93,7 @@ export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticate
     if(!response.ok){
       if(response.status===401){accessToken='';expiresAt=0;throw Error('La autorización de Google venció. Volvé a importar para renovarla.');}
       if(disabled)throw Error('La API de Google Docs no está habilitada para GB Studio. Mientras se configura, cargá una copia Word.');
-      if([403,404].includes(response.status))throw Error('Tu cuenta no puede leer ese documento. Revisá los permisos en Google Docs y elegilo nuevamente.');
+      if([403,404].includes(response.status))throw Error('No pudimos leer el documento vinculado con '+(documentAccountEmail||'esta cuenta')+'. Abrí su enlace para comprobar el acceso, o elegí «Importar con otra cuenta de Google».');
       throw Error('Google no pudo entregar el guion. Intentá de nuevo o cargá una copia Word.');
     }
     signal?.throwIfAborted();
@@ -91,6 +102,6 @@ export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticate
     onProgress('Detectando las escenas de la última versión…');
     const formatted=runtime.RodaScriptDocument.docsFormat(doc),text=formatted.text;
     if(!text.trim())throw Error('El documento no contiene texto de guion.');
-    return {id,url:'https://docs.google.com/document/d/'+id+'/edit',title:doc.title||'Google Docs',revisionId:doc.revisionId||'',text,format:formatted.format};
+    return {id,url:'https://docs.google.com/document/d/'+id+'/edit',title:doc.title||'Google Docs',revisionId:doc.revisionId||'',accountEmail:documentAccountEmail,text,format:formatted.format};
   };
 }
