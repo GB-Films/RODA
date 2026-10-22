@@ -65,3 +65,7 @@ reconexion y escrituras atomicas con reintentos usando un backend simulado.
 La versión alojada de Roda comparte su guion y sus jornadas con Croki y el PDR por escenas del mismo proyecto de GB Studio. El adaptador `js/studio-live-sync.js` protege las lecturas asíncronas: no aplica respuestas durante una edición ni después de que comenzó una edición nueva. La integración del editor, los permisos por sección y el almacenamiento atómico se mantienen en `GB-Films/GB-Studio` (`roda/js/studio-entry.js`, `studio-storage.js` y `app.js`). El Roda independiente conserva su sincronización propia con `collaboration.js`.
 
 Pruebas del adaptador: `node --test tests/studio-live-sync.test.cjs`.
+
+La integración de GB Studio utiliza `js/script-revisions.js` para conservar las identidades de producción al insertar, renumerar o mover escenas entre versiones. La importación permite crear una versión o reemplazar la seleccionada; las jornadas y los ajustes de las escenas existentes se conservan y las nuevas quedan sin asignar. Las coincidencias ambiguas mantienen las escenas anteriores para revisión manual. `js/google-docs.mjs` lee la revisión actual del documento vinculado sin caché, con progreso, cancelación y tiempos límite; solo solicita seleccionar el archivo cuando falta permiso. La interfaz y el guardado se integran en `GB-Films/GB-Studio`.
+
+Pruebas de revisiones e importación: `node --test tests/script-revisions.test.cjs tests/google-docs.test.mjs`.
