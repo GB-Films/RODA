@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createGoogleDocsImporter} from '../js/google-docs.mjs';
+import {createGoogleDocsImporter,resolveGoogleDocsSource} from '../js/google-docs.mjs';
 function fixture(options={}){
  const user={uid:'user',email:'user@example.test'},auth={currentUser:user},calls=[],progress=[],views=[];
  let authCalls=0,pickerCalls=0,disposed=0,callback;
@@ -47,9 +47,9 @@ test('cancel while reading rejects without applying a late response',async()=>{
 test('stalled authorization stops instead of leaving the editor loading indefinitely',async()=>{
  const t=fixture({authorize:()=>new Promise(()=>{})});await assert.rejects(t.importer({id:'doc'}),/autorización de Google no terminó/);assert.equal(t.calls.length,0);
 });
-test('expired credentials are cleared so the next attempt can reauthorize',async()=>{
+test('expired credentials are renewed within the same refresh request',async()=>{
  const t=fixture({fetch:async(_url,_init,n)=>({ok:n>1,status:n===1?401:200,json:async()=>n===1?{error:{}}:{text:'Guion'}})});
- await assert.rejects(t.importer({id:'doc'}),/venció/);await t.importer({id:'doc'});assert.equal(t.authCalls,2);
+ assert.equal((await t.importer({id:'doc'})).text,'Guion');assert.equal(t.authCalls,2);assert.equal(t.calls.length,2);
 });
 test('API configuration and changed Google identity return explicit errors',async()=>{
  const t=fixture({fetch:async()=>({ok:false,status:403,json:async()=>({error:{details:[{reason:'SERVICE_DISABLED'}]}})})});await assert.rejects(t.importer({id:'doc'}),/API de Google Docs/);assert.equal(t.pickerCalls,0);
@@ -73,4 +73,24 @@ test('another account cannot bypass a changed Studio session or import a differe
 });
 test('a fresh selection shows shared and folder views without an unrelated pinned document',async()=>{
  const t=fixture();await t.importer(null);assert.equal(t.views.length,3);assert.ok(t.views.every(view=>!view.fileIds));assert.equal(t.views[0].label,'Buscar en Drive');
+});
+
+const parseLink=value=>{const url=new URL(value);return {id:url.pathname.split('/')[3],url:url.origin+url.pathname};};
+test('refresh resolves the selected screenplay source before the last imported project document',()=>{
+ const version={source:{type:'google-doc',documentId:'selected',url:'https://docs.google.com/document/d/selected/edit',name:'Guion seleccionado',accountEmail:'writer@example.test'}};
+ const saved={id:'other',url:'https://docs.google.com/document/d/other/edit',accountEmail:'other@example.test'};
+ const source=resolveGoogleDocsSource(version,saved);assert.equal(source.id,'selected');assert.equal(source.accountEmail,'writer@example.test');assert.equal(source.title,'Guion seleccionado');
+ assert.equal(resolveGoogleDocsSource(version,saved,source.url,parseLink).accountEmail,'writer@example.test');
+ assert.equal(resolveGoogleDocsSource(version,saved,saved.url,parseLink).accountEmail,'other@example.test');
+ assert.equal(resolveGoogleDocsSource(version,saved,'https://docs.google.com/document/d/new/edit',parseLink).accountEmail,undefined);
+});
+test('pasting the same linked URL retains its independent Google account after reload',()=>{
+ const saved={id:'doc',url:'https://docs.google.com/document/d/doc/edit',accountEmail:'writer@example.test'};
+ const version={source:{type:'google-doc',documentId:'doc'}};
+ assert.equal(resolveGoogleDocsSource(version,saved,saved.url,parseLink).accountEmail,'writer@example.test');
+ assert.equal(resolveGoogleDocsSource({source:{type:'file'}},saved).id,'doc');
+});
+test('a second expired response fails without an unbounded retry loop',async()=>{
+ const t=fixture({fetch:async()=>({ok:false,status:401,json:async()=>({error:{}})})});
+ await assert.rejects(t.importer({id:'doc'}),/venció/);assert.equal(t.calls.length,2);assert.equal(t.authCalls,2);
 });

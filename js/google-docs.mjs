@@ -1,4 +1,18 @@
 // File-specific Google authorization. Tokens stay in memory for this browser session.
+export function resolveGoogleDocsSource(version,saved,entered='',parseLink){
+  const source=version?.source;
+  const selected=source?.type==='google-doc'&&source.documentId?{
+    ...(saved?.id===source.documentId?saved:{}),id:source.documentId,
+    url:source.url||'https://docs.google.com/document/d/'+encodeURIComponent(source.documentId)+'/edit',
+    title:source.name||'',...(source.accountEmail?{accountEmail:source.accountEmail}:{})
+  }:saved||null;
+  if(!String(entered||'').trim())return selected;
+  const link=parseLink(entered);
+  // Parsing the visible URL must not discard the account authorized for that file.
+  const metadata=selected?.id===link.id?selected:saved?.id===link.id?saved:null;
+  return {...metadata,...link};
+}
+
 export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticateWithPopup,authorizeOtherAccount,config,runtime=globalThis,requestTimeout=30000,interactionTimeout=120000}){
   let accessToken='',expiresAt=0,authorizedUid='',documentAccountEmail='',pickerReady;
   function waitFor(promise,signal,ms,message,cleanup=()=>{}){
@@ -78,11 +92,19 @@ export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticate
   return async function importDocument(link,{signal,onProgress=()=>{},chooseAccount=false}={}){
     signal?.throwIfAborted();
     const savedOtherAccount=link?.accountEmail&&link.accountEmail!==auth.currentUser?.email;
-    const token=await authorize(signal,onProgress,chooseAccount||!!savedOtherAccount&&documentAccountEmail!==link.accountEmail,link?.accountEmail);if(!token)return null;
+    const otherAccount=chooseAccount||!!savedOtherAccount&&documentAccountEmail!==link.accountEmail;
+    let token=await authorize(signal,onProgress,otherAccount,link?.accountEmail);if(!token)return null;
     let id=link?.id;
     if(!id){const picked=await choose(token,null,signal,onProgress);if(!picked)return null;id=picked.id;}
     const read=()=>{onProgress('Leyendo la última versión del documento de Google…');return readDocument(id,token,signal);};
     let result=await read();
+    if(result.response.status===401){
+      accessToken='';expiresAt=0;
+      onProgress('Renovando el permiso de Google para leer los últimos cambios…');
+      token=await authorize(signal,onProgress,chooseAccount||documentAccountEmail!==auth.currentUser?.email,documentAccountEmail);
+      if(!token)return null;
+      result=await read();
+    }
     const disabled=result.doc.error?.details?.some(d=>d.reason==='SERVICE_DISABLED');
     // drive.file grants persist across sessions: try the linked file directly before showing Picker.
     if(link?.id&&[403,404].includes(result.response.status)&&!disabled){
