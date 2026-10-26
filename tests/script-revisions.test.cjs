@@ -11,7 +11,7 @@ function apply(state,version,previousScenes){let id=0;return applyProduction(sta
 test('insertion and renumbering retain scene identity, assignments, timings, shots, notes and assigned locations',()=>{
  const state=fixture(),before=structuredClone(state),version={id:'v2',scenes:[a,scene(2,'INT. COCINA - DÍA','Una escena nueva.'),{...b,number:'3',body:b.body+' Ahora llueve.'},{...c,number:'4'}]};
  const result=apply(state,version);
- assert.deepEqual(result,{added:1,updated:3,retained:0});
+ assert.deepEqual(result,{added:1,updated:3,retained:0,archived:0,merged:0});
  assert.deepEqual(state.shootDays,before.shootDays);assert.deepEqual(state.crew,before.crew);
  assert.equal(state.scenes.find(s=>s.id==='scene-1').number,'3');
  for(const old of before.scenes){const updated=state.scenes.find(s=>s.id===old.id);for(const key of ['notes','shots','shootingLocationId','pages'])assert.deepEqual(updated[key],old[key]);assert.deepEqual(updated.elements.props,['Manual','Detectado']);}
@@ -29,11 +29,36 @@ test('repeated headings with an inserted scene use action identity and never a s
  const old=[a,{...b,slugline:a.slugline}],fresh=[{...old[0]},scene(2,a.slugline,'Una escena nueva en la misma casa.'),{...old[1],number:'3'}];
  assert.deepEqual(matchScenes(old,fresh),[0,null,1]);
 });
-test('ambiguous changed scenes retain previous production and new candidates stay unassigned',()=>{
+test('removed scenes leave the active plan and keep a recovery copy; ambiguous new scenes stay unassigned',()=>{
  const old=[a,{...b,slugline:a.slugline}],fresh=[scene(1,a.slugline,'Nueva primera'),scene(2,a.slugline,'Nueva segunda'),scene(3,a.slugline,'Nueva tercera')];
  assert.deepEqual(matchScenes(old,fresh),[null,null,null]);
  const state=fixture(),before=structuredClone(state.shootDays);const result=apply(state,{id:'v2',scenes:[a,c]});
- assert.equal(result.retained,1);assert.ok(state.scenes.some(s=>s.id==='scene-1'));assert.deepEqual(state.shootDays,before);
+ assert.equal(result.archived,1);assert.ok(!state.scenes.some(s=>s.id==='scene-1'));assert.deepEqual(state.shootDays[0].sceneIds,['scene-0']);
+ assert.equal(state.productionArchive['scene-1'].scene.notes,'Notas 1');assert.equal(state.productionArchive['scene-1'].days[0].time,60);assert.equal(state.productionArchive['scene-1'].days[0].duration,45);
+ assert.deepEqual(state.shootDays[0].blocks,before[0].blocks);assert.deepEqual(state.shootDays[0].crewIds,before[0].crewIds);
+});
+
+test('repairs accumulated legacy duplicates, remaps the plan once, preserves work and is idempotent',()=>{
+ const state=fixture();state.script.versions[0].scenes.forEach((s,i)=>s.productionSceneId='scene-'+i);
+ const legacy={...structuredClone(state.scenes[1]),id:'legacy',number:'9',notes:'Nota de asistencia',shots:[{id:'legacy-shot'}]};state.scenes.push(legacy);
+ state.shootDays[0].sceneIds=['scene-0','legacy','scene-1','legacy'];state.shootDays[0].times.legacy=90;state.shootDays[0].durations.legacy=30;
+ const v=state.script.versions[0],result=apply(state,v);
+ assert.equal(result.merged,1);assert.equal(state.scenes.length,3);assert.deepEqual(state.shootDays[0].sceneIds,['scene-0','scene-1']);assert.equal(state.shootDays[0].times['scene-1'],60);
+ assert.match(state.scenes[1].notes,/Nota de asistencia/);assert.deepEqual(state.scenes[1].shots.map(s=>s.id),['shot-1','legacy-shot']);
+ assert.equal(state.productionArchive.legacy.days[0].time,90);assert.equal(v.productionSyncVersion,2);
+ const before=structuredClone(state);apply(state,v);assert.deepEqual(state.scenes,before.scenes);assert.deepEqual(state.shootDays,before.shootDays);assert.deepEqual(state.productionArchive,before.productionArchive);
+});
+
+test('an unscheduled current scene inherits the schedule of a matching old import',()=>{
+ const state=fixture();state.script.versions[0].scenes.forEach((s,i)=>s.productionSceneId='scene-'+i);
+ state.scenes.push({...structuredClone(state.scenes[1]),id:'legacy'});state.shootDays[0].sceneIds=['legacy'];state.shootDays[0].times={legacy:120};state.shootDays[0].durations={legacy:75};
+ apply(state,state.script.versions[0]);assert.deepEqual(state.shootDays[0].sceneIds,['scene-1']);assert.equal(state.shootDays[0].times['scene-1'],120);assert.equal(state.shootDays[0].durations['scene-1'],75);
+});
+
+test('changed action in repeated locations follows distinctive text across renumbering',()=>{
+ const one=scene(10,'INT. FÁBRICA - DÍA','700 camina lentamente por el pasillo junto al equipo y encuentra una puerta cerrada al final.'),two=scene(11,one.slugline,'El terrorista mira a los rehenes mientras habla por su radio con el jefe de la operación.');
+ const fresh=[{...two,number:'9',body:two.body+' La radio se corta.'},{...one,number:'12',body:one.body+' Busca su llave.'}];
+ assert.deepEqual(matchScenes([one,two],fresh),[1,0]);
 });
 test('chapter numbers do not cross-match scenes with identical scene numbers',()=>{
  const old=[{...a,chapter:1},{...a,chapter:2}];assert.deepEqual(matchScenes(old,[old[1],old[0]]),[1,0]);

@@ -4,9 +4,14 @@
   const sceneKey=s=>normalize(s.chapter)+'|'+normalize(s.number).replace(/^0+(?=\d)/,'');
   const heading=s=>normalize(s.chapter)+'|'+normalize(s.slugline);
   const body=s=>normalize(s.body??s.summary);
+  function similarity(a,b,cache){
+    const grams=s=>{if(cache.has(s))return cache.get(s);const words=body(s).replace(/[^\p{L}\p{N} ]/gu,' ').split(/\s+/).filter(Boolean),result=new Set(words.slice(2).map((_,i)=>words.slice(i,i+3).join(' ')));cache.set(s,result);return result;};
+    const x=grams(a),y=grams(b);if(Math.min(x.size,y.size)<6)return 0;
+    let shared=0;for(const token of x)if(y.has(token))shared++;return shared/(x.size+y.size-shared);
+  }
   // Scene numbers alone cannot identify a scene after an insertion or renumbering.
   function matchScenes(previous,incoming){
-    const matches=incoming.map(()=>null),used=new Set();
+    const matches=incoming.map(()=>null),used=new Set(),similarities=new Map();
     function unique(key){
       const old=new Map(),fresh=new Map();
       previous.forEach((s,i)=>{if(used.has(i))return;const k=key(s);if(k)(old.get(k)||old.set(k,[]).get(k)).push(i);});
@@ -15,6 +20,15 @@
     }
     unique(s=>body(s)?heading(s)+'|'+body(s):'');
     unique(s=>body(s).length>=24?normalize(s.chapter)+'|'+body(s):'');
+    // Compare distinctive action before falling back to headings: locations repeat
+    // and script revisions often insert dialogue or change scene numbers.
+    incoming.forEach((s,i)=>{
+      if(matches[i]!==null)return;
+      const ranked=previous.map((p,index)=>({index,score:!used.has(index)&&normalize(p.chapter)===normalize(s.chapter)?similarity(p,s,similarities):0})).sort((a,b)=>b.score-a.score);
+      const best=ranked[0];if(!best||best.score<.55||best.score-(ranked[1]?.score||0)<.15)return;
+      const competing=incoming.some((other,j)=>j!==i&&matches[j]===null&&similarity(previous[best.index],other,similarities)>=best.score-.15);
+      if(!competing){matches[i]=best.index;used.add(best.index);}
+    });
     unique(heading);
     // Repeated locations with edited action can be paired in order only when their counts agree.
     const groups=new Map();
@@ -25,6 +39,7 @@
     return matches;
   }
   function applyProduction(state,version,{createId,breakdown,headingMetadata,normalizeTOD=value=>value,previousScenes}={}){
+    const before=structuredClone(state.scenes),daysBefore=structuredClone(state.shootDays||[]);
     const previous=previousScenes??state.script.versions.find(v=>v.id===state.script.activeVersionId)?.scenes??[];
     const old=previous.length?previous:state.scenes;
     const matches=matchScenes(old,version.scenes||[]),byId=new Map(state.scenes.map(s=>[s.id,s])),used=new Set();
@@ -47,8 +62,39 @@
       }
       used.add(existing.id);sc.productionSceneId=existing.id;
     }
-    state.script.activeVersionId=version.id;version.appliedAt=new Date().toISOString();
-    return {added,updated,retained:state.scenes.filter(s=>!used.has(s.id)).length};
+    // Only the selected screenplay belongs in the active scene bank. Older imports
+    // can have different IDs for the same scene: transfer their work before retiring them.
+    const aliases=new Map();
+    for(const oldScene of state.scenes.filter(s=>!used.has(s.id))){
+      const [match]=matchScenes(version.scenes,[oldScene]);
+      const destination=match===null?null:byId.get(version.scenes[match].productionSceneId)||state.scenes.find(s=>s.id===version.scenes[match].productionSceneId);
+      if(destination){
+        aliases.set(oldScene.id,destination.id);
+        if(oldScene.notes&&!destination.notes?.includes(oldScene.notes))destination.notes=[destination.notes,oldScene.notes].filter(Boolean).join('\n\n');
+        destination.shots=[...(destination.shots||[]),...(oldScene.shots||[]).filter(s=>!destination.shots?.some(t=>t.id===s.id))];
+        destination.shootingLocationId||=oldScene.shootingLocationId||'';
+        for(const [category,items]of Object.entries(oldScene.elements||{}))destination.elements[category]=[...new Set([...(destination.elements[category]||[]),...items])];
+      }
+    }
+    const retired=before.filter(s=>!used.has(s.id));
+    if(retired.length){
+      state.productionArchive??={};
+      for(const scene of retired)state.productionArchive[scene.id]={scene,versionId:version.id,mergedInto:aliases.get(scene.id)||null,days:daysBefore.filter(d=>d.sceneIds?.includes(scene.id)).map(d=>({id:d.id,date:d.date,callTime:d.callTime,sceneIndex:d.sceneIds.indexOf(scene.id),time:d.times?.[scene.id],duration:d.durations?.[scene.id],color:d.sceneColors?.[scene.id],shotsDone:d.shotsDone||{}}))};
+    }
+    state.scenes=state.scenes.filter(s=>used.has(s.id));
+    for(const day of state.shootDays||[]){
+      const ids=day.sceneIds||[];
+      for(const key of ['times','durations','sceneColors'])if(day[key]){
+        const previous=day[key],next={};
+        // Existing current-scene settings win over an older duplicate's settings.
+        for(const id of ids.filter(id=>used.has(id)))if(previous[id]!==undefined)next[id]=previous[id];
+        for(const id of ids){const to=aliases.get(id);if(to&&next[to]===undefined&&previous[id]!==undefined)next[to]=previous[id];}
+        day[key]=next;
+      }
+      day.sceneIds=[...new Set(ids.map(id=>aliases.get(id)||id).filter(id=>used.has(id)))];
+    }
+    state.script.activeVersionId=version.id;version.appliedAt=new Date().toISOString();version.productionSyncVersion=2;
+    return {added,updated,retained:0,archived:retired.length,merged:aliases.size};
   }
   function storeVersion(script,version,{mode='new',targetId}={}){
     if(!['new','replace'].includes(mode))throw Error('Elegí cómo guardar la actualización.');
