@@ -13,9 +13,18 @@
     if(!active)return;
     active.cancelled=true;active.observer?.disconnect();active.resize?.disconnect();
     if(active.frame)root.cancelAnimationFrame(active.frame);
+    clearTimeout(active.idleTimer);active.scroller?.removeEventListener('scroll',active.onScroll);
     active.task?.destroy().catch(()=>{});active=null;
   }
-  async function renderPDF(container,snapshot){
+  // Drive's all-tabs PDF can include a separator containing only the tab title.
+  // Never suppress text that also occurs in the actual document body, or non-Docs PDFs.
+  function isTabCover(text,format,raw){
+    const normalized=s=>String(s||'').normalize('NFC').replace(/\s+/g,' ').trim();
+    const title=normalized(text);
+    if(format?.source!=='google-doc'||!title||!raw||normalized(raw).includes(title))return false;
+    return Array.isArray(format.tabTitles)?format.tabTitles.some(t=>normalized(t)===title):/^(?:Pestaña|Tab)\s+\d+$/i.test(title);
+  }
+  async function renderPDF(container,snapshot,{format,raw}={}){
     cancel();
     if(snapshot?.version!==1||typeof snapshot.data!=='string'||snapshot.data.length>Math.ceil(PDF_LIMIT*4/3)+8)throw Error('Copia PDF no compatible.');
     const bytes=Uint8Array.from(atob(snapshot.data),c=>c.charCodeAt(0));
@@ -28,15 +37,19 @@
     if(doc.numPages>500)throw Error('La copia PDF supera las 500 páginas.');
     container.replaceChildren();container.classList.add('script-pdf-pages');
     const pages=new Map(),pending=new Set(),scroller=container.closest('.script-document-scroll');let busy=false,clock=0;
+    // Keep wheel/touch scrolling on the compositor; rasterize new pages after the gesture.
+    let scrolling=false;
+    session.scroller=scroller;session.onScroll=()=>{scrolling=true;clearTimeout(session.idleTimer);session.idleTimer=setTimeout(()=>{scrolling=false;schedule();},140);};
+    scroller?.addEventListener('scroll',session.onScroll,{passive:true});
     function release(info){info.canvas.width=info.canvas.height=0;info.rendered=false;delete info.sheet.dataset.rendered;}
     function trim(){
       const cached=Array.from(pages.values()).filter(info=>info.rendered),candidates=cached.filter(info=>!info.near).sort((a,b)=>a.lastUsed-b.lastUsed);
       let pixels=cached.reduce((n,info)=>n+info.canvas.width*info.canvas.height,0),count=cached.length;
       while((count>8||pixels>18000000)&&candidates.length){const info=candidates.shift();pixels-=info.canvas.width*info.canvas.height;count--;release(info);}
     }
-    function schedule(){if(!busy&&!session.frame&&pending.size&&!session.cancelled)session.frame=root.requestAnimationFrame(paintNext);}
+    function schedule(){if(!scrolling&&!busy&&!session.frame&&pending.size&&!session.cancelled)session.frame=root.requestAnimationFrame(paintNext);}
     async function paintNext(){
-      session.frame=0;if(session.cancelled||busy)return;
+      session.frame=0;if(session.cancelled||busy||scrolling)return;
       const bounds=scroller?.getBoundingClientRect()||{top:0,bottom:root.innerHeight},distance=info=>{const box=info.sheet.getBoundingClientRect();return Math.max(bounds.top-box.bottom,box.top-bounds.bottom,0);};
       const info=Array.from(pending).filter(info=>info.near&&!info.rendered).sort((a,b)=>distance(a)-distance(b))[0];
       if(!info)return;pending.delete(info);busy=true;
@@ -44,7 +57,7 @@
       canvas.width=Math.ceil(info.viewport.width*density);canvas.height=Math.ceil(info.viewport.height*density);
       try{
         const render=info.page.render({canvasContext:canvas.getContext('2d'),viewport:info.viewport,transform:[density,0,0,density,0,0]});
-        render.onContinue=next=>root.requestAnimationFrame(()=>{if(!session.cancelled)next();});
+        render.onContinue=next=>{const resume=()=>{if(session.cancelled)return;if(scrolling)setTimeout(resume,50);else root.requestAnimationFrame(next);};resume();};
         await render.promise;if(!session.cancelled){info.rendered=true;info.lastUsed=++clock;info.sheet.dataset.rendered='true';}
       }catch(error){if(!session.cancelled){info.sheet.dataset.renderError='true';canvas.width=canvas.height=0;}}
       finally{pending.delete(info);busy=false;if(!session.cancelled){trim();schedule();}}
@@ -53,6 +66,9 @@
     session.resize=new ResizeObserver(entries=>{for(const {target}of entries){const info=pages.get(target);if(info)target.querySelector('.script-pdf-text').style.setProperty('--scale-factor',String(info.viewport.scale*target.clientWidth/info.viewport.width));}});
     for(let n=1;n<=doc.numPages;n++){
       const page=await doc.getPage(n);if(session.cancelled)return null;
+      const content=await page.getTextContent();if(session.cancelled)return null;
+      const pageText=content.items.map(item=>item.str||'').join(' ');
+      if(isTabCover(pageText,format,raw))continue;
       const natural=page.getViewport({scale:1});
       if(!Number.isFinite(natural.width)||!Number.isFinite(natural.height)||natural.width<=0||natural.height<=0)throw Error('La página PDF no tiene un tamaño válido.');
       const viewport=page.getViewport({scale:Math.min(4/3,1600/natural.width,2200/natural.height)}),sheet=document.createElement('section');
@@ -62,7 +78,6 @@
       const layer=document.createElement('div');layer.className='script-pdf-text';layer.style.setProperty('--scale-factor',String(viewport.scale));
       sheet.append(canvas,layer);container.append(sheet);if(n>1)sheet.before(document.createTextNode('\n\n'));
       pages.set(sheet,{sheet,canvas,page,viewport,rendered:false,near:false,lastUsed:0});
-      const content=await page.getTextContent();if(session.cancelled)return null;
       const textLayer=new pdf.TextLayer({textContentSource:content,container:layer,viewport});await textLayer.render();
       layer.style.width='100%';layer.style.height='100%';
       const items=content.items.filter(item=>typeof item.str==='string');
@@ -75,7 +90,8 @@
       session.resize.observe(sheet);session.observer.observe(sheet);
     }
     if(session.cancelled)return null;
-    return {pages:doc.numPages};
+    let number=0;for(const {sheet}of pages.values()){number++;sheet.dataset.page=String(number);sheet.dataset.pageLabel=number+' / '+pages.size;sheet.setAttribute('aria-label','Página '+number+' de '+pages.size);}
+    return {pages:pages.size};
   }
   function readingPages(container,format={}){
     const layout=format.page||{},width=Math.min(1000,Math.max(300,Number(layout.width)||612)),height=Math.min(1600,Math.max(400,Number(layout.height)||792));
@@ -115,6 +131,6 @@
     container.classList.add('script-pagination-ready');
     return container.children.length;
   }
-  const api={PDF_LIMIT,capture,renderPDF,readingPages,cancel};root.RodaScriptPages=api;
+  const api={PDF_LIMIT,capture,renderPDF,readingPages,cancel,isTabCover};root.RodaScriptPages=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);
