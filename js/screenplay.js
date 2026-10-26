@@ -2,7 +2,7 @@
   const categories = ['cast','props','wardrobe','art','makeup','sound','sfx','vfx','vehicles','animals','extras'];
   const labels = {cast:'Cast',props:'Props',wardrobe:'Vestuario',art:'Arte',makeup:'Maquillaje',sound:'Sonido',sfx:'SFX',vfx:'VFX',vehicles:'Vehículos',animals:'Animales',extras:'Extras'};
   const normalize = s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  const parserVersion=4;
+  const parserVersion=5;
   const prefix=/^(?:(?:INT|EXT)\.?\s*\/\s*(?:INT|EXT)\.?|[IE]\/[IE]\.?|INTERIOR|EXTERIOR|INT|EXT)(?=$|[\s.:–—-])\s*[.:–—-]?\s*/i;
   const moment=/\b(AMANECER|DAWN|ATARDECER|TARDE|SUNSET|DUSK|NOCHE|NIGHT|D[IÍ]A|DAY|MAÑANA|MORNING)\b/i;
   function headingMetadata(heading){
@@ -97,10 +97,13 @@
     const lines=text.split(/\r?\n/);
     for(let i=0;i<lines.length;i++){
       const line=lines[i].trim();
-      const cue=line.replace(/^@/,'').replace(/\s*\((?:V\.?O\.?|O\.?S\.?|O\.?C\.?|CONT.*|FUERA.*)\)\s*$/i,'').replace(/\^$/,'').trim();
+      const cue=line.replace(/^@/,'').replace(/\s*\([^)]*\)\s*$/,'').replace(/\^$/,'').trim();
       let next=i+1;while(next<lines.length&&!lines[next].trim())next++;
-      const excluded=/^(?:INT|EXT|INTERIOR|EXTERIOR|ESCENA|SCENE|CORTE|CUT|FADE|FUNDIDO|DISUELVE|TRANSICION|CONTINU[OA]|FIN|TITLE|TITULO|CAP[IÍ]TULO|EPISODIO)\b/i;
-      if(cue.length<55&&/^(?:[\p{Lu}][\p{Lu}\p{N} .’'_-]*|\d+[A-Z]?)$/u.test(cue)&&!excluded.test(cue)&&!/[.!?:]$/.test(cue)&&next<lines.length&&next-i<=3&&(!/^[\p{Lu}\s]+$/u.test(lines[next].trim())||line.startsWith('@'))){add('cast',cue);}
+      const excluded=/^(?:INT|EXT|INTERIOR|EXTERIOR|ESCENA|SCENE|CORTE|CUT|FADE|FUNDIDO|DISUELVE|TRANSICION|CONTINU[OA]|FIN|TITLE|TITULO|CAP[IÍ]TULO|EPISODIO|NOTAS?\s+DE\s+PRODUCCI[ÓO]N|INDICACIONES|REPARTO|PERSONAJES|SONIDO|M[ÚU]SICA|VFX|SFX|IA|C[ÁA]MARA\s+LENTA)\b/i;
+      if(cue.length<90&&/^[\p{Lu}\p{N}][\p{Lu}\p{N} .,’'&/_-]*$/u.test(cue)&&!excluded.test(cue)&&!/[.!?:]$/.test(cue)&&next<lines.length&&next-i<=4&&(!/^[\p{Lu}\s]+$/u.test(lines[next].trim())||line.startsWith('@'))){
+        // A shared dialogue cue names several people, never a new combined character.
+        for(const name of cue.split(/\s*(?:,|&|\/)\s*|\s+(?:Y|E|AND)\s+/).filter(Boolean))if(name.length<55)add('cast',name);
+      }
       // Explicit production tags allow unusual elements to be recognized without guessing.
       for(const match of line.matchAll(/\[([^:\]]+):\s*([^\]]+)\]/g)){
         const key=normalize(match[1]);const cat=categories.find(c=>normalize(c)===key||normalize(labels[c])===key);
