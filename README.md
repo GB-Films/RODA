@@ -73,3 +73,9 @@ Pruebas de revisiones e importación: `node --test tests/script-revisions.test.c
 El selector abre el documento vinculado por su ID exacto y ofrece búsqueda, carpetas, archivos compartidos y unidades compartidas en vistas separadas. Usa una lista para no depender de permisos sobre miniaturas. La integración permite importar desde otra cuenta de Google mediante una sesión temporal independiente; la sesión y los permisos de GB Studio se conservan. Los tokens permanecen en memoria y cada importación comprueba que el usuario del proyecto siga siendo el mismo.
 
 `js/script-history.js` define el presupuesto del historial para la integración de GB Studio: valida las escenas actuales y el índice de versiones por separado de los textos y formatos históricos. El servidor de Studio guarda cada versión comprimida en registros independientes, verifica su integridad al leer y migra el historial anterior en el siguiente guardado válido. Las revisiones, los permisos, la duplicación y el guardado atómico se implementan en `GB-Films/GB-Studio`; la app independiente conserva su almacenamiento propio.
+
+## Páginas del guion
+
+`js/script-pages.js` conserva una copia PDF acotada dentro de la versión del guion y la presenta con PDF.js, búsqueda y texto seleccionable. El importador de Google Docs usa el permiso existente del archivo y verifica que la revisión no cambie entre texto y PDF. Si no puede obtener la copia original, conserva el texto para lectura. El lector de producción de GB Studio y su integración están en `GB-Films/GB-Studio`, dentro de `roda/`.
+
+Los números repetidos del documento reciben sufijos disponibles como `1A`, sin fusionar escenas ni ocupar sufijos explícitos. `sourceNumber` conserva la identificación original y el emparejamiento de revisiones mantiene los datos de rodaje de las escenas existentes.

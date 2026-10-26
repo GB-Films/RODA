@@ -2,7 +2,7 @@
   const categories = ['cast','props','wardrobe','art','makeup','sound','sfx','vfx','vehicles','animals','extras'];
   const labels = {cast:'Cast',props:'Props',wardrobe:'Vestuario',art:'Arte',makeup:'Maquillaje',sound:'Sonido',sfx:'SFX',vfx:'VFX',vehicles:'Vehículos',animals:'Animales',extras:'Extras'};
   const normalize = s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  const parserVersion=3;
+  const parserVersion=4;
   const prefix=/^(?:(?:INT|EXT)\.?\s*\/\s*(?:INT|EXT)\.?|[IE]\/[IE]\.?|INTERIOR|EXTERIOR|INT|EXT)(?=$|[\s.:–—-])\s*[.:–—-]?\s*/i;
   const moment=/\b(AMANECER|DAWN|ATARDECER|TARDE|SUNSET|DUSK|NOCHE|NIGHT|D[IÍ]A|DAY|MAÑANA|MORNING)\b/i;
   function headingMetadata(heading){
@@ -60,6 +60,14 @@
     for(const group of chapters.values()){
       // Inserting an unnumbered heading between numbered scenes must not duplicate the next number.
       if(group.some(sc=>sc.autoNumbered)&&new Set(group.map(sc=>sc.number)).size!==group.length)group.forEach((sc,i)=>{sc.number=String(i+1);});
+    }
+    for(const group of chapters.values()){
+      const reserved=new Set(group.map(sc=>sc.number)),used=new Set();
+      for(const sc of group){if(used.has(sc.number)){
+        const original=sc.number,base=original.match(/^\d+/)?.[0]||original;let n=0,candidate;
+        do{let value=++n,suffix='';while(value){value--;suffix=String.fromCharCode(65+value%26)+suffix;value=Math.floor(value/26);}candidate=base+suffix;}while(reserved.has(candidate)||used.has(candidate));
+        sc.sourceNumber=original;sc.number=candidate;reserved.add(candidate);
+      }used.add(sc.number);}
     }
     for(const sc of scenes)delete sc.autoNumbered;
     return scenes;
@@ -136,7 +144,9 @@
       text=(await root.mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()})).value;
     }}else if(ext==='pdf'){
       const pdf=await import('./vendor/pdf.mjs');pdf.GlobalWorkerOptions.workerSrc=new URL('js/vendor/pdf.worker.mjs',document.baseURI).href;
-      const task=pdf.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false});
+      const buffer=await file.arrayBuffer();
+      if(withFormat&&root.RodaScriptPages){format={version:1,source:'pdf'};try{format.pdf=root.RodaScriptPages.capture(buffer);}catch(error){format.pageWarning=error.message;}}
+      const task=pdf.getDocument({data:new Uint8Array(buffer),isEvalSupported:false});
       try{const doc=await task.promise;if(doc.numPages>500)throw Error('El PDF supera las 500 páginas.');const pages=[];for(let n=1;n<=doc.numPages;n++){const page=await doc.getPage(n);pages.push(pdfLines((await page.getTextContent()).items));}text=pages.join('\n\n');}finally{await task.destroy();}
     }else throw Error('Usá un PDF con texto, DOCX, TXT o Fountain.');
     if(!text?.trim())throw Error('No encontramos texto en el archivo. Si el PDF está escaneado, cargá una copia con texto seleccionable.');
