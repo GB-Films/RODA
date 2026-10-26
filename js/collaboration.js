@@ -62,7 +62,7 @@
 
   function mergeProject(base, local, remote){
     const out = merge(base,local,remote);
-    if(root.RodaCast)for(const person of out?.crew||[])root.RodaCast.syncPersonName(person);
+    if(root.RodaCast){for(const person of out?.crew||[])root.RodaCast.syncPersonName(person);root.RodaCast.reconcileMergedPeople(out||{});}
     if(!out || !Array.isArray(out.shootDays)) return out;
     const assignments = state => new Map((state?.shootDays||[]).flatMap(d=>(d.sceneIds||[]).map(id=>[id,d.id])));
     const b = assignments(base), l = assignments(local), r = assignments(remote);

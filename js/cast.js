@@ -30,12 +30,12 @@
  }
  function syncPersonName(person){if('firstName' in person || 'lastName' in person)person.name=[person.firstName,person.lastName].map(v=>String(v||'').trim()).filter(Boolean).join(' ');return person;}
  function setPersonName(person,firstName,lastName){Object.assign(person,{firstName,lastName});return syncPersonName(person);}
- const isPerson=person=>person.area==='Cast'&&!person.castProfile&&(person.castPerson||['name','phone','email'].some(field=>!!String(person[field]||'').trim()));
+ const isPerson=person=>person.area==='Cast'&&!person.castProfile&&!person.mergedInto&&(person.castPerson||['name','phone','email'].some(field=>!!String(person[field]||'').trim()));
  const people=state=>(state.crew||[]).filter(isPerson);
  const profileFor=(state,name)=>(state.crew||[]).find(p=>p.area==='Cast'&&p.castProfile&&key(p.role)===key(name));
  function actorFor(state,name){
   const profile=profileFor(state,name);
-  if(profile)return people(state).find(p=>p.id===profile.actorId)||null;
+  if(profile)return people(state).find(p=>p.id===resolvedPersonId(state,profile.actorId))||null;
   return people(state).find(p=>!p.castPerson&&key(p.role||p.name)===key(name))||null;
  }
  function typeFor(state,name){
@@ -67,6 +67,32 @@
   }
   return person;
  }
+ function duplicates(state,person){return person?.area==='Cast'&&key(person.name)?people(state).filter(p=>p.id!==person.id&&key(p.name)===key(person.name)):[];}
+ function resolvedPersonId(state,id){const seen=new Set();let person=(state.crew||[]).find(p=>p.id===id);while(person?.mergedInto&&!seen.has(person.id)){seen.add(person.id);person=state.crew.find(p=>p.id===person.mergedInto);}return person&&!person.mergedInto?person.id:id;}
+ function reconcileMergedPeople(state){
+  const byId=new Map((state.crew||[]).map(p=>[p.id,p]));
+  for(const profile of state.crew||[]){if(!profile.castProfile||!profile.actorId)continue;const seen=new Set();let actor=byId.get(profile.actorId);while(actor?.mergedInto&&!seen.has(actor.id)){seen.add(actor.id);actor=byId.get(actor.mergedInto);}if(actor&&!actor.mergedInto)profile.actorId=actor.id;}
+ }
+ function mergePeople(state,sourceId,targetId){
+  const source=people(state).find(p=>p.id===sourceId),target=people(state).find(p=>p.id===targetId);
+  if(!source||!target||!duplicates(state,source).some(p=>p.id===targetId))throw Error('Elegí dos fichas activas de la misma persona.');
+  // Materialize legacy character assignments before hiding either person record.
+  for(const name of [...personRoles(state,sourceId),...personRoles(state,targetId)])ensureProfile(state,name);
+  preparePerson(state,source);preparePerson(state,target);
+  source.mergedProfileIds=(state.crew||[]).filter(p=>p.castProfile&&p.actorId===sourceId).map(p=>p.id);
+  source.mergedInto=targetId;
+  for(const field of ['phone','email','notes']){const from=String(source[field]||'').trim(),to=String(target[field]||'').trim();if(from&&from!==to)target[field]=to?to+(field==='email'?'; ':' · ')+from:source[field];}
+  const reserved=new Set(['id','name','firstName','lastName','role','area','castPerson','legacyRole','mergedInto','mergedProfileIds']);
+  for(const [field,value]of Object.entries(source))if(value!==undefined&&!reserved.has(field)&&(target[field]===undefined||target[field]===''))target[field]=JSON.parse(JSON.stringify(value));
+  // The complete original record remains recoverable through Equipo > Unificaciones.
+  reconcileMergedPeople(state);return target;
+ }
+ function restorePerson(state,id){
+  const person=(state.crew||[]).find(p=>p.id===id);if(!person?.mergedInto)return false;
+  const targetId=resolvedPersonId(state,person.mergedInto);delete person.mergedInto;
+  for(const profileId of person.mergedProfileIds||[]){const profile=state.crew.find(p=>p.id===profileId);if(profile&&(profile.actorId===targetId||!profile.actorId))profile.actorId=id;}
+  delete person.mergedProfileIds;return true;
+ }
  function removePerson(state,id){for(const name of personRoles(state,id))ensureProfile(state,name);for(const p of state.crew||[])if(p.castProfile&&p.actorId===id)p.actorId='';state.crew=(state.crew||[]).filter(p=>p.id!==id);}
  function unify(state,aliases){
   for(const scene of state.scenes||[]){scene.elements??={};scene.elements.cast=names(scene.elements.cast,aliases);if(scene.castManual)scene.castManual=names(scene.castManual,aliases);}
@@ -92,5 +118,5 @@
   }
   state.script??={versions:[]};state.script.castAliases=aliases;
  }
- const api={personNameParts,syncPersonName,setPersonName,key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
+ const api={duplicates,reconcileMergedPeople,mergePeople,restorePerson,personNameParts,syncPersonName,setPersonName,key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);
