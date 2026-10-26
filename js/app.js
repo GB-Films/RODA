@@ -228,13 +228,13 @@ function sanitizeScriptState(opts={}){
     pill.className = "modeBanner";
     try{ pill.dataset.roAllow = "1"; }catch(_e){}
     pill.title = "Click para alternar edición";
-    pill.addEventListener("click", ()=>{
+    pill.addEventListener("click", async()=>{
       if(editUnlocked){
-        const ok = confirm("¿Volver a modo lector?");
+        const ok = await RodaDialogs.confirm({title:'Volver a modo lector',message:'Vas a poder consultar el proyecto sin editarlo.',confirmLabel:'Activar modo lector'});
         if(ok) setEditUnlocked(false);
         return;
       }
-      const pass = prompt("Contraseña para editar:");
+      const pass = await RodaDialogs.prompt({title:'Habilitar edición',label:'Contraseña',inputType:'password',confirmLabel:'Habilitar edición'});
       const cur = getEditPassword();
       if(String(pass||"").trim() === cur){
         setEditUnlocked(true);
@@ -1367,7 +1367,7 @@ function _guessCloudinaryCfgForProject(){
   return null;
 }
 
-function ensureCloudinaryCfg(){
+async function ensureCloudinaryCfg(){
   const cur = getCloudinaryCfg();
   if(cur.cloudName && cur.preset) return cur;
 
@@ -1378,11 +1378,12 @@ function ensureCloudinaryCfg(){
     return Object.assign(cur, guess);
   }
 
-  const cloudName = prompt("Cloudinary cloud name (ej: gbfilms):", cur.cloudName || "");
+  const cloudName = await RodaDialogs.prompt({title:'Configurar imágenes',label:'Nombre de la cuenta de Cloudinary',value:cur.cloudName||'',required:true,confirmLabel:'Continuar'});
   if(!cloudName) return null;
-  const preset = prompt("Cloudinary unsigned upload preset:", cur.preset || "");
+  const preset = await RodaDialogs.prompt({title:'Configurar imágenes',label:'Preset de carga de Cloudinary',value:cur.preset||'',required:true,confirmLabel:'Continuar'});
   if(!preset) return null;
-  const folder = prompt("Carpeta (opcional):", cur.folder || "") || (cur.folder || "");
+  const folder = await RodaDialogs.prompt({title:'Configurar imágenes',label:'Carpeta (opcional)',value:cur.folder||'',confirmLabel:'Guardar configuración'});
+  if(folder===null||isReadOnly())return null;
   const cfg = { cloudName: String(cloudName).trim(), preset: String(preset).trim(), folder: String(folder).trim() };
   setCloudinaryCfg(cfg);
   toast("Cloudinary configurado ✅");
@@ -1442,8 +1443,8 @@ async function uploadThumbToCloudinary(file, cfg){
 async function setShotThumb(sh, file){
   if(!sh || !file) return;
   if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
-  const cfg = ensureCloudinaryCfg();
-  if(!cfg) return;
+  const cfg = await ensureCloudinaryCfg();
+  if(!cfg||isReadOnly()) return;
 
   _shotThumbUploading[sh.id] = true;
   try{
@@ -2836,11 +2837,13 @@ function setupScheduleWheelScroll(){
     renderSceneBank();
   }
 
-  function deleteScene(){
+  async function deleteScene(){
     if(!selectedSceneId) return;
     const s = state.scenes.find(x=>x.id===selectedSceneId);
     if(!s) return;
-    if(!confirm(`Borrar escena #${s.number}?`)) return;
+    if(isReadOnly('breakdown'))return roToast();
+    if(!await RodaDialogs.confirm({title:'Eliminar escena',message:`¿Eliminar la escena #${s.number}?\nSe quitará del desglose y de las jornadas donde está programada.`,confirmLabel:'Eliminar escena',danger:true}))return;
+    if(isReadOnly('breakdown')||!getScene(s.id))return;
 
     for(const d of (state.shootDays || [])){
       ensureDayTimingMaps(d);
@@ -3057,14 +3060,15 @@ function setupScheduleWheelScroll(){
     renderReportsDetail();
   }
 
-  function deleteShootDay(){
+  async function deleteShootDay(){
     if(isReadOnly('planning'))return roToast();
     const d=getDay(selectedDayplanDayId||selectedDayId);
     if(!d)return;
     const title=[d.label,formatDayTitle(d.date),d.location].filter(Boolean).join(' · ');
     const scenes=(d.sceneIds||[]).length, blocks=(d.blocks||[]).length;
     const detail=(scenes?'\n'+(scenes===1?'Su escena queda disponible':'Sus '+scenes+' escenas quedan disponibles')+' para programar en otra jornada.':'')+(blocks?'\n'+(blocks===1?'Se borrará su bloque':'Se borrarán sus '+blocks+' bloques')+' de producción.':'');
-    if(!confirm('¿Eliminar '+title+'?'+detail))return;
+    if(!await RodaDialogs.confirm({title:'Eliminar día',message:'¿Eliminar '+title+'?'+detail,confirmLabel:'Eliminar día',danger:true}))return;
+    if(isReadOnly('planning')||!getDay(d.id))return;
     const index=state.shootDays.findIndex(x=>x.id===d.id);
     state.shootDays=state.shootDays.filter(x=>x.id!==d.id);
     sortShootDaysInPlace();
@@ -8654,12 +8658,12 @@ async function printPlanGeneral(){
 
   async function createProjectFromUI(){
     if(createProjectFromUI._running) return;
-    const name = prompt("Nombre del nuevo proyecto:");
+    const name = await RodaDialogs.prompt({title:'Nuevo proyecto',label:'Nombre del proyecto',required:true,confirmLabel:'Continuar'});
     if(name === null) return;
     const cleanName = String(name || "").trim();
     if(!cleanName) return toast("El proyecto necesita nombre");
 
-    const pass = prompt("Clave de edicion para este proyecto:", "1812");
+    const pass = await RodaDialogs.prompt({title:'Nuevo proyecto',label:'Contraseña de edición',value:'1812',inputType:'password',autocomplete:'new-password',confirmLabel:'Crear proyecto'});
     if(pass === null) return;
 
     createProjectFromUI._running = true;
@@ -9233,7 +9237,7 @@ async function printPlanGeneral(){
         "\n¿Aplicar cambios?"
       ].filter(Boolean).join("\n");
 
-      if(!confirm(msg)){
+      if(!await RodaDialogs.confirm({title:'Importar desglose',message:msg,confirmLabel:'Aplicar cambios',danger:opts.mode==='replace'})){
         if(pill) pill.textContent = "Cancelado";
         return;
       }
