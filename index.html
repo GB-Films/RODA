@@ -414,6 +414,7 @@
               <div class="row gap" style="flex-wrap:wrap">
                 <select class="input compact" id="dayplanSelect"></select>
                 <button class="btn" id="btnAddShootDay">+ Día</button>
+                <button class="btn danger small" id="btnDeleteShootDay" type="button">Eliminar día</button>
                 <details class="dpBlockMenu" id="dayplanBlockMenu"><summary class="btn">+ Bloque</summary><div class="dpBlockChoices" aria-label="Agregar bloque de producción"><button type="button" data-production-block="lunch">Almuerzo <small>45 min</small></button><button type="button" data-production-block="dinner">Cena <small>45 min</small></button><button type="button" data-production-block="travel">Traslado <small>30 min</small></button><button type="button" data-production-block="arrival">Llegada al rodaje <small>15 min</small></button><button type="button" data-production-block="setup">Armado técnico <small>30 min</small></button><button type="button" data-production-block="break">Pausa <small>15 min</small></button><button type="button" id="btnDayplanAddNote">Nota / tarea <small>15 min</small></button></div></details>
               </div>
 
@@ -446,7 +447,6 @@
             <!-- Pool de botones (se montan dentro del día seleccionado) -->
             <div class="hidden noPrint" id="dpDayActionPool">
               <button class="btn ghost small" id="btnDayplanNight" type="button" title="Extiende el día hasta las 06:00 del día siguiente">Horario nocturno</button>
-              <button class="btn danger small" id="btnDeleteShootDay" type="button">Borrar Día</button>
             </div>
 
             <div id="dayplanHead"></div>
@@ -493,7 +493,7 @@
                   <option value="30">30 min</option>
                 </select>
               </label>
-              <button class="btn iconBtn" id="btnSchedDays" title="Días: Todos" aria-label="Seleccionar días">📅</button>
+              <button class="btn iconBtn" id="btnSchedDays" title="Días: Todos" aria-label="Seleccionar días">Días: Todos</button>
               <button class="btn" id="btnSchedPrint">Imprimir</button>
             </div>
           </div>
@@ -692,6 +692,7 @@
     </div>
 
     <div class="schedCalGrid" id="schedCalGrid"></div>
+    <section class="schedUndatedDays" id="schedUndatedDays" data-ro-allow="1" hidden></section>
 
     <div class="schedCalActions">
       <button class="btn" id="schedCalAll" type="button">Todos</button>
@@ -699,7 +700,7 @@
       <button class="btn primary" id="schedCalDone" type="button">Cerrar</button>
     </div>
 
-    <div class="schedCalHint muted">Tip: clickeá un día con plan cargado para incluirlo/excluirlo.</div>
+    <div class="schedCalHint muted">Seleccioná las jornadas que querés ver. Ocultarlas no modifica el plan.</div>
   </dialog>
 
   <!-- Cache bust fuerte (mobile): cargamos assets con un v dinámico por sesión -->

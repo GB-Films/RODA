@@ -81,3 +81,11 @@ El selector abre el documento vinculado por su ID exacto y ofrece búsqueda, car
 Los números repetidos del documento reciben sufijos disponibles como `1A`, sin fusionar escenas ni ocupar sufijos explícitos. `sourceNumber` conserva la identificación original y el emparejamiento de revisiones mantiene los datos de rodaje de las escenas existentes.
 
 El lector dibuja una página PDF por vez, prioriza la vista actual y conserva una caché de hasta ocho páginas y 18 millones de píxeles fuera del margen de precarga. Volver a una hoja cercana no vuelve a rasterizarla. Las páginas de lectura registran su altura antes de permitir que el navegador omita el contenido fuera de vista; esto mantiene estable el recorrido y los saltos a escena. La integración y las pruebas de navegador de 60 hojas están en GB Studio.
+
+## Gestión de jornadas
+
+En **Plan General → Días**, el calendario incluye las fechas de rodaje y una lista de **Jornadas sin fecha**. Cada selección define qué columnas se muestran en este navegador; ocultar una jornada conserva su contenido y no cambia el plan compartido. Varias jornadas en la misma fecha se seleccionan juntas.
+
+En **Plan de Rodaje**, elegí una jornada y usá **Eliminar día**, junto a **+ Día**. La confirmación identifica la jornada y avisa si tiene escenas o bloques. Las escenas se conservan en el guion y quedan disponibles para reprogramar; los bloques de esa jornada se eliminan con ella. Se requiere permiso de edición de Planificación. Un plan puede quedar vacío: no se crea una jornada automáticamente al abrirlo o recargarlo.
+
+Validación: `node --test tests/*.test.cjs tests/*.test.mjs`. La prueba de navegador `tests/shoot-days-browser.cjs` requiere Playwright, `STUDIO_ROOT` y `RODA_ROOT` apuntando a la distribución integrada (`<Studio>/roda`); `RODA_QA_DIR` permite elegir dónde guardar las capturas.
