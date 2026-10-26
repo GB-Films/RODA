@@ -1646,11 +1646,11 @@ async function setShotThumb(sh, file){
       let st = it.start ?? 0;
       let du = it.dur ?? snapMin;
 
-      du = clamp(du, snapMin, span);
+      du = clamp(du, it.kind==="block" ? 5 : snapMin, span);
       st = clamp(st, 0, Math.max(0, span - snapMin));
 
       if(st < cursor){
-        st = snap(cursor, snapMin);
+        st = snapCeil(cursor, it.kind==="block" ? 5 : snapMin);
       }
 
       st = clamp(st, 0, Math.max(0, span - du));
@@ -5705,7 +5705,9 @@ items.push({
     resolveOverlapsPushDown(d, snapMin);
   }
 
-  function addDayplanNote(){
+  function addDayplanNote(type="note"){
+    if(isReadOnly())return roToast();
+    if(typeof type!=="string")type="note";
     const dayId = selectedDayplanDayId || selectedDayId || state.shootDays?.[0]?.id || null;
     const d = dayId ? getDay(dayId) : null;
     if(!d) return toast("No hay día seleccionado.");
@@ -5716,14 +5718,12 @@ items.push({
     let lastEnd = 0;
     for(const it of items) lastEnd = Math.max(lastEnd, (it.start||0) + (it.dur||0));
 
-    d.blocks.push({
-      id: uid("blk"),
-      title: "Nueva tarea",
-      detail: "",
-      startMin: snap(lastEnd, snapMin),
-      durMin: snapMin,
-      color: "#bdbdbd"
-    });
+    const block=window.RodaProductionBlocks?.create(type,uid("blk"),Math.ceil(lastEnd/5)*5,dayplanAvailSpan(d));
+    if(!block)return toast("No queda espacio para este bloque. Ajustá el horario de la jornada.");
+    d.blocks.push(block);
+    dayplanSelectedKey="block:"+block.id;
+    dayplanSelectedKeys=new Set([dayplanSelectedKey]);
+    if(el('dayplanBlockMenu'))el('dayplanBlockMenu').open=false;
 
     resolveOverlapsPushDown(d, snapMin);
     touch();
@@ -6099,6 +6099,7 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
 }
 
     const blocks = items.map((it)=>{
+      const snapMin=it.kind==="block" ? 5 : getDayplanSnap();
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, 0.75);
 const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
@@ -6685,7 +6686,7 @@ dayplanPointer = {
     const box = el("dayplanInspector");
     if(!box) return;
 
-    const snapMin = getDayplanSnap();
+    const snapMin = dayplanSelectedKey?.startsWith("block:") ? 5 : getDayplanSnap();
     const base = minutesFromHHMM(d.callTime || "08:00");
     const dpEndAbs = dayplanEndAbs(d);
 
@@ -6709,7 +6710,7 @@ dayplanPointer = {
 
     box.innerHTML = `
       <div class="row gap" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
-        <div><b>${it.kind==="scene" ? "Escena" : "Nota / tarea"}</b> <span class="muted">(${esc(it.title||"")})</span></div>
+        <div><b>${it.kind==="scene" ? "Escena" : "Bloque"}</b> <span class="muted">(${esc(it.title||"")})</span></div>
         <div class="row gap" style="align-items:center">
           <span class="muted small">Color</span>
           <div class="dpSwatches">
@@ -6807,7 +6808,7 @@ dayplanPointer = {
         if(!it0) return;
 
         const base0 = minutesFromHHMM(d0.callTime || "08:00");
-        const snap0 = getDayplanSnap();
+        const snap0 = it0.kind==="block" ? 5 : getDayplanSnap();
         const dpEndAbs0 = dayplanEndAbs(d0);
         const availSpan0 = Math.max(0, dpEndAbs0 - base0);
 
@@ -9289,7 +9290,10 @@ el("bdFileInput")?.addEventListener("change", ()=>{
       try{ renderCallSheetCalendar(); }catch(_e){}
       try{ renderReportsDetail(); }catch(_e){}
     });
-el("btnDayplanAddNote")?.addEventListener("click", addDayplanNote);
+el("btnDayplanAddNote")?.addEventListener("click", ()=>addDayplanNote("note"));
+    document.querySelectorAll('[data-production-block]').forEach(button=>button.addEventListener('click',()=>addDayplanNote(button.dataset.productionBlock)));
+    document.addEventListener('click',event=>{const menu=el('dayplanBlockMenu');if(menu?.open&&!menu.contains(event.target))menu.open=false;});
+    document.addEventListener('keydown',event=>{if(event.key==='Escape'&&el('dayplanBlockMenu')?.open){el('dayplanBlockMenu').open=false;el('dayplanBlockMenu').querySelector('summary').focus();}});
     el("btnDayplanAuto")?.addEventListener("click", ()=>{
       const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
       if(!d) return;
