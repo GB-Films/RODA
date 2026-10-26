@@ -22,6 +22,14 @@
   const manual=previous?.castManual||[],unchanged=previous?.summary===scene.body;
   return names([...detected,...manual.filter(name=>unchanged||mentioned(name,scene.body,aliases))],aliases);
  }
+ function personNameParts(person){
+  if('firstName' in person || 'lastName' in person)return {firstName:String(person.firstName||''),lastName:String(person.lastName||'')};
+  const full=String(person.name||'').trim(),parts=full.split(/\s+/);
+  // Two-part legacy names can be separated without guessing compound names.
+  return parts.length===2?{firstName:parts[0],lastName:parts[1]}:{firstName:full,lastName:''};
+ }
+ function syncPersonName(person){if('firstName' in person || 'lastName' in person)person.name=[person.firstName,person.lastName].map(v=>String(v||'').trim()).filter(Boolean).join(' ');return person;}
+ function setPersonName(person,firstName,lastName){Object.assign(person,{firstName,lastName});return syncPersonName(person);}
  const isPerson=person=>person.area==='Cast'&&!person.castProfile&&(person.castPerson||['name','phone','email'].some(field=>!!String(person[field]||'').trim()));
  const people=state=>(state.crew||[]).filter(isPerson);
  const profileFor=(state,name)=>(state.crew||[]).find(p=>p.area==='Cast'&&p.castProfile&&key(p.role)===key(name));
@@ -84,5 +92,5 @@
   }
   state.script??={versions:[]};state.script.castAliases=aliases;
  }
- const api={key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
+ const api={personNameParts,syncPersonName,setPersonName,key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

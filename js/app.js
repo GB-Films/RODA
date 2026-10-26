@@ -4271,7 +4271,7 @@ function renderDayCast(){
     list=list.filter(c=>(!window.RodaAccess||RodaAccess.canView(c.area==='Cast'?'cast':'crew'))&&(areaFilter==='all'||(areaFilter==='Cast'?c.area==='Cast':c.area!=='Cast')));
     if(q){
       list = list.filter(c=>{
-        const hay = `${c.area} ${c.role} ${c.name} ${c.phone} ${c.email} ${c.notes} ${RodaCast.personRoles(state,c.id).join(' ')}`.toLowerCase();
+        const hay = `${c.area} ${c.role} ${c.name} ${c.phone} ${c.email} ${c.notes}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -4292,7 +4292,7 @@ function renderDayCast(){
       if(c.area !== lastArea){
         const trG = document.createElement("tr");
         trG.className = "groupRow";
-        trG.innerHTML = `<td colspan="7">${esc(c.area)}</td>`;
+        trG.innerHTML = `<td colspan="8">${esc(c.area)}</td>`;
         tbody.appendChild(trG);
         lastArea = c.area;
       }
@@ -4301,7 +4301,7 @@ function renderDayCast(){
       const scope=c.area==='Cast'?'cast':'crew',readonly=isReadOnly(scope);
       tr.dataset.rodaSection=scope;tr.dataset.crewId=c.id;
       const displayRole=c.area==='Cast'&&!c.castPerson?'Actor / actriz':c.role||'';
-      const characters=c.area==='Cast'?RodaCast.personRoles(state,c.id):[];
+      const parts=RodaCast.personNameParts(c);
       tr.innerHTML = `
         <td>
           <div class="crewAreaCell">
@@ -4312,7 +4312,8 @@ function renderDayCast(){
           </div>
         </td>
         <td><input class="input" aria-label="Rol" value="${esc(displayRole)}" ${readonly?'disabled':''}/></td>
-        <td><input class="input" aria-label="Nombre" value="${esc(c.name||"")}" ${readonly?'disabled':''}/>${characters.length?`<small class="crew-characters">${esc(characters.join(' · '))}</small>`:''}</td>
+        <td><input class="input" aria-label="Nombre" value="${esc(parts.firstName)}" ${readonly?'disabled':''}/></td>
+        <td><input class="input" aria-label="Apellido" value="${esc(parts.lastName)}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Teléfono" value="${esc(c.phone||"")}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Email" value="${esc(c.email||"")}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Notas" value="${esc(c.notes||"")}" ${readonly?'disabled':''}/></td>
@@ -4332,11 +4333,12 @@ function renderDayCast(){
         });
       }
 
-      const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
-      const saveField=(field,value)=>{if(isReadOnly(scope))return false;RodaCast.preparePerson(state,real);real[field]=value;touch();return true;};
+      const [areaSel, role, name, lastName, phone, email, notes] = tr.querySelectorAll("select,input");
+      const saveField=(field,value)=>{if(isReadOnly(scope))return false;RodaCast.preparePerson(state,real);if(field==='firstName'||field==='lastName'){const nextParts=RodaCast.personNameParts(real);nextParts[field]=value;RodaCast.setPersonName(real,nextParts.firstName,nextParts.lastName);}else real[field]=value;touch();return true;};
       areaSel.addEventListener("change", ()=>{const next=normalizeCrewArea(areaSel.value);if(isReadOnly(scope)||isReadOnly(next==='Cast'?'cast':'crew'))return;RodaCast.preparePerson(state,real);if(real.area==='Cast'&&next!=='Cast')for(const p of state.crew)if(p.castProfile&&p.actorId===real.id)p.actorId='';real.area=next;if(next==='Cast')real.castPerson=true;touch();renderCrew();refreshElementSuggestions();renderReports();renderReportsDetail();});
       role.addEventListener("input", ()=>{if(saveField('role',role.value)){renderReports();renderReportsDetail();}});
-      name.addEventListener("input", ()=>{if(saveField('name',name.value)){refreshElementSuggestions();renderReports();renderReportsDetail();}});
+      name.addEventListener("input", ()=>{if(saveField('firstName',name.value)){refreshElementSuggestions();renderReports();renderReportsDetail();}});
+      lastName.addEventListener("input", ()=>{if(saveField('lastName',lastName.value)){refreshElementSuggestions();renderReports();renderReportsDetail();}});
       phone.addEventListener("input", ()=>saveField('phone',phone.value));
       email.addEventListener("input", ()=>saveField('email',email.value));
       notes.addEventListener("input", ()=>saveField('notes',notes.value));
@@ -4373,7 +4375,7 @@ function renderDayCast(){
           : `<div class="muted small">No está asignado a ningún día del Plan de Rodaje.</div>`;
 
         trD.innerHTML = `
-          <td colspan="7">
+          <td colspan="8">
             <div class="crewDetailBox">
               <div class="muted small" style="margin-bottom:8px;">Días donde está cargado</div>
               ${daysHtml}
@@ -4386,7 +4388,7 @@ function renderDayCast(){
 
     if(!list.length){
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="7" class="muted">No hay resultados.</td>`;
+      tr.innerHTML = `<td colspan="8" class="muted">No hay resultados.</td>`;
       tbody.appendChild(tr);
     }
   }
@@ -9934,6 +9936,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
   }
 
   function hydrateAll(){
+    for(const person of state.crew||[])RodaCast.syncPersonName(person);
     ensureScriptState();
     sanitizeScriptState({ migrateRawToLocal:true });
     ensureProjectConfig();
