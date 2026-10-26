@@ -53,8 +53,9 @@
       const slugline=String(sc.slugline||existing?.slugline||'').trim(),meta=headingMetadata(slugline),detected=breakdown(sc);
       const values={number:String(sc.number||'').replace(/^0+(?=\d)/,'').toUpperCase(),chapter:sc.chapter??'',slugline,intExt:sc.intExt||meta.intExt||existing?.intExt||'',location:sc.location||meta.location||existing?.location||'',timeOfDay:normalizeTOD(sc.timeOfDay||meta.timeOfDay||existing?.timeOfDay||''),summary:String(sc.body??sc.summary??existing?.summary??'').trim(),scriptVersionId:version.id};
       if(existing){
+        const cast=root.RodaCast?.resolveScene(sc,detected.cast||[],existing,state.script.castAliases||[]);
         Object.assign(existing,values);existing.elements??={};
-        for(const [cat,items]of Object.entries(detected))existing.elements[cat]=[...new Set([...(existing.elements[cat]||[]),...items])];
+        for(const [cat,items]of Object.entries(detected))existing.elements[cat]=cat==='cast'?(cast||items):[...new Set([...(existing.elements[cat]||[]),...items])];
         updated++;
       }else{
         existing={id:createId(),...values,pages:0,notes:'',elements:detected,shots:[]};
@@ -73,7 +74,7 @@
         if(oldScene.notes&&!destination.notes?.includes(oldScene.notes))destination.notes=[destination.notes,oldScene.notes].filter(Boolean).join('\n\n');
         destination.shots=[...(destination.shots||[]),...(oldScene.shots||[]).filter(s=>!destination.shots?.some(t=>t.id===s.id))];
         destination.shootingLocationId||=oldScene.shootingLocationId||'';
-        for(const [category,items]of Object.entries(oldScene.elements||{}))destination.elements[category]=[...new Set([...(destination.elements[category]||[]),...items])];
+        for(const [category,items]of Object.entries(oldScene.elements||{}))if(category!=='cast')destination.elements[category]=[...new Set([...(destination.elements[category]||[]),...items])];
       }
     }
     const retired=before.filter(s=>!used.has(s.id));
@@ -93,6 +94,7 @@
       }
       day.sceneIds=[...new Set(ids.map(id=>aliases.get(id)||id).filter(id=>used.has(id)))];
     }
+    if(root.RodaCast)root.RodaCast.unify(state,state.script.castAliases||[]);
     state.script.activeVersionId=version.id;version.appliedAt=new Date().toISOString();version.productionSyncVersion=2;
     return {added,updated,retained:0,archived:retired.length,merged:aliases.size};
   }

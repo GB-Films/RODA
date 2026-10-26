@@ -61,6 +61,7 @@
       getRemoteStamp:id=>read('stamp:'+id,''),setRemoteStamp:(id,stamp)=>write('stamp:'+id,stamp),
       sharedRevisions:()=>Object.fromEntries(revisions),
       readSharedState,commitSharedState,
+      presence:async activity=>{assertIdentity();const data=await projects.request(accessPath+'/presence',{method:'POST',body:JSON.stringify(activity),keepalive:true});assertIdentity();return data;},
       acceptSharedState:data=>{assertIdentity();if(JSON.stringify(project.rodaAccess)!==JSON.stringify(data.access)){root.location.reload();throw Error('Tus permisos cambiaron.');}baseline=data.parts;for(const [key,value] of Object.entries(data.revisions))revisions.set(key,value);},
       jsonbinGet:get,jsonbinPut:put,getEditPassword:()=>'',updateActiveProjectMeta:entry,
       createProject:async()=>{throw Error('Creá el proyecto desde GB Studio.');}
