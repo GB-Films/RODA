@@ -12,6 +12,7 @@
   function cancel(){
     if(!active)return;
     active.cancelled=true;active.observer?.disconnect();active.resize?.disconnect();
+    if(active.frame)root.cancelAnimationFrame(active.frame);
     active.task?.destroy().catch(()=>{});active=null;
   }
   async function renderPDF(container,snapshot){
@@ -26,17 +27,29 @@
     const doc=await task.promise;if(session.cancelled)return null;
     if(doc.numPages>500)throw Error('La copia PDF supera las 500 páginas.');
     container.replaceChildren();container.classList.add('script-pdf-pages');
-    const pages=new Map(),scroller=container.closest('.script-document-scroll');
-    function release(sheet){const info=pages.get(sheet);if(!info)return;const canvas=sheet.querySelector('canvas');canvas.width=canvas.height=0;info.rendered=false;info.rendering=false;delete sheet.dataset.rendered;}
-    async function paint(sheet){
-      const info=pages.get(sheet);if(!info||info.rendering||session.cancelled)return;
-      info.rendering=true;
-      const canvas=sheet.querySelector('canvas'),density=Math.min(root.devicePixelRatio||1,1.5);
-      canvas.width=Math.ceil(info.viewport.width*density);canvas.height=Math.ceil(info.viewport.height*density);
-      try{await info.page.render({canvasContext:canvas.getContext('2d'),viewport:info.viewport,transform:[density,0,0,density,0,0]}).promise;if(!session.cancelled){info.rendered=true;sheet.dataset.rendered='true';if(info.visible===false)release(sheet);}}
-      catch(error){if(!session.cancelled)sheet.dataset.renderError='true';}
+    const pages=new Map(),pending=new Set(),scroller=container.closest('.script-document-scroll');let busy=false,clock=0;
+    function release(info){info.canvas.width=info.canvas.height=0;info.rendered=false;delete info.sheet.dataset.rendered;}
+    function trim(){
+      const cached=Array.from(pages.values()).filter(info=>info.rendered),candidates=cached.filter(info=>!info.near).sort((a,b)=>a.lastUsed-b.lastUsed);
+      let pixels=cached.reduce((n,info)=>n+info.canvas.width*info.canvas.height,0),count=cached.length;
+      while((count>8||pixels>18000000)&&candidates.length){const info=candidates.shift();pixels-=info.canvas.width*info.canvas.height;count--;release(info);}
     }
-    session.observer=new IntersectionObserver(entries=>{for(const entry of entries){const info=pages.get(entry.target);if(info)info.visible=entry.isIntersecting;if(entry.isIntersecting)paint(entry.target);else if(info?.rendered)release(entry.target);}},{root:scroller,rootMargin:'900px 0px'});
+    function schedule(){if(!busy&&!session.frame&&pending.size&&!session.cancelled)session.frame=root.requestAnimationFrame(paintNext);}
+    async function paintNext(){
+      session.frame=0;if(session.cancelled||busy)return;
+      const bounds=scroller?.getBoundingClientRect()||{top:0,bottom:root.innerHeight},distance=info=>{const box=info.sheet.getBoundingClientRect();return Math.max(bounds.top-box.bottom,box.top-bounds.bottom,0);};
+      const info=Array.from(pending).filter(info=>info.near&&!info.rendered).sort((a,b)=>distance(a)-distance(b))[0];
+      if(!info)return;pending.delete(info);busy=true;
+      const density=Math.min(root.devicePixelRatio||1,1.5),canvas=info.canvas;
+      canvas.width=Math.ceil(info.viewport.width*density);canvas.height=Math.ceil(info.viewport.height*density);
+      try{
+        const render=info.page.render({canvasContext:canvas.getContext('2d'),viewport:info.viewport,transform:[density,0,0,density,0,0]});
+        render.onContinue=next=>root.requestAnimationFrame(()=>{if(!session.cancelled)next();});
+        await render.promise;if(!session.cancelled){info.rendered=true;info.lastUsed=++clock;info.sheet.dataset.rendered='true';}
+      }catch(error){if(!session.cancelled){info.sheet.dataset.renderError='true';canvas.width=canvas.height=0;}}
+      finally{pending.delete(info);busy=false;if(!session.cancelled){trim();schedule();}}
+    }
+    session.observer=new IntersectionObserver(entries=>{for(const entry of entries){const info=pages.get(entry.target);if(!info)continue;info.near=entry.isIntersecting;if(info.near){info.lastUsed=++clock;if(!info.rendered)pending.add(info);}else pending.delete(info);}trim();schedule();},{root:scroller,rootMargin:'900px 0px'});
     session.resize=new ResizeObserver(entries=>{for(const {target}of entries){const info=pages.get(target);if(info)target.querySelector('.script-pdf-text').style.setProperty('--scale-factor',String(info.viewport.scale*target.clientWidth/info.viewport.width));}});
     for(let n=1;n<=doc.numPages;n++){
       const page=await doc.getPage(n);if(session.cancelled)return null;
@@ -45,10 +58,10 @@
       const viewport=page.getViewport({scale:Math.min(4/3,1600/natural.width,2200/natural.height)}),sheet=document.createElement('section');
       sheet.className='script-pdf-page';sheet.dataset.page=String(n);sheet.dataset.pageLabel=n+' / '+doc.numPages;sheet.setAttribute('aria-label','Página '+n+' de '+doc.numPages);
       sheet.style.width=viewport.width+'px';sheet.style.aspectRatio=viewport.width+'/'+viewport.height;
-      const canvas=document.createElement('canvas');canvas.setAttribute('aria-hidden','true');
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=0;canvas.setAttribute('aria-hidden','true');
       const layer=document.createElement('div');layer.className='script-pdf-text';layer.style.setProperty('--scale-factor',String(viewport.scale));
       sheet.append(canvas,layer);container.append(sheet);if(n>1)sheet.before(document.createTextNode('\n\n'));
-      pages.set(sheet,{page,viewport,rendering:false});
+      pages.set(sheet,{sheet,canvas,page,viewport,rendered:false,near:false,lastUsed:0});
       const content=await page.getTextContent();if(session.cancelled)return null;
       const textLayer=new pdf.TextLayer({textContentSource:content,container:layer,viewport});await textLayer.render();
       layer.style.width='100%';layer.style.height='100%';
@@ -62,14 +75,13 @@
       session.resize.observe(sheet);session.observer.observe(sheet);
     }
     if(session.cancelled)return null;
-    if(container.firstElementChild)await paint(container.firstElementChild);
     return {pages:doc.numPages};
   }
   function readingPages(container,format={}){
     const layout=format.page||{},width=Math.min(1000,Math.max(300,Number(layout.width)||612)),height=Math.min(1600,Math.max(400,Number(layout.height)||792));
     const margins={top:72,right:72,bottom:72,left:72,...layout.margins};
     for(const side of Object.keys(margins))margins[side]=Math.max(12,Math.min(160,Number(margins[side])||72));
-    const nodes=Array.from(container.childNodes);container.replaceChildren();container.classList.add('script-reading-pages');
+    const nodes=Array.from(container.childNodes);container.replaceChildren();container.classList.remove('script-pagination-ready');container.classList.add('script-reading-pages');
     let sheet,body;
     function page(){sheet=document.createElement('section');sheet.className='script-reading-page';sheet.style.width=width*4/3+'px';sheet.style.minHeight=height*4/3+'px';
       for(const side of ['top','right','bottom','left'])sheet.style.setProperty('--page-'+side,Math.max(12,Math.min(160,Number(margins[side])||72))*4/3+'px');
@@ -99,7 +111,8 @@
         const rest=original.cloneNode(false);rest.append(range.extractContents());page();body.append(rest);paragraph=rest;
       }
     }
-    Array.from(container.children).forEach((p,i)=>{p.dataset.page=String(i+1);p.dataset.pageLabel=String(i+1);p.setAttribute('aria-label','Página '+(i+1));});
+    Array.from(container.children).forEach((p,i)=>{p.dataset.page=String(i+1);p.dataset.pageLabel=String(i+1);p.setAttribute('aria-label','Página '+(i+1));p.style.setProperty('--reading-page-height',p.getBoundingClientRect().height+'px');});
+    container.classList.add('script-pagination-ready');
     return container.children.length;
   }
   const api={PDF_LIMIT,capture,renderPDF,readingPages,cancel};root.RodaScriptPages=api;
