@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const pages=createRequire(import.meta.url)('../js/script-pages.js');
 import {createGoogleDocsImporter,resolveGoogleDocsSource} from '../js/google-docs.mjs';
 function fixture(options={}){
  const user={uid:'user',email:'user@example.test'},auth={currentUser:user},calls=[],progress=[],views=[];
@@ -12,7 +14,7 @@ function fixture(options={}){
  }
  const runtime={location:{origin:'https://studio.test'},google:{picker:{PickerBuilder:Builder,DocsView:View,DocsViewMode:{LIST:'list'},ViewId:{DOCUMENTS:'docs'},Action:{PICKED:'picked',CANCEL:'cancel'}}},RodaScriptDocument:{docsFormat:doc=>({text:doc.text,format:{version:1,blocks:[]}})},fetch:async(url,init)=>{calls.push({url,init});return options.fetch?options.fetch(url,init,calls.length):{ok:true,status:200,json:async()=>({documentId:'doc',title:'Guion',text:'1. INT. CASA - DÍA\nÚltima revisión',revisionId:'latest-revision'})};}};
  const importer=createGoogleDocsImporter({auth,GoogleAuthProvider:Provider,reauthenticateWithPopup:async()=>{authCalls++;return options.authorize?options.authorize():{user};},authorizeOtherAccount:options.authorizeOtherAccount,config:{},runtime,requestTimeout:25,interactionTimeout:40});
- return {importer,auth,calls,progress,views,get authCalls(){return authCalls;},get pickerCalls(){return pickerCalls;},get disposed(){return disposed;},onProgress:message=>progress.push(message)};
+ return {runtime,importer,auth,calls,progress,views,get authCalls(){return authCalls;},get pickerCalls(){return pickerCalls;},get disposed(){return disposed;},onProgress:message=>progress.push(message)};
 }
 test('linked document reads latest revision directly, disables cache and requests all tabs with accepted text',async()=>{
  const t=fixture(),result=await t.importer({id:'doc'},{onProgress:t.onProgress});
@@ -93,4 +95,25 @@ test('pasting the same linked URL retains its independent Google account after r
 test('a second expired response fails without an unbounded retry loop',async()=>{
  const t=fixture({fetch:async()=>({ok:false,status:401,json:async()=>({error:{}})})});
  await assert.rejects(t.importer({id:'doc'}),/venció/);assert.equal(t.calls.length,2);assert.equal(t.authCalls,2);
+});
+
+test('original PDF bytes are stored with the version under the same bounded file permission',async()=>{
+ const bytes=new TextEncoder().encode('%PDF-1.4\noriginal-page-data');
+ const t=fixture({fetch:async(url,init)=>url.includes('/drive/v3/')?{ok:true,status:200,headers:{get:()=>String(bytes.length)},arrayBuffer:async()=>bytes.buffer}:{ok:true,status:200,json:async()=>({documentId:'doc',text:'Ultimo guion',revisionId:'stable'})}});
+ t.runtime.RodaScriptPages=pages;const result=await t.importer({id:'doc'});
+ assert.equal(Buffer.from(result.format.pdf.data,'base64').toString(),'%PDF-1.4\noriginal-page-data');assert.equal(t.calls.length,3);
+ const exported=t.calls.find(c=>c.url.includes('/drive/v3/'));assert.equal(exported.init.cache,'no-store');assert.equal(exported.init.headers.Authorization,'Bearer memory-token');assert.equal(result.format.pdf.Authorization,undefined);
+});
+test('unavailable original pages retain readable text and explain the reading-page fallback',async()=>{
+ const t=fixture({fetch:async url=>url.includes('/drive/v3/')?{ok:false,status:403}:{ok:true,status:200,json:async()=>({text:'Texto intacto'})}});t.runtime.RodaScriptPages=pages;
+ const result=await t.importer({id:'doc'});assert.equal(result.text,'Texto intacto');assert.equal(result.format.pdf,undefined);assert.match(result.format.pageWarning,/páginas originales/);
+});
+test('a document edited during PDF export is not saved as a mismatched text/PDF version',async()=>{
+ let reads=0;const bytes=new TextEncoder().encode('%PDF-1.4\npages');
+ const t=fixture({fetch:async url=>url.includes('/drive/v3/')?{ok:true,status:200,arrayBuffer:async()=>bytes.buffer}:{ok:true,status:200,json:async()=>({text:'Texto',revisionId:String(++reads)})}});t.runtime.RodaScriptPages=pages;
+ await assert.rejects(t.importer({id:'doc'}),/cambió mientras/);
+});
+test('PDF snapshots reject invalid or oversized content and keep only original bytes',()=>{
+ assert.throws(()=>pages.capture(new TextEncoder().encode('not a PDF').buffer),/PDF válida/);
+ assert.throws(()=>pages.capture(new ArrayBuffer(pages.PDF_LIMIT+1)),/4 MB/);
 });

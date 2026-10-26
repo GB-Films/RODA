@@ -89,6 +89,17 @@ export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticate
       const doc=await response.json();return {response,doc};
     })(),signal,requestTimeout,'Google tardó demasiado en entregar el documento. Volvé a importar; tu guion anterior se conserva.',()=>controller.abort());
   }
+  async function pageSnapshot(id,token,signal,onProgress){
+    if(!runtime.RodaScriptPages)return null;
+    const controller=new AbortController();
+    return waitFor((async()=>{
+      onProgress('Descargando las páginas originales del guion…');
+      const response=await runtime.fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'/export?mimeType=application%2Fpdf',{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:controller.signal});
+      if(!response.ok)throw Error('No pudimos obtener las páginas originales de Google Docs. Actualizá otra vez o cargá su PDF.');
+      if(Number(response.headers?.get('content-length'))>runtime.RodaScriptPages.PDF_LIMIT)throw Error('La copia PDF es demasiado grande. Cargá un PDF más liviano para conservar sus hojas.');
+      return runtime.RodaScriptPages.capture(await response.arrayBuffer());
+    })(),signal,requestTimeout,'Google tardó demasiado en entregar las páginas originales.',()=>controller.abort());
+  }
   return async function importDocument(link,{signal,onProgress=()=>{},chooseAccount=false}={}){
     signal?.throwIfAborted();
     const savedOtherAccount=link?.accountEmail&&link.accountEmail!==auth.currentUser?.email;
@@ -124,6 +135,14 @@ export function createGoogleDocsImporter({auth,GoogleAuthProvider,reauthenticate
     onProgress('Detectando las escenas de la última versión…');
     const formatted=runtime.RodaScriptDocument.docsFormat(doc),text=formatted.text;
     if(!text.trim())throw Error('El documento no contiene texto de guion.');
+    let snapshot;
+    try{snapshot=await pageSnapshot(id,token,signal,onProgress);}
+    catch(error){if(error.name==='AbortError')throw error;formatted.format.pageWarning=error.message;}
+    if(snapshot){
+      if(doc.revisionId){const checked=await readDocument(id,token,signal);if(!checked.response.ok||checked.doc.revisionId!==doc.revisionId)throw Error('El documento cambió mientras se descargaban sus páginas. Volvé a actualizar; el guion anterior se conserva.');}
+      formatted.format.pdf=snapshot;
+    }
+    signal?.throwIfAborted();
     return {id,url:'https://docs.google.com/document/d/'+id+'/edit',title:doc.title||'Google Docs',revisionId:doc.revisionId||'',accountEmail:documentAccountEmail,text,format:formatted.format};
   };
 }
