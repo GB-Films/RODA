@@ -89,3 +89,9 @@ En **Plan General → Días**, el calendario incluye las fechas de rodaje y una 
 En **Plan de Rodaje**, elegí una jornada y usá **Eliminar día**, junto a **+ Día**. La confirmación identifica la jornada y avisa si tiene escenas o bloques. Las escenas se conservan en el guion y quedan disponibles para reprogramar; los bloques de esa jornada se eliminan con ella. Se requiere permiso de edición de Planificación. Un plan puede quedar vacío: no se crea una jornada automáticamente al abrirlo o recargarlo.
 
 Validación: `node --test tests/*.test.cjs tests/*.test.mjs`. La prueba de navegador `tests/shoot-days-browser.cjs` requiere Playwright, `STUDIO_ROOT` y `RODA_ROOT` apuntando a la distribución integrada (`<Studio>/roda`); `RODA_QA_DIR` permite elegir dónde guardar las capturas.
+
+## Diálogos de la aplicación
+
+`js/dialogs.js` y `css/dialogs.css` definen las confirmaciones, avisos y pedidos de datos de Roda. Las acciones esperan la respuesta antes de modificar el proyecto. Las eliminaciones muestran un botón con el nombre de la acción y empiezan con Cancelar seleccionado; Escape y cerrar equivalen a cancelar. Los campos de contraseña permanecen ocultos y los errores se muestran dentro del diálogo. Los textos se insertan como texto, sin interpretar HTML.
+
+Las nuevas confirmaciones deben usar `await RodaDialogs.confirm({title, message, confirmLabel, danger})`; para pedir datos se usa `await RodaDialogs.prompt({title, label, value, inputType})` y para avisos `await RodaDialogs.alert({title, message})`. No agregar llamadas nativas a `confirm`, `prompt` o `alert`. Las advertencias del navegador al cerrar una pestaña con cambios pendientes conservan su protección original. La prueba de navegador `tests/dialogs.browser.cjs` comprueba confirmación, cancelación, teclado, foco, contraseñas, texto literal y diálogos consecutivos y anidados.
