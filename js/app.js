@@ -4251,7 +4251,37 @@ function renderDayCast(){
     renderReportsDetail();
   }
 
+  function openCrewAction(mode,personId){
+    const person=state.crew.find(p=>p.id===personId),history=state.crew.filter(p=>p.mergedInto);
+    if(mode!=='history'&&(!person||isReadOnly(person.area==='Cast'?'cast':'crew')))return;
+    let dialog=el('crewActionDialog');if(!dialog){dialog=document.createElement('dialog');dialog.id='crewActionDialog';dialog.className='crew-action-dialog';dialog.setAttribute('aria-labelledby','crewActionTitle');document.body.append(dialog);}
+    const close=()=>dialog.close();
+    const refresh=message=>{touch();hydrateAll();renderDayPlan();close();toast(message);};
+    const heading=mode==='history'?'Unificaciones':mode==='merge'?'Unificar fichas':'Quitar integrante';
+    dialog.innerHTML='<div class="crew-dialog-heading"><h2 id="crewActionTitle">'+heading+'</h2><button type="button" class="btn icon ghost" data-close aria-label="Cerrar">×</button></div>';
+    if(mode==='history'){
+      const list=document.createElement('div');list.className='crew-merge-history';
+      for(const row of history){const target=state.crew.find(p=>p.id===row.mergedInto),item=document.createElement('div');item.className='crew-merge-history-row';item.innerHTML='<div><strong>'+esc(row.name||'Sin nombre')+'</strong><small>Unificada con '+esc(target?.name||'otra ficha')+'</small></div><button type="button" class="btn small" '+(isReadOnly('cast')?'disabled':'')+'>Restaurar ficha</button>';item.querySelector('button').onclick=()=>{if(isReadOnly('cast'))return;if(RodaCast.restorePerson(state,row.id))refresh('Ficha restaurada. Se conservaron los datos combinados.');};list.append(item);}
+      dialog.append(list);dialog.insertAdjacentHTML('beforeend','<p class="crew-dialog-copy">Al restaurar, vuelven la ficha y sus asignaciones originales si no se asignaron a otra persona. Los datos combinados se conservan.</p><div class="crew-dialog-actions"><button type="button" class="btn" data-close>Cerrar</button></div>');
+    }else{
+      const roles=person.area==='Cast'?RodaCast.personRoles(state,person.id):[],candidates=RodaCast.duplicates(state,person);
+      dialog.insertAdjacentHTML('beforeend','<p class="crew-dialog-person">'+esc(person.name||'Integrante sin nombre')+'</p><p class="crew-dialog-copy">'+(mode==='merge'?'Se combinarán las dos fichas en una sola persona. Se conservan los personajes asignados, sus citaciones y los datos de ambas.':'Se quitará esta persona del proyecto y se eliminarán sus datos de contacto. '+(roles.length?roles.length+' personaje'+(roles.length===1?' quedará':'s quedarán')+' sin actor asignado. Las escenas y sus horarios se conservan.':'Se quitará su asignación a las jornadas.'))+'</p>');
+      if(mode==='merge')dialog.insertAdjacentHTML('beforeend','<label class="crew-dialog-field">Unificar con<select class="input" id="crewMergeTarget">'+candidates.map((p,i)=>'<option value="'+esc(p.id)+'">'+esc(p.name)+' · ficha '+(i+1)+'</option>').join('')+'</select></label><p class="crew-dialog-note">Podés restaurar la ficha de origen desde Unificaciones.</p>');
+      else if(candidates.length)dialog.insertAdjacentHTML('beforeend','<p class="crew-dialog-note">Hay otra ficha con el mismo nombre. Para conservar los datos y personajes de ambas, elegí Unificar en la tabla.</p>');
+      dialog.insertAdjacentHTML('beforeend','<p class="crew-dialog-error" role="alert" id="crewActionError"></p><div class="crew-dialog-actions"><button type="button" class="btn ghost" data-close id="crewActionCancel">Cancelar</button><button type="button" class="btn '+(mode==='merge'?'crew-dialog-primary':'danger')+'" id="crewActionConfirm">'+(mode==='merge'?'Unificar fichas':'Quitar de Equipo')+'</button></div>');
+      el('crewActionConfirm').onclick=()=>{
+        const current=state.crew.find(p=>p.id===personId);if(!current||current.mergedInto){el('crewActionError').textContent='Esta ficha cambió. Cerrá esta ventana y revisá Equipo.';return;}if(isReadOnly(current.area==='Cast'?'cast':'crew'))return;
+        try{
+          if(mode==='merge'){RodaCast.mergePeople(state,personId,el('crewMergeTarget').value);refresh('Fichas unificadas. Personajes y datos conservados.');}
+          else{for(const day of state.shootDays)day.crewIds=(day.crewIds||[]).filter(id=>id!==personId);RodaCast.removePerson(state,personId);refresh('Integrante quitado de Equipo.');}
+        }catch(error){el('crewActionError').textContent=error.message;}
+      };
+    }
+    dialog.querySelectorAll('[data-close]').forEach(button=>button.onclick=close);dialog.showModal();el('crewActionCancel')?.focus();
+  }
+
   function renderCrew(){
+    const historyButton=el("btnCrewMergeHistory");if(historyButton){historyButton.classList.toggle("hidden",!state.crew.some(p=>p.mergedInto));historyButton.onclick=()=>openCrewAction("history");}
     const table = el("crewTable");
     if(!table) return;
     const tbody = table.querySelector("tbody");
@@ -4317,7 +4347,7 @@ function renderDayCast(){
         <td><input class="input" aria-label="Teléfono" value="${esc(c.phone||"")}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Email" value="${esc(c.email||"")}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Notas" value="${esc(c.notes||"")}" ${readonly?'disabled':''}/></td>
-        <td><button class="btn danger" ${readonly?'disabled':''}>Borrar</button></td>
+        <td class="crew-person-actions">${RodaCast.duplicates(state,c).length?`<button type="button" class="btn small" data-merge-person ${readonly?'disabled':''}>Unificar</button>`:''}<button class="btn danger" ${readonly?'disabled':''}>Borrar</button></td>
       `;
 
       const expBtn = tr.querySelector(".crewExpander");
@@ -4343,21 +4373,8 @@ function renderDayCast(){
       email.addEventListener("input", ()=>saveField('email',email.value));
       notes.addEventListener("input", ()=>saveField('notes',notes.value));
 
-      const delBtn = tr.querySelector("button.btn.danger");
-      delBtn?.addEventListener("click", ()=>{
-        if(isReadOnly(scope))return;
-        if(!confirm("Borrar integrante?")) return;
-        for(const d of state.shootDays){
-          d.crewIds = (d.crewIds||[]).filter(id=>id!==real.id);
-        }
-        RodaCast.removePerson(state,real.id);
-        touch();
-        renderCrew();
-        refreshElementSuggestions();
-        renderDayDetail();
-        renderReports();
-        renderReportsDetail();
-      });
+      tr.querySelector('[data-merge-person]')?.addEventListener('click',()=>openCrewAction('merge',real.id));
+      tr.querySelector('button.btn.danger')?.addEventListener('click',()=>openCrewAction('delete',real.id));
 
       tbody.appendChild(tr);
 
@@ -9936,7 +9953,7 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
   }
 
   function hydrateAll(){
-    for(const person of state.crew||[])RodaCast.syncPersonName(person);
+    for(const person of state.crew||[])RodaCast.syncPersonName(person);RodaCast.reconcileMergedPeople(state);
     ensureScriptState();
     sanitizeScriptState({ migrateRawToLocal:true });
     ensureProjectConfig();
