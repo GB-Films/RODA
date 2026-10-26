@@ -7,5 +7,9 @@
 .dpBlockChoices button:disabled{opacity:.4;cursor:default;}
 .dpBlockChoices small{font-size:11px;color:#b7b7b7;white-space:nowrap;}
 .dpBlock[data-kind="block"] .dpSlug{font-weight:650;}
+.dpBlock[data-kind="block"],.schedBlock[data-kind="block"]{color:var(--production-ink,#111);}
+.dpBlock[data-kind="block"] .dpTime,.dpBlock[data-kind="block"] .dpBlockDetail,.roda-studio .dpBlock[data-kind="block"] .dpTime,.roda-studio .dpBlock[data-kind="block"] .dpBlockDetail,.schedBlock[data-kind="block"] .title,.schedBlock[data-kind="block"] .meta,.schedBlock[data-kind="block"] .schedNote{color:inherit;}
+.dpBlock[data-kind="block"] .dpMiniBtn{color:inherit;background:transparent;}
+.dpBlock[data-kind="block"].sel{outline-color:var(--production-ink,#111);}
 @media(max-width:640px){.dpBlockChoices{left:auto;right:0;}}
 @media print{.dpBlockMenu{display:none!important;}}
