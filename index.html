@@ -8,6 +8,7 @@
   <title>GB Production Board</title>
   <link href="css/styles.css?v=20260124-01" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
+<link rel="stylesheet" href="css/production-blocks.css?v=1.14.0">
 </head>
 <body>
   <div class="shell">
@@ -405,7 +406,7 @@
               <div class="row gap" style="flex-wrap:wrap">
                 <select class="input compact" id="dayplanSelect"></select>
                 <button class="btn" id="btnAddShootDay">+ Día</button>
-                <button class="btn" id="btnDayplanAddNote">+ Nota / tarea</button>
+                <details class="dpBlockMenu" id="dayplanBlockMenu"><summary class="btn">+ Bloque</summary><div class="dpBlockChoices" aria-label="Agregar bloque de producción"><button type="button" data-production-block="lunch">Almuerzo <small>45 min</small></button><button type="button" data-production-block="dinner">Cena <small>45 min</small></button><button type="button" data-production-block="travel">Traslado <small>30 min</small></button><button type="button" data-production-block="arrival">Llegada al rodaje <small>15 min</small></button><button type="button" data-production-block="setup">Armado técnico <small>30 min</small></button><button type="button" data-production-block="break">Pausa <small>15 min</small></button><button type="button" id="btnDayplanAddNote">Nota / tarea <small>15 min</small></button></div></details>
               </div>
 
               <div class="row gap" style="align-items:center; flex-wrap:wrap">
@@ -714,7 +715,7 @@
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
     ];
-    const appFiles = ["js/firebase-config.js","js/utils.js","js/day-swap.js","js/collaboration.js","js/storage.js","js/app.js"];
+    const appFiles = ["js/firebase-config.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/storage.js","js/app.js"];
 
     function loadScript(src){
       return new Promise((res)=>{
