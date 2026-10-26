@@ -1,5 +1,5 @@
 (function(root){
- const views={script:'Guion',breakdown:'Breakdown',locations:'Locaciones',cast:'Reparto',shooting:'Call diario',dayplan:'Plan de rodaje',schedule:'Plan general',shotlist:'Shotlist',elements:'Elementos',crew:'Equipo técnico',reports:'Reportes',callsheet:'Reportes',filters:'Filtros'};
+ const views={script:'Guion',breakdown:'Breakdown',locations:'Locaciones',cast:'Reparto',shooting:'Call diario',dayplan:'Plan de rodaje',schedule:'Plan general',shotlist:'Shotlist',elements:'Elementos',crew:'Equipo',teamCast:'Equipo · Cast',reports:'Reportes',callsheet:'Reportes',filters:'Filtros'};
  const fields={time:'horario',duration:'duración',notes:'notas',title:'nombre',date:'fecha',location:'locación',actor:'intérprete',scene:'escena',script:'guion',element:'elemento',shot:'plano',crew:'integrante'};
  function create({send,getActivity,describe,mount}){
   const sessionId=crypto.randomUUID();let rows=[],timer,busy=false,again=false,stopped=false,lastKey='',connected=false,dragging=null;

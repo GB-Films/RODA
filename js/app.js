@@ -1,6 +1,6 @@
 (function(){
   const el = (id)=>document.getElementById(id);
-  const views = ["breakdown","shooting","dayplan","schedule","shotlist","elements","crew","reports","callsheet"];
+  const views = ["cast","breakdown","shooting","dayplan","schedule","shotlist","elements","crew","reports","callsheet"];
 
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
@@ -2143,6 +2143,8 @@ function setupScheduleWheelScroll(){
 }
 
   function showView(name){
+    document.body.dataset.rodaView=name;
+    if(name==='cast')renderCastDirectory();
     // Reset print-only mode if a browser skipped the afterprint event.
     try{ clearPrintOrientation(); }catch(_e){}
     try{ cleanupGbPrintRoot(); }catch(_e){}
@@ -2313,23 +2315,42 @@ function setupScheduleWheelScroll(){
       .trim();
   }
   function getCastRoster(){
-    // Cast en Breakdown = Rol (si no hay rol, cae al Nombre para compatibilidad)
-    return union(
-      state.crew
-        .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
-        .filter(c=>c.area==="Cast")
-        .map(c=>String(c.role || c.name || "").trim())
-        .filter(Boolean)
-    ).sort((a,b)=>a.localeCompare(b));
+    return RodaCast.roster(state).sort((a,b)=>a.localeCompare(b));
   }
 
   function findCastCrewEntryByName(name){
-    const key = normName(name);
-    const crew = (state.crew||[]);
-    // Prioridad: match por Rol (nuevo flujo). Si no, por Nombre (compatibilidad).
-    return crew.find(c=> normalizeCrewArea(c.area)==="Cast" && normName(c.role)===key)
-        || crew.find(c=> normalizeCrewArea(c.area)==="Cast" && normName(c.name)===key)
-        || null;
+    return RodaCast.actorFor(state,name);
+  }
+  function sceneLinks(scenes){return scenes.map(s=>'<button class="scene-link" data-cast-scene="'+esc(s.id)+'" data-ro-allow="1">#'+esc(s.number)+'</button>').join('');}
+  function bindSceneLinks(root){root.querySelectorAll('[data-cast-scene]').forEach(b=>b.onclick=()=>{selectedSceneId=b.dataset.castScene;showView('breakdown');renderScenesTable();renderSceneEditor();});}
+  function renderCastDirectory(){
+    const root=el('castDirectory');if(!root)return;
+    const groups=new Map();
+    for(const s of state.scenes)for(const name of s.elements?.cast||[]){const key=normName(name);if(!key)continue;if(!groups.has(key))groups.set(key,{name,scenes:[]});const g=groups.get(key);if(!g.scenes.includes(s))g.scenes.push(s);}
+    if(!state.script?.activeVersionId)for(const name of getCastRoster())if(!groups.has(normName(name)))groups.set(normName(name),{name,scenes:[]});
+    const all=[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    const typeOf=g=>RodaCast.typeFor(state,g.name);
+    el('castStats').innerHTML=`<div><strong>${all.filter(g=>typeOf(g)==='character').length}</strong><span>Personajes</span></div><div><strong>${all.filter(g=>typeOf(g)==='extra').length}</strong><span>Figuración / acción</span></div><div><strong>${all.filter(g=>typeOf(g)==='voice').length}</strong><span>Voces</span></div><div><strong data-cast-assigned>${all.filter(g=>findCastCrewEntryByName(g.name)?.name).length}</strong><span>Con intérprete</span></div>`;
+
+    const q=normName(el('castSearch').value),kind=el('castKindFilter')?.value||'all',entries=all.filter(g=>(kind==='all'||typeOf(g)===kind)&&(!q||normName(g.name+' '+(findCastCrewEntryByName(g.name)?.name||'')+' '+((state.script.castAliases||[]).find(row=>normName(row.name)===normName(g.name))?.aliases?.join(' ')||'')).includes(q)));
+    const actors=RodaCast.people(state).filter(p=>String(p.name||'').trim()).slice().sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    root.innerHTML=entries.map((g,i)=>{
+      const person=findCastCrewEntryByName(g.name),days=state.shootDays.filter(d=>g.scenes.some(s=>(d.sceneIds||[]).includes(s.id)));
+      return `<article class="card cast-card"><div class="cardContent"><div class="cast-title"><span class="cast-avatar">${esc(g.name.slice(0,2))}</span><div><h2>${esc(g.name)}</h2><span class="muted small">${g.scenes.length} escenas · ${days.length} jornadas</span></div></div><label>Intérprete<select class="input" data-cast-entry="${i}" aria-label="Intérprete de ${esc(g.name)}"><option value="">${actors.length?'Sin asignar':'Cargá actores en Equipo'}</option>${actors.map(actor=>`<option value="${esc(actor.id)}" ${person?.id===actor.id?'selected':''}>${esc(actor.name)}</option>`).join('')}</select></label><label>Participación<select class="input" data-cast-type="${i}">${[["character","Personaje"],["extra","Figuración / acción"],["voice","Voz"]].map(([value,label])=>`<option value="${value}" ${typeOf(g)===value?"selected":""}>${label}</option>`).join("")}</select></label><div class="scene-links">${sceneLinks(g.scenes)}</div><p class="muted small">${esc(days.map(d=>(d.label||'Jornada')+(d.date?' · '+formatDDMMYYYY(d.date):'')).join(' / ')||'Sin jornadas programadas')}</p><button class="btn small" data-cast-plan="${i}" data-ro-allow="1">Ver plan de rodaje →</button></div></article>`;
+    }).join('')||'<div class="empty-state">No hay personajes para esta búsqueda. Revisá el reparto detectado en el desglose del guion.</div>';
+    root.querySelectorAll('[data-cast-entry]').forEach(input=>{input.disabled=isReadOnly();input.onchange=()=>{
+      if(isReadOnly())return roToast();const g=entries[Number(input.dataset.castEntry)];
+      RodaCast.assign(state,g.name,input.value);touch();refreshElementSuggestions();
+      el('castStats').querySelector('[data-cast-assigned]').textContent=all.filter(g=>findCastCrewEntryByName(g.name)?.name).length;
+    };});
+    root.querySelectorAll('[data-cast-plan]').forEach(b=>b.onclick=()=>showView('dayplan'));
+    root.querySelectorAll('[data-cast-type]').forEach(select=>{select.disabled=isReadOnly();select.onchange=()=>{
+      if(isReadOnly())return;const g=entries[Number(select.dataset.castType)];
+      RodaCast.setType(state,g.name,select.value);touch();renderCastDirectory();
+    };});
+    bindSceneLinks(root);el('castSearch').oninput=renderCastDirectory;el('castKindFilter').onchange=renderCastDirectory;
+    el('btnCastTeam').onclick=()=>{showView('crew');el('crewAreaFilter').value='Cast';renderCrew();};
+    const review=el('btnCastReview');if(review){review.hidden=!['script','cast','breakdown','planning'].every(section=>!isReadOnly(section));review.onclick=openCastReview;}
   }
   function getExistingElementsByCat(cat){
     const set = new Set();
@@ -2870,17 +2891,9 @@ function setupScheduleWheelScroll(){
 
     if(cat === "cast"){
       const roster = getCastRoster();
-      if(!roster.length){
-        toast("No hay Cast cargado. Cargalo en Equipo técnico (Área Cast).");
-        return;
-      }
       const nIn = normName(item);
       const exact = roster.find(r => normName(r) === nIn);
-      if(exact) item = exact;
-      else{
-        toast("Ese rol no está en Cast (Equipo técnico). Cargalo ahí primero.");
-        return;
-      }
+      item=RodaCast.canonical(exact||item,state.script?.castAliases||[]);
     }
 
     s.elements[cat] = s.elements[cat] || [];
@@ -4221,8 +4234,12 @@ function renderDayCast(){
   }
 
   // ===================== Crew =====================
-  function addCrew(){
-    state.crew.push({ id: uid("crew"), area:"Produccion", role:"", name:"", phone:"", email:"", notes:"" });
+  function addCrew(area){
+    area=typeof area==='string'?area:(el('crewAreaFilter')?.value==='Cast'||isReadOnly('crew')?'Cast':'Produccion');
+    if(isReadOnly(area==='Cast'?'cast':'crew'))return roToast();
+    if(el('crewSearch'))el('crewSearch').value='';
+    if(area==='Cast'&&el('crewAreaFilter')?.value==='technical')el('crewAreaFilter').value='Cast';
+    state.crew.push({ id: uid("crew"), area, role:area==='Cast'?'Actor / actriz':'', name:"", phone:"", email:"", notes:"", ...(area==='Cast'?{castPerson:true}:{}) });
     touch();
     renderCrew();
     refreshElementSuggestions();
@@ -4236,20 +4253,22 @@ function renderDayCast(){
     if(!table) return;
     const tbody = table.querySelector("tbody");
     const q = (el("crewSearch")?.value||"").toLowerCase();
+    const areaFilter=el('crewAreaFilter')?.value||'all';
     tbody.innerHTML = "";
 
     // Helper: which shoot days include this crew member
     function crewDays(crewId){
       sortShootDaysInPlace();
       return state.shootDays
-        .filter(d => (d.crewIds||[]).includes(crewId))
+        .filter(d => (d.crewIds||[]).includes(crewId)||dayScenes(d).some(s=>(s.elements?.cast||[]).some(role=>RodaCast.actorFor(state,role)?.id===crewId)))
         .map(d => ({ id:d.id, date:d.date, label:d.label, location:d.location, callTime:d.callTime }));
     }
 
-    let list = state.crew.map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
+    let list = state.crew.filter(c=>normalizeCrewArea(c.area)!=='Cast'||RodaCast.isPerson(c)).map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
+    list=list.filter(c=>(!window.RodaAccess||RodaAccess.canView(c.area==='Cast'?'cast':'crew'))&&(areaFilter==='all'||(areaFilter==='Cast'?c.area==='Cast':c.area!=='Cast')));
     if(q){
       list = list.filter(c=>{
-        const hay = `${c.area} ${c.role} ${c.name} ${c.phone} ${c.email} ${c.notes}`.toLowerCase();
+        const hay = `${c.area} ${c.role} ${c.name} ${c.phone} ${c.email} ${c.notes} ${RodaCast.personRoles(state,c.id).join(' ')}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -4276,21 +4295,25 @@ function renderDayCast(){
       }
 
       const tr = document.createElement("tr");
+      const scope=c.area==='Cast'?'cast':'crew',readonly=isReadOnly(scope);
+      tr.dataset.rodaSection=scope;tr.dataset.crewId=c.id;
+      const displayRole=c.area==='Cast'&&!c.castPerson?'Actor / actriz':c.role||'';
+      const characters=c.area==='Cast'?RodaCast.personRoles(state,c.id):[];
       tr.innerHTML = `
         <td>
           <div class="crewAreaCell">
-            <button class="btn icon crewExpander" title="Ver días">▸</button>
-            <select class="input">
-              ${crewAreas.map(a=>`<option value="${esc(a)}" ${c.area===a?"selected":""}>${esc(a)}</option>`).join("")}
+            <button class="btn icon crewExpander" title="Ver días" data-ro-allow="1">▸</button>
+            <select class="input" aria-label="Área" ${readonly?'disabled':''}>
+              ${crewAreas.map(a=>`<option value="${esc(a)}" ${c.area===a?"selected":""} ${isReadOnly(a==='Cast'?'cast':'crew')?'disabled':''}>${esc(a)}</option>`).join("")}
             </select>
           </div>
         </td>
-        <td><input class="input" value="${esc(c.role||"")}" /></td>
-        <td><input class="input" value="${esc(c.name||"")}" /></td>
-        <td><input class="input" value="${esc(c.phone||"")}" /></td>
-        <td><input class="input" value="${esc(c.email||"")}" /></td>
-        <td><input class="input" value="${esc(c.notes||"")}" /></td>
-        <td><button class="btn danger">Borrar</button></td>
+        <td><input class="input" aria-label="Rol" value="${esc(displayRole)}" ${readonly?'disabled':''}/></td>
+        <td><input class="input" aria-label="Nombre" value="${esc(c.name||"")}" ${readonly?'disabled':''}/>${characters.length?`<small class="crew-characters">${esc(characters.join(' · '))}</small>`:''}</td>
+        <td><input class="input" aria-label="Teléfono" value="${esc(c.phone||"")}" ${readonly?'disabled':''}/></td>
+        <td><input class="input" aria-label="Email" value="${esc(c.email||"")}" ${readonly?'disabled':''}/></td>
+        <td><input class="input" aria-label="Notas" value="${esc(c.notes||"")}" ${readonly?'disabled':''}/></td>
+        <td><button class="btn danger" ${readonly?'disabled':''}>Borrar</button></td>
       `;
 
       const expBtn = tr.querySelector(".crewExpander");
@@ -4307,20 +4330,22 @@ function renderDayCast(){
       }
 
       const [areaSel, role, name, phone, email, notes] = tr.querySelectorAll("select,input");
-      areaSel.addEventListener("change", ()=>{ real.area = normalizeCrewArea(areaSel.value); touch(); renderCrew(); refreshElementSuggestions(); renderReports(); renderReportsDetail(); });
-      role.addEventListener("input", ()=>{ real.role = role.value; touch(); renderReports(); renderReportsDetail(); });
-      name.addEventListener("input", ()=>{ real.name = name.value; touch(); refreshElementSuggestions(); renderReports(); renderReportsDetail(); });
-      phone.addEventListener("input", ()=>{ real.phone = phone.value; touch(); });
-      email.addEventListener("input", ()=>{ real.email = email.value; touch(); });
-      notes.addEventListener("input", ()=>{ real.notes = notes.value; touch(); });
+      const saveField=(field,value)=>{if(isReadOnly(scope))return false;RodaCast.preparePerson(state,real);real[field]=value;touch();return true;};
+      areaSel.addEventListener("change", ()=>{const next=normalizeCrewArea(areaSel.value);if(isReadOnly(scope)||isReadOnly(next==='Cast'?'cast':'crew'))return;RodaCast.preparePerson(state,real);if(real.area==='Cast'&&next!=='Cast')for(const p of state.crew)if(p.castProfile&&p.actorId===real.id)p.actorId='';real.area=next;if(next==='Cast')real.castPerson=true;touch();renderCrew();refreshElementSuggestions();renderReports();renderReportsDetail();});
+      role.addEventListener("input", ()=>{if(saveField('role',role.value)){renderReports();renderReportsDetail();}});
+      name.addEventListener("input", ()=>{if(saveField('name',name.value)){refreshElementSuggestions();renderReports();renderReportsDetail();}});
+      phone.addEventListener("input", ()=>saveField('phone',phone.value));
+      email.addEventListener("input", ()=>saveField('email',email.value));
+      notes.addEventListener("input", ()=>saveField('notes',notes.value));
 
       const delBtn = tr.querySelector("button.btn.danger");
       delBtn?.addEventListener("click", ()=>{
+        if(isReadOnly(scope))return;
         if(!confirm("Borrar integrante?")) return;
         for(const d of state.shootDays){
           d.crewIds = (d.crewIds||[]).filter(id=>id!==real.id);
         }
-        state.crew = state.crew.filter(x=>x.id!==real.id);
+        RodaCast.removePerson(state,real.id);
         touch();
         renderCrew();
         refreshElementSuggestions();
@@ -4996,7 +5021,7 @@ for(const b of (d.blocks||[])){
   const height = Math.max(34, durMin * pxPerMin);
 
   const col = safeHexColor(b.color || "#E5E7EB", "#E5E7EB");
-  const bg = hexToRgba(col, 0.10);
+  const appearance=RodaProductionBlocks.appearance(col),bg=appearance.background;
 
   const block = document.createElement("div");
   block.className = "schedBlock";
@@ -5006,6 +5031,7 @@ for(const b of (d.blocks||[])){
   block.style.top = `${top}px`;
   block.style.height = `${height}px`;
   block.style.background = bg;
+  block.style.setProperty('--production-ink',appearance.ink);
   block.style.borderLeft = `6px solid ${col}`;
     const startTxt = clockLabelFromCall(d, startMin);
   const endTxt   = clockLabelFromCall(d, startMin + durMin);
@@ -6097,7 +6123,8 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
     const blocks = items.map((it)=>{
       const snapMin=it.kind==="block" ? 5 : getDayplanSnap();
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-      const bg = hexToRgba(col, 0.75);
+      const appearance=RodaProductionBlocks.appearance(col);
+      const bg=it.kind==='block'?appearance.background:hexToRgba(col,0.75);
 const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
 const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, dpEndAbs - absStart);
 const absEnd = clamp(absStart + dur, absStart + snapMin, dpEndAbs);
@@ -6118,7 +6145,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
       return `
         <div class="dpBlock ${isSel?"sel":""} ${showPal?"showPalette":""}"
              data-key="${eattr(it.key)}" data-kind="${eattr(it.kind)}" data-id="${eattr(it.id)}"
-             style="top:${top}px;height:${height}px;background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
+             style="top:${top}px;height:${height}px;background:${eattr(bg)};border-left:8px solid ${eattr(col)};--production-ink:${appearance.ink};">
           <div class="dpBlockBtns dpBlockBtns--abs">
               <button class="dpMiniBtn noPrint" data-action="palette" title="Color">🎨</button>
               ${actionBtns}
@@ -9808,6 +9835,8 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
     el("elxSearch")?.addEventListener("input", renderElementsExplorer);
 
     el("btnAddCrew")?.addEventListener("click", addCrew);
+    el("btnAddCast")?.addEventListener("click",()=>addCrew("Cast"));
+    el("crewAreaFilter")?.addEventListener("change",renderCrew);
     el("crewSearch")?.addEventListener("input", renderCrew);
 
     el("btnRefreshReports")?.addEventListener("click", renderReports);
