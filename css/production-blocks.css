@@ -11,5 +11,8 @@
 .dpBlock[data-kind="block"] .dpTime,.dpBlock[data-kind="block"] .dpBlockDetail,.roda-studio .dpBlock[data-kind="block"] .dpTime,.roda-studio .dpBlock[data-kind="block"] .dpBlockDetail,.schedBlock[data-kind="block"] .title,.schedBlock[data-kind="block"] .meta,.schedBlock[data-kind="block"] .schedNote{color:inherit;}
 .dpBlock[data-kind="block"] .dpMiniBtn{color:inherit;background:transparent;}
 .dpBlock[data-kind="block"].sel{outline-color:var(--production-ink,#111);}
+.dpBlock.sel,.schedBlock.is-selected{z-index:40;}
+.dpBlock.is-dragging,.schedBlock.is-dragging{z-index:60;cursor:grabbing;}
+.dpBlock.swap-target,.schedBlock.swap-target{outline:2px dashed #eee;outline-offset:2px;}
 @media(max-width:640px){.dpBlockChoices{left:auto;right:0;}}
 @media print{.dpBlockMenu{display:none!important;}}

@@ -1223,6 +1223,8 @@ function enforceScriptVersionsLimit(notify=false){
     return DAY_SPAN_MIN + (d && d.night ? NIGHT_EXT_MIN : 0);
   }
 
+  function dayplanMinOffset(d){return -minutesFromHHMM(d?.callTime||"08:00");}
+
   function dayplanAvailSpan(d){
     const base = minutesFromHHMM((d && d.callTime) || "08:00");
     return Math.max(0, dayplanEndAbs(d) - base);
@@ -1300,8 +1302,8 @@ function enforceScriptVersionsLimit(notify=false){
       if(!b.id) b.id = uid("blk");
       if(typeof b.startMin !== "number" || !Number.isFinite(b.startMin)) b.startMin = 0;
       if(typeof b.durMin !== "number" || !Number.isFinite(b.durMin)) b.durMin = 30;
-      b.durMin = clamp(b.durMin, 5, _dpSpan);
-      b.startMin = clamp(b.startMin, 0, Math.max(0, _dpSpan-1));
+      b.durMin = clamp(b.durMin, 5, dayplanEndAbs(d));
+      b.startMin = clamp(b.startMin, dayplanMinOffset(d), _dpSpan-1);
       if(typeof b.title !== "string") b.title = String(b.title||"");
       if(typeof b.detail !== "string") b.detail = String(b.detail||"");
       if(typeof b.color !== "string" || !b.color) b.color = "#bdbdbd";
@@ -1637,19 +1639,19 @@ async function setShotThumb(sh, file){
 
     items.sort((a,b)=> (a.start??0) - (b.start??0));
 
-    let cursor = 0;
+    let cursor = dayplanMinOffset(d);
     for(const it of items){
       let st = it.start ?? 0;
       let du = it.dur ?? snapMin;
 
-      du = clamp(du, it.kind==="block" ? 5 : snapMin, span);
-      st = clamp(st, 0, Math.max(0, span - snapMin));
+      du = clamp(du, it.kind==="block" ? 5 : snapMin, dayplanEndAbs(d));
+      st = clamp(st, dayplanMinOffset(d), span - snapMin);
 
       if(st < cursor){
         st = snapCeil(cursor, it.kind==="block" ? 5 : snapMin);
       }
 
-      st = clamp(st, 0, Math.max(0, span - du));
+      st = clamp(st, dayplanMinOffset(d), span - du);
 
       if(it.kind === "scene"){
         d.times[it.id] = st;
@@ -1662,7 +1664,7 @@ async function setShotThumb(sh, file){
         }
       }
 
-      cursor = clamp(st + du, 0, span);
+      cursor = clamp(st + du, dayplanMinOffset(d), span);
     }
 
     // Mantener escenas ordenadas por horario
@@ -2143,6 +2145,8 @@ function setupScheduleWheelScroll(){
 }
 
   function showView(name){
+    if(name==="schedule" && document.body.dataset.rodaView!=="schedule")el("schedBoard")?.removeAttribute("data-focus-days");
+    if(name==='dayplan'&&document.body.dataset.rodaView!=='dayplan')el('dpScroller')?.removeAttribute('data-focus-day');
     document.body.dataset.rodaView=name;
     if(name==='cast')renderCastDirectory();
     // Reset print-only mode if a browser skipped the afterprint event.
@@ -3593,10 +3597,9 @@ function renderDayCast(){
         const diff = minutesFromHHMM(call) - minutesFromHHMM(castBase);
         const dotStyle = diff === 0 ? "background: rgba(var(--ok-rgb),.9)" : "background: rgba(255, 208, 0, .9)";
         const castRec = findCastCrewEntryByName(name);
-        const displayRole = String(castRec?.role || "").trim();
         const displayName = String(castRec?.name || "").trim();
-        const displayTitle = displayRole || name;
-        const castMeta = [displayName && displayName!==displayTitle ? displayName : "", castRec?.phone].filter(Boolean).join(" • ");
+        const displayTitle = name;
+        const castMeta = [displayName || 'Intérprete sin asignar', castRec?.phone].filter(Boolean).join(" • ");
 
 
         const card = document.createElement("div");
@@ -3615,7 +3618,7 @@ function renderDayCast(){
               <div class="timeLine">
                 <div class="k">CALL</div>
                 <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
-                  <input type="time" class="input timeInput ${callIsOv ? "timeDiffDay" : ""}" value="${call}" data-kind="call" ${ro ? "disabled" : ""}/>
+                  <input type="time" class="input timeInput ${callIsOv ? "timeDiffDay" : ""}" value="${call}" data-kind="call" aria-label="Citación de ${escapeHtml(name)}" ${ro ? "disabled" : ""}/>
                   <button class="btn icon ghost small" title="Reset CALL" data-kind="callReset" ${ro ? "disabled" : ""}>↺</button>
                 </div>
               </div>
@@ -4669,15 +4672,7 @@ function getScheduleDaysFiltered(){
   return days.filter(d=> set.has(d.id));
 }
 
-function computeScheduleGlobalBaseHour(days){
-  let minBase = Infinity;
-  for(const d of (days||[])){
-    const baseH = baseHourFromCall((d && d.callTime) || "08:00"); // floor a la hora
-    if(Number.isFinite(baseH)) minBase = Math.min(minBase, baseH);
-  }
-  if(!Number.isFinite(minBase) || minBase===Infinity) return 8*60;
-  return minBase;
-}
+function computeScheduleGlobalBaseHour(){return 0;}
 
 function scheduleBoardBaseHourFallback(){
   const days = getScheduleDaysFiltered();
@@ -4966,8 +4961,8 @@ function bindSchedDayPickerUI(){
           if(!hay.includes(q)) continue;
         }
 
-        const startMin = clamp(d.times[sid] ?? 0, 0, Math.max(0, span-1));
-        const durMin   = clamp(d.durations[sid] ?? 60, 5, span);
+        const startMin = clamp(d.times[sid] ?? 0, dayplanMinOffset(d), span-1);
+        const durMin   = clamp(d.durations[sid] ?? 60, 5, dayplanEndAbs(d));
 
         const top = (preOffset + startMin) * pxPerMin;
         const height = Math.max(34, durMin * pxPerMin);
@@ -4976,6 +4971,8 @@ function bindSchedDayPickerUI(){
         const rowColor = d.sceneColors?.[sid];
         if(rowColor) block.style.borderLeft = `6px solid ${rowColor}`;
         block.dataset.sceneId = sid;
+        block.dataset.kind = "scene";block.dataset.itemId = sid;
+      block.classList.toggle('is-selected',board.dataset.selectedItem===JSON.stringify([d.id,'scene',sid]));
         block.dataset.dayId = d.id;
         block.style.top = `${top}px`;
         block.style.height = `${height}px`;
@@ -5014,8 +5011,8 @@ for(const b of (d.blocks||[])){
     if(!hay.includes(q)) continue;
   }
 
-  const startMin = clamp(Number(b.startMin ?? 0) || 0, 0, Math.max(0, span-1));
-  const durMin   = clamp(Number(b.durMin ?? 30) || 30, 5, span);
+  const startMin = clamp(Number(b.startMin ?? 0) || 0, dayplanMinOffset(d), span-1);
+  const durMin   = clamp(Number(b.durMin ?? 30) || 30, 5, dayplanEndAbs(d));
 
   const top = (preOffset + startMin) * pxPerMin;
   const height = Math.max(34, durMin * pxPerMin);
@@ -5027,6 +5024,7 @@ for(const b of (d.blocks||[])){
   block.className = "schedBlock";
   block.dataset.kind = "block";
   block.dataset.itemId = b.id;
+      block.classList.toggle('is-selected',board.dataset.selectedItem===JSON.stringify([d.id,'block',b.id]));
   block.dataset.dayId = d.id;
   block.style.top = `${top}px`;
   block.style.height = `${height}px`;
@@ -5062,6 +5060,10 @@ for(const b of (d.blocks||[])){
 
     if(q && !board.children.length){
       board.innerHTML = `<div class="muted">Sin resultados.</div>`;
+    }
+    if(document.body.dataset.rodaView==="schedule" && board.dataset.focusDays!==daysToShow.map(d=>d.id).join(",")){
+      (el("schedWrap")||board).scrollTop=Math.min(...daysToShow.map(d=>minutesFromHHMM(d.callTime||"08:00")))*pxPerMin;
+      board.dataset.focusDays=daysToShow.map(d=>d.id).join(",");
     }
     bindScheduleDnD();
     setupScheduleTopScrollbar(); // ✅
@@ -5139,8 +5141,11 @@ function bindScheduleDnD(){
     const clickY = e.clientY - rectBlock.top;
 
     const it = getItem(d, kind, itemId);
+    board.querySelectorAll('.schedBlock.is-selected').forEach(node=>node.classList.remove('is-selected'));
+    block.classList.add('is-selected');board.dataset.selectedItem=JSON.stringify([dayId,kind,itemId]);
 
     schedDrag = {
+      before:RodaDaySwap.captureLayout(d),swapTarget:null,
       pointerId: e.pointerId,
       el: block,
       fromGrid: grid,
@@ -5181,6 +5186,7 @@ function bindScheduleDnD(){
     }
 
     if(drag.ro || isReadOnly()) return;
+    if(drag.moved)drag.el.classList.add('is-dragging');
 
     const pxPerMin = getPxPerMin();
     drag.pxPerMin = pxPerMin; // por si cambió el zoom mientras arrastra
@@ -5207,6 +5213,8 @@ function bindScheduleDnD(){
 
     const rect = targetGrid.getBoundingClientRect();
     const y = clamp(e.clientY - rect.top, 0, rect.height);
+    drag.swapTarget=drag.mode==='move'&&drag.kind==='scene'&&targetDayId===drag.dayId?RodaDaySwap.sceneAt(drag.before,drag.itemId,y/pxPerMin-preOffset):null;
+    for(const node of board.querySelectorAll('.schedBlock'))node.classList.toggle('swap-target',node.dataset.dayId===targetDayId&&node.dataset.kind==='scene'&&node.dataset.itemId===drag.swapTarget);
 
     if(drag.mode === "resize"){
       if(targetDayId !== drag.dayId) return; // resize solo dentro del mismo día
@@ -5233,7 +5241,7 @@ function bindScheduleDnD(){
     let newStart = (y/pxPerMin - preOffset) - drag.grabOffsetMin;
     newStart = snap(newStart, drag.snapMin);
     const tSpan = Math.max(5, dayplanAvailSpan(targetDay));
-    newStart = clamp(newStart, 0, Math.max(0, tSpan - drag.dur0));
+    newStart = clamp(newStart, dayplanMinOffset(targetDay), tSpan - drag.dur0);
 
     // reparent visual if day changes
     if(targetGrid !== drag.el.parentElement){
@@ -5251,6 +5259,8 @@ function bindScheduleDnD(){
     if(!schedDrag || schedDrag.pointerId !== e.pointerId) return;
     const d0 = schedDrag;
     schedDrag = null;
+    d0.el.classList.remove('is-dragging');board.querySelectorAll('.swap-target').forEach(node=>node.classList.remove('swap-target'));
+    if(e.type==='pointercancel'){const day=getDay(d0.dayId);if(day)RodaDaySwap.restoreLayout(day,d0.before);renderScheduleBoard();return;}
 
     const roEnd = !!d0.ro || isReadOnly();
 
@@ -5292,7 +5302,11 @@ function bindScheduleDnD(){
     const toDayId = d0.targetDayId || d0.dayId;
     const newStart = Number.isFinite(d0.newStart) ? d0.newStart : d0.start0;
 
-    if(toDayId !== d0.dayId){
+    board.dataset.selectedItem=JSON.stringify([toDayId,d0.kind,d0.itemId]);
+    if(toDayId===d0.dayId&&d0.kind==='scene'&&d0.swapTarget){
+      if(!RodaDaySwap.swapScenes(fromDay,d0.itemId,d0.swapTarget)){renderScheduleBoard();toast('No se pudieron intercambiar estos horarios.');return;}
+      toast('Escenas intercambiadas; se conservaron sus duraciones.');
+    }else if(toDayId !== d0.dayId){
       const toDay = getDay(toDayId);
       if(!toDay) return;
       ensureDayTimingMaps(toDay);
@@ -5520,7 +5534,7 @@ function updateScheduleDayDOM(dayId){
       if(nowAbs == null) return null;
 
       const base0 = minutesFromHHMM(day.callTime || "08:00");
-      const dpStartAbs = Math.floor(base0/60)*60;
+      const dpStartAbs = 0;
       const endAbs = dayplanEndAbs(day);
       const spanMin = endAbs - dpStartAbs;
       const ppm = getDayplanPPM() || DAYPLAN_PPM;
@@ -5675,19 +5689,19 @@ items.push({
     if(selected.length < 2){ resolveOverlapsPushDown(d, snapMin); return; }
 
     const getDur = (it, startOff)=>{
-      const absStart = clamp(base + startOff, base, dpEndAbs);
+      const absStart = clamp(base + startOff, 0, dpEndAbs);
       return clamp(Math.max(snapMin, it.dur||snapMin), snapMin, Math.max(snapMin, dpEndAbs - absStart));
     };
 
     // cuánto hay que correr el grupo para que ningún seleccionado quede "atrapado" detrás de un no-seleccionado
     let needed = 0;
     for(const s of selected){
-      const sStart0 = clamp(s.start||0, 0, availSpan);
+      const sStart0 = clamp(s.start||0, dayplanMinOffset(d), availSpan);
       const sAbs = base + sStart0;
 
       for(const o of items){
         if(sel.has(o.key)) continue;
-        const oStart0 = clamp(o.start||0, 0, availSpan);
+        const oStart0 = clamp(o.start||0, dayplanMinOffset(d), availSpan);
         const oAbs = base + oStart0;
 
         if(oAbs < sAbs){
@@ -5706,7 +5720,7 @@ items.push({
       // clamp por límite del día (no pasarse de medianoche)
       let maxShift = Infinity;
       for(const s of selected){
-        const sStart0 = clamp(s.start||0, 0, availSpan);
+        const sStart0 = clamp(s.start||0, dayplanMinOffset(d), availSpan);
         const sDur = getDur(s, sStart0);
         const maxStart = availSpan - sDur;
         maxShift = Math.min(maxShift, maxStart - sStart0);
@@ -5715,10 +5729,10 @@ items.push({
 
       if(needed > 0){
         for(const s of selected){
-          const sStart0 = clamp(s.start||0, 0, availSpan);
+          const sStart0 = clamp(s.start||0, dayplanMinOffset(d), availSpan);
           const sDur = getDur(s, sStart0);
           const maxStart = availSpan - sDur;
-          const newStart = clamp(sStart0 + needed, 0, maxStart);
+          const newStart = clamp(sStart0 + needed, dayplanMinOffset(d), maxStart);
           setDayplanStart(d, s.kind, s.id, newStart);
         }
       }
@@ -5818,7 +5832,7 @@ items.push({
     ensureDayTimingMaps(d);
     const snapMin = getDayplanSnap();
     const base = minutesFromHHMM(d.callTime || "08:00"); // minutos absolutos del día
-    const dpStartAbs = Math.floor(base/60)*60; // arranca en la hora exacta (hacia abajo)
+    const dpStartAbs = 0; // El call define la vista inicial, no el inicio del calendario.
     const dpEndAbs = dayplanEndAbs(d); // hasta 24:00 (o 06:00 del día siguiente)
     const dpSpanMin = dpEndAbs - dpStartAbs;
     const items = buildDayplanItems(d);
@@ -6125,7 +6139,7 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const appearance=RodaProductionBlocks.appearance(col);
       const bg=it.kind==='block'?appearance.background:hexToRgba(col,0.75);
-const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
+const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMin);
 const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, dpEndAbs - absStart);
 const absEnd = clamp(absStart + dur, absStart + snapMin, dpEndAbs);
 
@@ -6184,6 +6198,7 @@ ${
     }).join("");
 
     lane.innerHTML = grid.join("") + blocks;
+    if(document.body.dataset.rodaView==='dayplan'&&scroller.dataset.focusDay!==d.id){scroller.scrollTop=base*ppm;scroller.dataset.focusDay=d.id;}
 
     // Hover preview (igual que Cronograma + Planos)
     try{
@@ -6250,18 +6265,18 @@ ${
         const ppm0 = getDayplanPPM() || DAYPLAN_PPM;
 
         const base0 = minutesFromHHMM(d0.callTime || "08:00");
-        const dpStartAbs0 = Math.floor(base0/60)*60;
+        const dpStartAbs0 = 0;
         const dpEndAbs0 = dayplanEndAbs(d0);
         const availSpan0 = Math.max(0, dpEndAbs0 - base0);
 
-        const rect = lane.getBoundingClientRect();
+        const rect = scroller.getBoundingClientRect();
         const y = (e.clientY - rect.top) + (scroller?.scrollTop || 0);
         let abs = dpStartAbs0 + (y / ppm0);
 
-        abs = clamp(abs, base0, dpEndAbs0 - snapMin0);
+        abs = clamp(abs, 0, dpEndAbs0 - snapMin0);
         let offset = abs - base0;
         offset = snap(offset, snapMin0);
-        offset = clamp(offset, 0, Math.max(0, availSpan0 - snapMin0));
+        offset = clamp(offset, dayplanMinOffset(d0), availSpan0 - snapMin0);
 
         d0.times[sid] = offset;
         d0.durations[sid] = d0.durations[sid] ?? 60;
@@ -6289,10 +6304,10 @@ ${
     const snapMinPrint = Number(el("schedSnap")?.value || snapMin || 15);
 
     const rows = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMinPrint);
+      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMinPrint);
       const durMax = Math.max(snapMinPrint, dpEndAbs - absStart);
       const dur = clamp(Math.max(snapMinPrint, it.dur||snapMinPrint), snapMinPrint, durMax);
-      const absEnd = clamp(absStart + dur, base, dpEndAbs);
+      const absEnd = clamp(absStart + dur, 0, dpEndAbs);
       const isNote = it.kind==="block";
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
@@ -6522,7 +6537,7 @@ ${
 
 const snapMin = getDayplanSnap();
 const base = minutesFromHHMM(d.callTime || "08:00");
-const dpStartAbs = Math.floor(base/60)*60;
+const dpStartAbs = 0;
 const dpEndAbs = dayplanEndAbs(d);
 const items = buildDayplanItems(d);
 const ppm = getDayplanPPM() || DAYPLAN_PPM;
@@ -6565,8 +6580,8 @@ const ppm = getDayplanPPM() || DAYPLAN_PPM;
         const availSpan = Math.max(0, dpEndAbs - base);
 
         const selItems = items.filter(x=>selSet.has(x.key)).map(x=>{
-          const start0 = clamp(x.start||0, 0, availSpan);
-          const absStartX = clamp(base + start0, base, dpEndAbs);
+          const start0 = clamp(x.start||0, dayplanMinOffset(d), availSpan);
+          const absStartX = clamp(base + start0, 0, dpEndAbs);
           const durX = clamp(Math.max(snapMin, x.dur||snapMin), snapMin, Math.max(snapMin, dpEndAbs - absStartX));
           return { key:x.key, kind:x.kind, id:x.id, start0, dur0: durX, el: domMap.get(x.key) || null };
         });
@@ -6574,21 +6589,22 @@ const ppm = getDayplanPPM() || DAYPLAN_PPM;
         let minDelta = -Infinity;
         let maxDelta = Infinity;
         for(const s of selItems){
-          const start0 = clamp(s.start0||0, 0, availSpan);
+          const start0 = clamp(s.start0||0, dayplanMinOffset(d), availSpan);
           const dur0i = clamp(Math.max(snapMin, s.dur0||snapMin), snapMin, Math.max(snapMin, availSpan - start0));
           const maxStart = availSpan - dur0i;
-          minDelta = Math.max(minDelta, -start0);
+          minDelta = Math.max(minDelta, dayplanMinOffset(d) - start0);
           maxDelta = Math.min(maxDelta, maxStart - start0);
         }
 
-        const absStart0 = clamp(base + (it.start||0), base, dpEndAbs);
+        const absStart0 = clamp(base + (it.start||0), 0, dpEndAbs);
         const dur0 = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, Math.max(snapMin, dpEndAbs - absStart0));
 
         const mode = (action === "resize") ? "resize" : "drag";
         const grabOffset = clamp(pressAbsMin - absStart0, 0, dur0);
-        const activeStart0 = clamp(it.start||0, 0, availSpan);
+        const activeStart0 = clamp(it.start||0, dayplanMinOffset(d), availSpan);
 
 dayplanPointer = {
+  before:RodaDaySwap.captureLayout(d),startClientX:e.clientX,startClientY:e.clientY,moved:false,swapTarget:null,
   dayId,
   base,
   dpStartAbs,
@@ -6624,6 +6640,9 @@ dayplanPointer = {
         const rect = sc.getBoundingClientRect();
         const y = (e.clientY - rect.top) + (sc?.scrollTop||0);
         const p = dayplanPointer;
+        if(Math.abs(e.clientX-p.startClientX)>4||Math.abs(e.clientY-p.startClientY)>4)p.moved=true;
+        if(p.mode==='drag'&&!p.moved)return;
+        p.el.classList.add('is-dragging');
 
         const d = p.dayId ? getDay(p.dayId) : null;
         if(!d) return;
@@ -6632,11 +6651,15 @@ dayplanPointer = {
   const ppm = p.ppm || getDayplanPPM() || DAYPLAN_PPM;
   const snapMin = p.snapMin || getDayplanSnap();
   const base = p.base || minutesFromHHMM(d.callTime || "08:00");
-  const dpStartAbs = Number.isFinite(p.dpStartAbs) ? p.dpStartAbs : Math.floor(base/60)*60;
+  const dpStartAbs = Number.isFinite(p.dpStartAbs) ? p.dpStartAbs : 0;
   const dpEndAbs = Number.isFinite(p.dpEndAbs) ? p.dpEndAbs : dayplanEndAbs(d);
   const availSpan = Math.max(0, dpEndAbs - base);
 
   const absPos = dpStartAbs + (y/ppm);
+  const laneRect=lane.getBoundingClientRect();
+  p.inside=e.clientX>=laneRect.left&&e.clientX<=laneRect.right&&e.clientY>=rect.top&&e.clientY<=rect.bottom;
+  p.swapTarget=p.mode==='drag'&&p.kind==='scene'&&p.sel.length===1&&p.inside?RodaDaySwap.sceneAt(p.before,p.id,absPos-base):null;
+  for(const node of lane.querySelectorAll('.dpBlock'))node.classList.toggle('swap-target',node.dataset.kind==='scene'&&node.dataset.id===p.swapTarget);
 
   if(p.mode === "drag"){
     let absStart = absPos - p.grabOffset;
@@ -6652,19 +6675,19 @@ dayplanPointer = {
     const group = Array.isArray(p.sel) ? p.sel : [];
     if(group.length > 1){
       // place active based on clamped delta (keeps group together)
-      const newActiveOff = clamp((p.activeStart0||0) + delta, 0, Math.max(0, availSpan - snapMin));
-      absStart = clamp(base + newActiveOff, base, dpEndAbs - p.dur0);
+      const newActiveOff = clamp((p.activeStart0||0) + delta, dayplanMinOffset(d), availSpan - snapMin);
+      absStart = clamp(base + newActiveOff, 0, dpEndAbs - p.dur0);
 
       for(const s of group){
-        const newStart = clamp((s.start0||0) + delta, 0, Math.max(0, availSpan - snapMin));
+        const newStart = clamp((s.start0||0) + delta, dayplanMinOffset(d), availSpan - snapMin);
         setDayplanStart(d, s.kind, s.id, newStart);
         const absS = base + newStart;
         if(s.el) s.el.style.top = Math.round((absS - dpStartAbs)*ppm) + "px";
       }
     }else{
-      absStart = clamp(absStart, base, dpEndAbs - p.dur0);
+      absStart = clamp(absStart, 0, dpEndAbs - p.dur0);
       const offset = absStart - base;
-      setDayplanStart(d, p.kind, p.id, clamp(offset, 0, Math.max(0, availSpan - snapMin)));
+      setDayplanStart(d, p.kind, p.id, clamp(offset, dayplanMinOffset(d), availSpan - snapMin));
       // update UI live
       p.el.style.top = Math.round((absStart - dpStartAbs)*ppm) + "px";
     }
@@ -6679,14 +6702,21 @@ dayplanPointer = {
 });
 
 
-      function endPointer(){
+      function endPointer(event){
         if(!dayplanPointer) return;
         const p = dayplanPointer;
         const dayId = p.dayId;
         const d2 = dayId ? getDay(dayId) : null;
         if(!d2) { dayplanPointer = null; return; }
+        if(event.type==='pointercancel'||p.moved&&p.mode==='drag'&&!p.inside){
+          RodaDaySwap.restoreLayout(d2,p.before);dayplanPointer=null;renderDayPlan();renderScheduleBoard();return;
+        }
 
-        if(p.mode === "drag" && Array.isArray(p.sel) && p.sel.length > 1){
+        if(p.mode==='drag'&&p.moved&&p.swapTarget){
+          RodaDaySwap.restoreLayout(d2,p.before);
+          if(!RodaDaySwap.swapScenes(d2,p.id,p.swapTarget)){dayplanPointer=null;renderDayPlan();toast('No se pudieron intercambiar estos horarios.');return;}
+          toast('Escenas intercambiadas; se conservaron sus duraciones.');
+        }else if(p.mode === "drag" && Array.isArray(p.sel) && p.sel.length > 1){
           finalizeDayplanGroupMove(d2, p.sel.map(x=>x.key));
         }else{
           resolveOverlapsPushDown(d2, getDayplanSnap());
@@ -6720,7 +6750,7 @@ dayplanPointer = {
     }
 
     const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-    const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
+    const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMin);
     const durMax = Math.max(snapMin, dpEndAbs - absStart);
     const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, durMax);
     const timeVal = hhmmFromMinutes(absStart);
@@ -6748,6 +6778,7 @@ dayplanPointer = {
         <div class="field">
           <label>Hora</label>
           <input class="input" type="time" id="dpi_time" value="${esc(timeVal)}">
+          ${d.night ? `<select class="input" id="dpi_dayOffset" aria-label="Día del horario"><option value="0" ${absStart<DAY_SPAN_MIN?"selected":""}>Mismo día</option><option value="1" ${absStart>=DAY_SPAN_MIN?"selected":""}>Día siguiente</option></select>` : ""}
         </div>
         <div class="field">
           <label>Duración</label>
@@ -6835,14 +6866,13 @@ dayplanPointer = {
         const dpEndAbs0 = dayplanEndAbs(d0);
         const availSpan0 = Math.max(0, dpEndAbs0 - base0);
 
-        if(e.target.id === "dpi_time"){
-          let abs = minutesFromHHMM(e.target.value || "00:00");
-          // En horario nocturno, una hora 00:00-06:00 puede pertenecer al día siguiente
-          if(d0.night && abs < base0) abs += DAY_SPAN_MIN;
+        if(e.target.id === "dpi_time" || e.target.id === "dpi_dayOffset"){
+          let abs = minutesFromHHMM(box.querySelector("#dpi_time").value || "00:00");
+          abs += Number(box.querySelector("#dpi_dayOffset")?.value || 0)*DAY_SPAN_MIN;
 
-          abs = clamp(abs, base0, dpEndAbs0 - snap0);
+          abs = clamp(abs, 0, dpEndAbs0 - snap0);
           let offset = abs - base0;
-          offset = clamp(offset, 0, Math.max(0, availSpan0 - snap0));
+          offset = clamp(offset, dayplanMinOffset(d0), availSpan0 - snap0);
           offset = snap(offset, snap0);
           setDayplanStart(d0, it0.kind, it0.id, offset);
           resolveOverlapsPushDown(d0, snap0);
@@ -7563,20 +7593,19 @@ grid.appendChild(cell);
         <table class="callTimeTable callTimeTable--cast">
           <thead>
             <tr>
-              <th>Nombre</th>
-              <th>Rol</th>
+              <th>Actor / actriz</th>
+              <th>Personaje</th>
               <th class="time">PU</th>
-              <th class="time">Call</th>
+              <th class="time">Citación</th>
               <th class="time">RTS</th>
             </tr>
           </thead>
           <tbody>
             ${cast.length ? cast.map(n=>{
               const castRec = findCastCrewEntryByName(n);
-              const role = String(castRec?.role || "").trim();
               const actorName = String(castRec?.name || "").trim();
-              const roleDisp = role;
-              const nameDisp = actorName || n;
+              const roleDisp = n;
+              const nameDisp = actorName || 'Sin asignar';
               const call = effectiveCastCall(d, n);
               const pu = d.pickupCastEnabled ? effectiveCastPU(d, n) : "—";
               const rts = d.rtsEnabled ? effectiveCastRTS(d, n) : "—";
@@ -7978,10 +8007,10 @@ function renderReportDayplanDetail(d){
     pretty.className = "dayplanPretty screenOnly";
 
     const cards = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
+      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMin);
       const durMax = Math.max(snapMin, dpEndAbs - absStart);
       const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, durMax);
-      const absEnd = clamp(absStart + dur, base, dpEndAbs);
+      const absEnd = clamp(absStart + dur, 0, dpEndAbs);
 
       const isNote = it.kind==="block";
       const num = isNote ? "NOTA" : (it.number||"");
@@ -8040,10 +8069,10 @@ function renderReportDayplanDetail(d){
 
     // ========= Vista de impresión (intacta) =========
     const rows = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), base, dpEndAbs - snapMin);
+      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMin);
       const durMax = Math.max(snapMin, dpEndAbs - absStart);
       const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, durMax);
-      const absEnd = clamp(absStart + dur, base, dpEndAbs);
+      const absEnd = clamp(absStart + dur, 0, dpEndAbs);
       const isNote = it.kind==="block";
       const num = isNote ? "NOTA" : (it.number||"");
       const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
@@ -8440,8 +8469,8 @@ function buildPlanGeneralPrintHTML(){
     for(const sid of (d.sceneIds||[])){
       const s = getScene(sid);
       if(!s) continue;
-      const startMin = clamp(Number(d.times?.[sid] ?? 0) || 0, 0, Math.max(0, span-1));
-      const durMin   = clamp(Number(d.durations?.[sid] ?? 60) || 60, 5, span);
+      const startMin = clamp(Number(d.times?.[sid] ?? 0) || 0, dayplanMinOffset(d), span-1);
+      const durMin   = clamp(Number(d.durations?.[sid] ?? 60) || 60, 5, dayplanEndAbs(d));
       items.push({
         kind:"scene",
         start:startMin,
@@ -8452,8 +8481,8 @@ function buildPlanGeneralPrintHTML(){
 
     for(const b of (d.blocks||[])){
       if(!b) continue;
-      const startMin = clamp(Number(b.startMin ?? 0) || 0, 0, Math.max(0, span-1));
-      const durMin   = clamp(Number(b.durMin ?? 30) || 30, 5, span);
+      const startMin = clamp(Number(b.startMin ?? 0) || 0, dayplanMinOffset(d), span-1);
+      const durMin   = clamp(Number(b.durMin ?? 30) || 30, 5, dayplanEndAbs(d));
       items.push({
         kind:"block",
         start:startMin,
@@ -9356,7 +9385,7 @@ el("btnDayplanAddNote")?.addEventListener("click", ()=>addDayplanNote("note"));
       let centerAbs = null;
       if(sc && d){
         const base = minutesFromHHMM(d.callTime || "08:00");
-        const dpStartAbs = Math.floor(base/60)*60;
+        const dpStartAbs = 0;
         const centerY = (sc.scrollTop||0) + (sc.clientHeight||0)/2;
         centerAbs = dpStartAbs + (centerY / oldPpm);
       }
@@ -9366,7 +9395,7 @@ el("btnDayplanAddNote")?.addEventListener("click", ()=>addDayplanNote("note"));
 
       if(sc && d && centerAbs!=null){
         const base = minutesFromHHMM(d.callTime || "08:00");
-        const dpStartAbs = Math.floor(base/60)*60;
+        const dpStartAbs = 0;
         const newPpm = getDayplanPPM() || DAYPLAN_PPM;
         const newCenterY = (centerAbs - dpStartAbs) * newPpm;
         sc.scrollTop = Math.max(0, newCenterY - (sc.clientHeight||0)/2);
