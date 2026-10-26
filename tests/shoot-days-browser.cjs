@@ -77,4 +77,3 @@ const server=http.createServer((req,res)=>{const p=new URL(req.url,'http://local
  viewer=true;await page.reload();await page.waitForFunction(()=>window.RODA_READY===true);await page.locator('.navBtn[data-view=dayplan]').click();assert.equal(await page.locator('#btnDeleteShootDay').isDisabled(),true);const before=writes.length;await page.locator('.navBtn[data-view=schedule]').click();await page.locator('#btnSchedDays').click();await page.locator('#schedUndatedDays input').uncheck();assert.equal(await page.locator('.schedDay').count(),0);assert.equal(writes.length,before,'viewers can hide undated days without writing shared data');
  assert.deepEqual(errors,[]);console.log('PASS: undated/double-date filtering, reload, cancel/delete, scene preservation, empty-plan recovery, desktop/mobile and reader permissions.');
  }finally{if(browser)await browser.close();server.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
-
