@@ -93,11 +93,13 @@
     let number=0;for(const {sheet}of pages.values()){number++;sheet.dataset.page=String(number);sheet.dataset.pageLabel=number+' / '+pages.size;sheet.setAttribute('aria-label','Página '+number+' de '+pages.size);}
     return {pages:pages.size};
   }
-  function readingPages(container,format={}){
+  async function readingPages(container,format={},isCurrent=()=>true){
     const layout=format.page||{},width=Math.min(1000,Math.max(300,Number(layout.width)||612)),height=Math.min(1600,Math.max(400,Number(layout.height)||792));
     const margins={top:72,right:72,bottom:72,left:72,...layout.margins};
     for(const side of Object.keys(margins))margins[side]=Math.max(12,Math.min(160,Number(margins[side])||72));
     const nodes=Array.from(container.childNodes);container.replaceChildren();container.classList.remove('script-pagination-ready');container.classList.add('script-reading-pages');
+    let budget=performance.now();
+    const yieldToInput=async()=>{await new Promise(resolve=>setTimeout(resolve,0));budget=performance.now();return isCurrent();};
     let sheet,body;
     function page(){sheet=document.createElement('section');sheet.className='script-reading-page';sheet.style.width=width*4/3+'px';sheet.style.minHeight=height*4/3+'px';
       for(const side of ['top','right','bottom','left'])sheet.style.setProperty('--page-'+side,Math.max(12,Math.min(160,Number(margins[side])||72))*4/3+'px');
@@ -105,6 +107,8 @@
     page();
     const fits=()=>body.getBoundingClientRect().height<=height*4/3-(Number(margins.top)+Number(margins.bottom))*4/3+1;
     for(const node of nodes){
+      if(performance.now()-budget>8&&!await yieldToInput())return null;
+      if(!isCurrent())return null;
       if(node.nodeType!==1){body.append(node);continue;}
       if(node.dataset.breakBefore==='true'&&body.textContent.trim())page();
       body.append(node);
@@ -113,6 +117,7 @@
       // A long paragraph may span pages. Split its DOM rather than discarding runs or styles.
       let paragraph=node,guard=0;
       while(!fits()&&paragraph.textContent.length>1&&guard++<500){
+        if(performance.now()-budget>8&&!await yieldToInput())return null;
         const walker=document.createTreeWalker(paragraph,NodeFilter.SHOW_TEXT),texts=[];let t,total=0;
         while(t=walker.nextNode()){texts.push({node:t,start:total,end:total+t.length});total+=t.length;}
         const original=paragraph.cloneNode(true);
@@ -127,7 +132,10 @@
         const rest=original.cloneNode(false);rest.append(range.extractContents());page();body.append(rest);paragraph=rest;
       }
     }
-    Array.from(container.children).forEach((p,i)=>{p.dataset.page=String(i+1);p.dataset.pageLabel=String(i+1);p.setAttribute('aria-label','Página '+(i+1));p.style.setProperty('--reading-page-height',p.getBoundingClientRect().height+'px');});
+    for(const [i,p]of Array.from(container.children).entries()){
+      if(performance.now()-budget>8&&!await yieldToInput())return null;
+      p.dataset.page=String(i+1);p.dataset.pageLabel=String(i+1);p.setAttribute('aria-label','Página '+(i+1));p.style.setProperty('--reading-page-height',p.getBoundingClientRect().height+'px');
+    }
     container.classList.add('script-pagination-ready');
     return container.children.length;
   }

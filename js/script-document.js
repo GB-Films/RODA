@@ -124,7 +124,7 @@
     for(let i=scenes.length-1;i>=0;i--){const offset=offsets[scenes[i].sourceLine],entry=nodes.find(n=>n.start<=offset&&n.end>offset);if(!entry)continue;const anchor=document.createElement('span');anchor.id='script-scene-'+i;anchor.className='script-scene-anchor';entry.node.splitText(offset-entry.start).before(anchor);if(!rich)anchor.closest('p')?.classList.add('script-slugline');}
     return scenes;
   }
-  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver;
+  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver,originalSnapshot,originalURL;
   const $=id=>document.getElementById(id);
   function reveal(node){if(!node)return;const scroller=$('scriptDocumentScroll'),box=node.getBoundingClientRect();scroller.scrollTop+=box.top-scroller.getBoundingClientRect().top-36;}
   function clearMatches(){for(const node of $('scriptFullText').querySelectorAll('mark'))node.replaceWith(document.createTextNode(node.textContent));$('scriptFullText').normalize();matches=[];current=-1;}
@@ -142,7 +142,11 @@
   }
   let updateSerial=0;
   function update(v,raw){
-    const key=JSON.stringify([v?.id,raw,v?.documentFormat,v?.keywords]);if(key===readerKey)return;readerKey=key;
+    const {pdf,...readingFormat}=v?.documentFormat||{};
+    const key=JSON.stringify([v?.id,v?.updatedAt,raw,readingFormat,v?.keywords]);
+    if(originalSnapshot!==pdf){if(originalURL)URL.revokeObjectURL(originalURL);originalURL=null;originalSnapshot=pdf;}
+    if($('scriptOriginal')){$('scriptOriginal').hidden=!pdf;$('scriptOriginal').setAttribute('href','#');}
+    if(key===readerKey)return;readerKey=key;
     const serial=++updateSerial,container=$('scriptFullText');root.RodaScriptPages?.cancel();$('scriptDocumentScroll').scrollTop=0;
     layoutObserver?.disconnect();layoutObserver=null;
     container.classList.remove('script-pdf-pages','script-reading-pages');
@@ -154,23 +158,29 @@
       for(const id of ['scriptSceneSelect','scriptSearch'])$(id).disabled=!anchors.length;
       $('scriptFormatHint').textContent=hint;
     }
-    function reading(){root.RodaScriptPages?.cancel();container.classList.remove('script-pdf-pages');let measuredWidth=0;
-      function paginate(){if(serial!==updateSerial)return;const result=render(container,raw,v?.documentFormat,v?.keywords);
+    function reading(){root.RodaScriptPages?.cancel();container.classList.remove('script-pdf-pages');let measuredWidth=0,layoutRun=0;
+      async function paginate(){if(serial!==updateSerial)return;const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);
         if(raw&&container.clientWidth===0){finish(result.scenes,'Preparando las páginas de lectura…');return;}
-        measuredWidth=container.clientWidth;const count=raw&&root.RodaScriptPages?root.RodaScriptPages.readingPages(container,v?.documentFormat):0;
-        finish(result.scenes,!raw?'':count+' páginas de lectura · '+(v?.documentFormat?.pageWarning||'Actualizá desde Google Docs o cargá un PDF para ver las hojas originales.'));}
+        measuredWidth=container.clientWidth;
+        const count=raw&&root.RodaScriptPages?await root.RodaScriptPages.readingPages(container,readingFormat,()=>serial===updateSerial&&run===layoutRun):0;
+        if(count===null||serial!==updateSerial||run!==layoutRun)return;
+        finish(result.scenes,!raw?'':count+' páginas de lectura'+(pdf?' · El PDF original conserva la paginación exacta.':''));}
       paginate();
       layoutObserver=new ResizeObserver(entries=>{if(serial!==updateSerial)return;const width=entries[0]?.contentRect.width||0;if(width>0&&Math.abs(width-measuredWidth)>1){measuredWidth=width;requestAnimationFrame(paginate);}});layoutObserver.observe(container);
     }
     clearTimeout(searchTimer);anchors=[];matches=[];current=-1;$('scriptSearch').value='';$('scriptSearchCount').textContent='';$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;$('scriptSearch').disabled=true;$('scriptSceneSelect').disabled=true;
-    if(v?.documentFormat?.pdf&&root.RodaScriptPages){
-      $('scriptFormatHint').textContent='Cargando las páginas originales…';
-      root.RodaScriptPages.renderPDF(container,v.documentFormat.pdf,{format:v.documentFormat,raw}).then(result=>{if(result&&serial===updateSerial)finish(decorate(container,v?.keywords),result.pages+' páginas originales · mismo formato que el documento');}).catch(()=>{if(serial===updateSerial)reading();});
-    }else reading();
+    // Keep the original PDF out of Roda's render loop. A native browser tab can
+    // display it on request, without a PDF worker/canvas/text layer in the editor.
+    $('scriptFormatHint').textContent='Preparando lectura…';reading();
   }
 
   function jump(index){if(!anchors[index])return;$('scriptSceneSelect').value=index;if(matchMedia('(max-width:700px)').matches){$('scriptReaderTools').classList.remove('is-open');$('scriptToolsToggle').setAttribute('aria-expanded','false');}const node=$('script-scene-'+index);reveal(node);node?.closest('p')?.animate([{backgroundColor:'#e7d998'},{backgroundColor:'transparent'}],{duration:900});}
   function bind(){
+    if($('scriptOriginal'))$('scriptOriginal').onclick=e=>{
+      if(!originalSnapshot?.data){e.preventDefault();return;}
+      if(!originalURL){const bytes=Uint8Array.from(atob(originalSnapshot.data),c=>c.charCodeAt(0));originalURL=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));}
+      e.currentTarget.href=originalURL;
+    };
     $('scriptSearch').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(search,180);});
     $('scriptSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(searchTimer){search();}else navigateMatch(e.shiftKey?-1:1);}if(e.key==='Escape'){e.target.value='';search();}});
     $('scriptSearchPrev').onclick=()=>navigateMatch(-1);$('scriptSearchNext').onclick=()=>navigateMatch(1);
