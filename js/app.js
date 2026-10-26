@@ -3030,12 +3030,13 @@ function setupScheduleWheelScroll(){
   }
 
   function addShootDay(){
+    if(isReadOnly('planning'))return roToast();
     const d = {
       id: uid("day"),
       date:"",
       callTime:"08:00",
       location:"",
-      label:`Día ${state.shootDays.length+1}`,
+      label:`Día ${Math.max(0,...state.shootDays.map(d=>Number(/^Día (\d+)(?:\b|$)/i.exec(d.label||'')?.[1])||0))+1}`,
       notes:"",
       sceneIds:[],
       crewIds:[],
@@ -3062,24 +3063,30 @@ function setupScheduleWheelScroll(){
   }
 
   function deleteShootDay(){
-    if(!selectedDayId) return;
-    const d = getDay(selectedDayId);
-    if(!d) return;
-    if(!confirm(`Borrar ${formatDayTitle(d.date)}?`)) return;
-
-    state.shootDays = state.shootDays.filter(x=>x.id!==d.id);
+    if(isReadOnly('planning'))return roToast();
+    const d=getDay(selectedDayplanDayId||selectedDayId);
+    if(!d)return;
+    const title=[d.label,formatDayTitle(d.date),d.location].filter(Boolean).join(' · ');
+    const scenes=(d.sceneIds||[]).length, blocks=(d.blocks||[]).length;
+    const detail=(scenes?'\n'+(scenes===1?'Su escena queda disponible':'Sus '+scenes+' escenas quedan disponibles')+' para programar en otra jornada.':'')+(blocks?'\n'+(blocks===1?'Se borrará su bloque':'Se borrarán sus '+blocks+' bloques')+' de producción.':'');
+    if(!confirm('¿Eliminar '+title+'?'+detail))return;
+    const index=state.shootDays.findIndex(x=>x.id===d.id);
+    state.shootDays=state.shootDays.filter(x=>x.id!==d.id);
     sortShootDaysInPlace();
-    selectedDayId = state.shootDays[0]?.id || null;
-    if(selectedDayplanDayId === d.id) selectedDayplanDayId = selectedDayId;
-    touch();
-    renderDaysBoard();
-    renderDayDetail();
-    renderReports();
-    renderScheduleBoard();
-    renderDayPlan();
-    renderSceneBank();
-    renderCallSheetCalendar();
-    renderReportsDetail();
+    const next=state.shootDays[Math.min(index,state.shootDays.length-1)]?.id||null;
+    if(selectedDayId===d.id)selectedDayId=next;
+    if(selectedDayplanDayId===d.id)selectedDayplanDayId=next;
+    selectedDayId=selectedDayplanDayId;
+    if(selectedShotlistDayId===d.id){selectedShotlistDayId=next;selectedShotlistSceneId=null;}
+    if(callSheetDayId===d.id)callSheetDayId=next;
+    dayplanSelectedKey=null;dayplanSelectedKeys.clear();
+    const filter=loadSchedDayFilter();filter.selected=filter.selected.filter(id=>id!==d.id);
+    if(filter.mode==='selected'&&!filter.selected.length)filter.mode='none';
+    saveSchedDayFilter(filter);
+    touch();saveCallSheetCursor();
+    renderDaysBoard();renderDayDetail();renderReports();renderScheduleBoard();
+    renderDayPlan();renderSceneBank();renderShotList();renderCallSheetCalendar();renderReportsDetail();
+    toast('Jornada eliminada.');
   }
 
   function bindDaySceneSwap(head, container, day){
@@ -4715,11 +4722,12 @@ function updateSchedDaysButton(){
     title = "Días: Ninguno";
     btn.classList.add("active");
   }else if(f.mode==="selected"){
-    const n = (f.selected||[]).length;
+    const n = (state.shootDays||[]).filter(d=>f.selected.includes(d.id)).length;
     title = `Días: ${n} seleccionado${n===1?"":"s"}`;
     btn.classList.add("active");
   }
   btn.title = title;
+  btn.textContent = title;
 }
 
 // Calendar UI state
@@ -4729,6 +4737,7 @@ function openSchedDayPicker(){
   if(!dlg) return;
 
   // init month: primer día del proyecto o del primer seleccionado
+  sortShootDaysInPlace();
   const f = loadSchedDayFilter();
   let initDateStr = null;
   if(f.mode==="selected" && (f.selected||[]).length){
@@ -4736,7 +4745,7 @@ function openSchedDayPicker(){
     initDateStr = d0?.date || null;
   }
   if(!initDateStr){
-    initDateStr = state.shootDays?.[0]?.date || null;
+    initDateStr = state.shootDays?.find(d=>d.date)?.date || null;
   }
   let dt = initDateStr ? new Date(initDateStr+"T12:00:00") : new Date();
   if(!Number.isFinite(dt.getTime())) dt = new Date();
@@ -4755,81 +4764,49 @@ function closeSchedDayPicker(){
   try{ dlg.close(); }catch(_e){ dlg.removeAttribute("open"); }
 }
 
+function selectedScheduleDayIds(){
+  const f=loadSchedDayFilter(), ids=(state.shootDays||[]).map(d=>d.id);
+  return new Set(f.mode==='all'?ids:f.mode==='none'?[]:ids.filter(id=>f.selected.includes(id)));
+}
+
+function setScheduleDaysSelected(ids, checked){
+  const selected=selectedScheduleDayIds();
+  for(const id of ids) { if(checked) selected.add(id); else selected.delete(id); }
+  saveSchedDayFilter({mode:selected.size?'selected':'none',selected:[...selected]});
+  updateSchedDaysButton();
+  renderSchedCalendar();
+  renderScheduleBoard();
+}
+
 function renderSchedCalendar(){
-  const grid = el("schedCalGrid");
-  const monthLab = el("schedCalMonth");
-  if(!grid || !monthLab) return;
-  if(!schedCalCursor) schedCalCursor = { y:new Date().getFullYear(), m:new Date().getMonth() };
-
-  const y = schedCalCursor.y;
-  const m = schedCalCursor.m;
-
-  const monthName = new Date(y, m, 1).toLocaleDateString("es-AR", { month:"long", year:"numeric" });
-  monthLab.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
-
-  const days = (state.shootDays||[]);
-  const byDate = new Map();
-  for(const d of days){
-    if(d?.date) byDate.set(d.date, d.id);
+  const grid=el('schedCalGrid'), monthLab=el('schedCalMonth'), undated=el('schedUndatedDays');
+  if(!grid||!monthLab)return;
+  if(!schedCalCursor)schedCalCursor={y:new Date().getFullYear(),m:new Date().getMonth()};
+  const {y,m}=schedCalCursor, days=state.shootDays||[], selected=selectedScheduleDayIds();
+  const monthName=new Date(y,m,1).toLocaleDateString('es-AR',{month:'long',year:'numeric'});
+  monthLab.textContent=monthName.charAt(0).toUpperCase()+monthName.slice(1);
+  const byDate=new Map();
+  for(const d of days)if(d.date){if(!byDate.has(d.date))byDate.set(d.date,[]);byDate.get(d.date).push(d);}
+  const dow=(new Date(y,m,1).getDay()+6)%7, lastDay=new Date(y,m+1,0).getDate();
+  let html=['L','M','X','J','V','S','D'].map(x=>'<div class="schedCalDow">'+x+'</div>').join('');
+  html+='<div class="schedCalCell isEmpty"></div>'.repeat(dow);
+  for(let day=1;day<=lastDay;day++){
+    const date=y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0'), group=byDate.get(date)||[];
+    const active=group.length>0&&group.every(d=>selected.has(d.id)), partial=group.some(d=>selected.has(d.id))&&!active;
+    const label=date+(group.length?' · '+group.map(d=>d.label||'Jornada').join(', '):' · Sin jornadas');
+    html+='<button type="button" data-ro-allow="1" class="schedCalCell'+(!group.length?' isDisabled':'')+(active?' isSelected':'')+'" data-date="'+date+'" aria-label="'+escAttr(label)+'" aria-pressed="'+(partial?'mixed':String(active))+'" '+(!group.length?'disabled':'')+'>'+day+'</button>';
   }
-
-  const f = loadSchedDayFilter();
-  const sel = new Set(f.selected||[]);
-
-  const first = new Date(y, m, 1);
-  // Week starts Monday (AR): 0..6
-  const dow = (first.getDay() + 6) % 7;
-  const lastDay = new Date(y, m+1, 0).getDate();
-
-  const dows = ["L","M","X","J","V","S","D"];
-  let html = dows.map(x=>`<div class="schedCalDow">${x}</div>`).join("");
-
-  for(let i=0;i<dow;i++){
-    html += `<div class="schedCalCell isEmpty"></div>`;
-  }
-
-  for(let day=1; day<=lastDay; day++){
-    const dateStr = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-    const dayId = byDate.get(dateStr);
-    const enabled = !!dayId;
-    const isSelected = enabled && sel.has(dayId);
-    const cls = [
-      "schedCalCell",
-      enabled ? "" : "isDisabled",
-      isSelected ? "isSelected" : ""
-    ].filter(Boolean).join(" ");
-    const attrs = enabled ? `data-day-id="${escAttr(dayId)}"` : "";
-    html += `<div class="${cls}" ${attrs} title="${escAttr(dateStr)}">${day}</div>`;
-  }
-
-  grid.innerHTML = html;
-
-  // click delegate (solo una vez)
-  if(grid.dataset.bound!=="1"){
-    grid.dataset.bound="1";
-    grid.addEventListener("click", (e)=>{
-      const cell = e.target.closest(".schedCalCell");
-      if(!cell || cell.classList.contains("isEmpty") || cell.classList.contains("isDisabled")) return;
-      const dayId = cell.getAttribute("data-day-id");
-      if(!dayId) return;
-
-      const f = loadSchedDayFilter();
-      const set = new Set(f.selected||[]);
-      if(set.has(dayId)) set.delete(dayId); else set.add(dayId);
-
-      const selected = [...set];
-      if(selected.length){
-        f.mode = "selected";
-        f.selected = selected;
-      }else{
-        f.mode = "none";
-        f.selected = [];
-      }
-      saveSchedDayFilter(f);
-      updateSchedDaysButton();
-      renderSchedCalendar();
-      renderScheduleBoard();
-    });
+  grid.innerHTML=html;
+  grid.onclick=e=>{
+    const cell=e.target.closest('button[data-date]');if(!cell||cell.disabled)return;
+    const group=byDate.get(cell.dataset.date)||[];
+    setScheduleDaysSelected(group.map(d=>d.id),!group.every(d=>selected.has(d.id)));
+  };
+  if(undated){
+    const pending=days.filter(d=>!d.date);
+    undated.hidden=!pending.length;
+    undated.innerHTML='<h3>Jornadas sin fecha</h3><p class="muted small">También podés mostrarlas u ocultarlas sin asignarles una fecha.</p>'+pending.map(d=>'<label class="schedUndatedDay"><input type="checkbox" data-ro-allow="1" data-sched-day="'+escAttr(d.id)+'" '+(selected.has(d.id)?'checked':'')+'/><span>'+esc(d.label||'Jornada sin nombre')+(d.location?' · '+esc(d.location):'')+'</span></label>').join('');
+    undated.onchange=e=>{const id=e.target.dataset.schedDay;if(id)setScheduleDaysSelected([id],e.target.checked);};
   }
 }
 
@@ -5838,8 +5815,13 @@ items.push({
     }
     if(selectedDayplanDayId) sel.value = selectedDayplanDayId;
 
+    selectedDayId=selectedDayplanDayId;
     const d = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
+    const deleteButton=el("btnDeleteShootDay");
+    if(deleteButton)deleteButton.disabled=!d||isReadOnly("planning");
     if(!d){
+      const nightButton=el("btnDayplanNight");
+      if(nightButton)el("dpDayActionPool")?.appendChild(nightButton);
       head.innerHTML = `<div class="muted">No hay días cargados.</div>`;
       timeCol.innerHTML = "";
       lane.innerHTML = "";
@@ -5858,10 +5840,8 @@ items.push({
 
     // Preservar botones de acciones del día (si están dentro del header, innerHTML los destruiría)
     const preservedNightBtn = el("btnDayplanNight");
-    const preservedDeleteBtn = el("btnDeleteShootDay");
     const preserveFrag = document.createDocumentFragment();
     if(preservedNightBtn) preserveFrag.appendChild(preservedNightBtn);
-    if(preservedDeleteBtn) preserveFrag.appendChild(preservedDeleteBtn);
 
     // Toggle UI "Horario nocturno"
     if(preservedNightBtn){
@@ -5893,7 +5873,6 @@ items.push({
       <div class="dpActions noPrint">
         <div class="row gap" style="align-items:center; flex-wrap:wrap; justify-content:flex-end;">
           <div id="dpDayNightMount"></div>
-          <div id="dpDayDeleteMount"></div>
         </div>
       </div>
 
@@ -5944,18 +5923,11 @@ items.push({
     // Montar acciones del día (reusamos los botones existentes para no perder listeners)
     try{
       const nightBtn = preservedNightBtn;
-      const delBtn = preservedDeleteBtn;
       const nightMount = head.querySelector("#dpDayNightMount");
-      const delMount = head.querySelector("#dpDayDeleteMount");
       if(nightBtn && nightMount){
         nightMount.innerHTML = "";
         nightMount.appendChild(nightBtn);
         nightBtn.classList.remove("full");
-      }
-      if(delBtn && delMount){
-        delMount.innerHTML = "";
-        delMount.appendChild(delBtn);
-        delBtn.classList.remove("full");
       }
     }catch(_e){}
 
@@ -9991,22 +9963,6 @@ if(!state.scenes.length){
         notes:"",
         elements: Object.fromEntries(cats.map(c=>[c,[]])),
         shots: []
-      });
-    }
-    if(!state.shootDays.length){
-      state.shootDays.push({
-        id: uid("day"),
-        date:"",
-        callTime:"08:00",
-        location:"",
-        label:"Día 1",
-        notes:"",
-        sceneIds:[],
-        crewIds:[],
-        blocks:[],
-        sceneColors:{},
-        times:{},
-        durations:{}
       });
     }
 

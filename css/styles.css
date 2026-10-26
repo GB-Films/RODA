@@ -3969,3 +3969,14 @@ dialog.dlg::backdrop{
   padding:0 14px 14px;
   font-size:12px;
 }
+
+/* Schedule day selection, including undated jornadas. */
+#btnSchedDays{width:auto;white-space:nowrap;}
+#schedDayPicker{max-height:90vh;overflow-y:auto;}
+button.schedCalCell{font:inherit;color:inherit;width:100%;padding:0;}
+.schedCalCell[aria-pressed="mixed"]{outline:1px dashed currentColor;}
+.schedUndatedDays{border-top:1px solid var(--border);margin-top:14px;padding:12px 14px;}
+.schedUndatedDays h3{font-size:14px;margin:0 0 6px;}
+.schedUndatedDay{display:flex;align-items:center;gap:10px;padding:9px 4px;cursor:pointer;}
+.schedUndatedDay input{width:18px;height:18px;flex-shrink:0;accent-color:#ddd;}
+.schedUndatedDay span{overflow-wrap:anywhere;}
