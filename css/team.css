@@ -20,6 +20,9 @@
 #crewCard .cardHeader{flex-wrap:wrap;gap:12px;}
 #crewAreaFilter{width:auto;min-width:150px;}
 #crewCard .cardHeader .row{flex-wrap:wrap;}
+#crewTable{min-width:1160px;}
+#crewTable td:nth-child(3){min-width:220px;}
+#crewTable td:nth-child(3) .input{min-width:200px;}
 body:not(.roda-studio) .cast-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;}
 body:not(.roda-studio) .cast-title{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
 body:not(.roda-studio) .cast-title h2{font-size:16px;margin:0 0 4px;}
