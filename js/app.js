@@ -685,17 +685,13 @@ const shotlistCollapsedSceneIds = new Set();
     clearTimeout(livePaintTimer);
     livePaintTimer = setTimeout(()=>{
       const active = document.activeElement;
-      const editing = active?.matches('input, textarea, select, [contenteditable="true"]');
+      const editing = window.RodaLiveView ? RodaLiveView.editing(document) : active?.matches('input, textarea, select, [contenteditable="true"]');
       if(editing || schedDrag || dayplanPointer || htmlDragging || document.querySelector('dialog[open]')){
         scheduleLivePaint();
         return;
       }
-      const scrolls = [...document.querySelectorAll('[id]')]
-        .filter(node=>node.scrollTop || node.scrollLeft)
-        .map(node=>[node.id,node.scrollLeft,node.scrollTop]);
-      hydrateAll();
-      renderDayPlan();
-      for(const [id,x,y] of scrolls){ const node = el(id); if(node){ node.scrollLeft=x; node.scrollTop=y; } }
+      if(window.RodaLiveView)RodaLiveView.paint(document,()=>{hydrateAll();renderDayPlan();});
+      else {hydrateAll();renderDayPlan();}
     },180);
   }
 
@@ -5825,7 +5821,7 @@ items.push({
     <div class="dpTitle">
       <div class="dpProj">${proj}</div>
       <div class="dpRowLine">
-        <button class="dpDayBtn" id="dpDayTitleBtn" type="button" title="Editar detalle del día">${dayTxt}</button>
+        <button class="dpDayBtn" id="dpDayTitleBtn" data-ro-allow="1" type="button" title="Editar detalle del día">${dayTxt}</button>
         <div class="dpBadges" id="dpDayBadges">
           <span class="metaPill"><b>Call</b> ${esc(d.callTime || "—")}</span>
           <span class="metaPill"><b>Locación</b> ${esc(d.location || "—")}</span>
