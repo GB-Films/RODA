@@ -2523,8 +2523,8 @@ body.gbPrintingDayplan #gbPrintRoot .catBlock .items{
   body.gbPrintingDayplan .dayplanPrintTable{ page-break-inside:auto; }
   body.gbPrintingDayplan .dayplanPrintTable tbody{ display:table-row-group; }
   body.gbPrintingDayplan .dayplanPrintTable tr{
-    break-inside:auto;
-    page-break-inside:auto;
+    break-inside:avoid;
+    page-break-inside:avoid;
   }
 
 
@@ -3980,3 +3980,38 @@ button.schedCalCell{font:inherit;color:inherit;width:100%;padding:0;}
 .schedUndatedDay{display:flex;align-items:center;gap:10px;padding:9px 4px;cursor:pointer;}
 .schedUndatedDay input{width:18px;height:18px;flex-shrink:0;accent-color:#ddd;}
 .schedUndatedDay span{overflow-wrap:anywhere;}
+
+/* Printed production documents must win over the shared Studio header styles. */
+@media print{
+  html:has(body[class*="gbPrinting"]){ background:#fff !important; color-scheme:light; }
+  body[class*="gbPrinting"] > :not(#gbPrintRoot){ display:none !important; }
+  body.gbPrintingDayplan #gbPrintRoot,
+  body.gbPrintingSchedule #gbPrintRoot{ position:static; width:100%; }
+  body.gbPrintingDayplan #gbPrintRoot .dpPrintBlock{ border:0 !important; }
+  body.gbPrintingDayplan #gbPrintRoot .items{ padding:0 !important; }
+  body.gbPrintingSchedule .pgDayCard{ break-inside:auto; page-break-inside:auto; -webkit-column-break-inside:auto; }
+  .dpPrintHeader{ margin:0 0 6mm; break-inside:avoid; break-after:avoid; color:#161616; }
+  .dpPrintHeading{ display:flex; align-items:flex-end; justify-content:space-between; gap:8mm; padding-bottom:4mm; border-bottom:2px solid #161616; }
+  .dpPrintEyebrow{ margin-bottom:2mm; font-size:8pt; font-weight:700; letter-spacing:1.6px; text-transform:uppercase; }
+  .dpPrintHeading h1{ margin:0; font-size:21pt; line-height:1.15; font-weight:800; }
+  .dpPrintDay{ max-width:45%; text-align:right; font-size:11pt; font-weight:700; line-height:1.4; }
+  .dpPrintMeta{ display:grid; grid-template-columns:1fr 2fr 1fr; gap:6mm; padding:3mm 0; border-bottom:1px solid #d1d1d1; }
+  .dpPrintMeta span{ display:block; margin-bottom:1mm; color:#555; font-size:8pt; }
+  .dpPrintMeta strong{ font-size:10pt; font-weight:700; }
+  .dpPrintMeta > :last-child{ text-align:right; }
+  body.gbPrintingDayplan .dayplanPrintTable{ font-size:8.5pt; line-height:1.35; }
+  body.gbPrintingDayplan .dayplanPrintTable th{ background:#ededed; padding:2mm 1.5mm; font-size:8pt; }
+  body.gbPrintingDayplan .dayplanPrintTable td{ padding:2mm 1.5mm; }
+  body.gbPrintingDayplan .dayplanPrintTable col.colHour{ width:15mm; }
+  body.gbPrintingDayplan .dayplanPrintTable col.colDur{ width:17mm; }
+  body.gbPrintingDayplan .dayplanPrintTable col.colNro{ width:11mm; }
+  body.gbPrintingDayplan .dayplanPrintTable col.colTitle{ width:48mm; }
+  body.gbPrintingDayplan .dayplanPrintTable col.colIE{ width:10mm; }
+  body.gbPrintingDayplan .dayplanPrintTable col.colLoc{ width:32mm; }
+  body.gbPrintingDayplan .dayplanPrintTable col.colTod{ width:17mm; }
+  body.gbPrintingDayplan .dayplanPrintTable td.cNro{ font-size:10pt; font-weight:800; text-align:center; }
+  body.gbPrintingDayplan .dayplanPrintTable td.cDur,
+  body.gbPrintingDayplan .dayplanPrintTable td.cHour{ white-space:nowrap; }
+  body.gbPrintingDayplan .dayplanPrintTable .dpClock2{ line-height:1.25; }
+  body.gbPrintingDayplan .dayplanPrintTable td.cSum{ font-size:8pt; }
+}
