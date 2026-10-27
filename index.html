@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="css/planning.css?v=1.27.1">
 <link rel="stylesheet" href="css/team.css?v=1.27.0">
 <link rel="stylesheet" href="css/dialogs.css?v=1.21.1"/>
+<link rel="stylesheet" href="css/shotlist.css?v=1.28.0">
 </head>
 <body>
   <div class="shell">
@@ -538,22 +539,8 @@
             <div class="shotlistLayout">
               <div class="shotlistMain">
                 <div class="muted small" id="shotlistSummary">—</div>
-                <div class="spacer"></div>
                 <div id="shotlistWrap"></div>
               </div>
-              <aside class="shotlistSide">
-                <div class="shotSceneInfoCard">
-                  <div class="shotSceneInfoHead">
-                    <div class="shotSceneInfoTitle">Escena</div>
-                    <div class="row gap noPrint">
-                      <button class="btn small" id="btnShotSceneGoBreakdown" type="button" disabled>Ir a Breakdown</button>
-                    </div>
-                  </div>
-                  <div class="shotSceneInfoBody" id="shotSceneInfo">
-                    <div class="muted">Seleccioná una escena para ver su info.</div>
-                  </div>
-                </div>
-              </aside>
             </div>
           </div>
         </div>
@@ -740,7 +727,7 @@
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
     ];
-    const appFiles = ["js/firebase-config.js","js/dialogs.js","js/cast.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/planning-history.js","js/app.js"];
+    const appFiles = ["js/firebase-config.js","js/dialogs.js","js/cast.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/planning-history.js","js/day-navigation.js","js/app.js"];
 
     function loadScript(src){
       return new Promise((res)=>{

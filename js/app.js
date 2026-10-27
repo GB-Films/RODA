@@ -258,6 +258,7 @@ function sanitizeScriptState(opts={}){
   // Mantener el "día foco" sincronizado entre Call Diario / Plan de Rodaje / Shotlist / Reportes.
   function syncAllDaySelections(id){
     if(!id) return;
+    sharedDayScope=id;
     selectedDayId = id;
     selectedDayplanDayId = id;
     selectedShotlistDayId = id;
@@ -273,7 +274,57 @@ function sanitizeScriptState(opts={}){
 
   let selectedShotlistDayId = null;
 let selectedShotlistSceneId = null;
-const shotlistCollapsedSceneIds = new Set();
+const shotlistExpandedSceneIds = new Set();
+  // Jornada is local navigation state, never part of the shared production plan.
+  let sharedDayScope = null;
+  let dayNavigation = null;
+  let dayNavigationProject = null;
+  function sharedDayFilter(){
+    const key = getSchedDayFilterKey();
+    if(dayNavigationProject !== key){
+      dayNavigationProject=key; sharedDayScope=null; shotlistExpandedSceneIds.clear();
+    }
+    if(sharedDayScope && !['all','unassigned'].includes(sharedDayScope) && !getDay(sharedDayScope)) sharedDayScope='all';
+    return sharedDayScope || 'all';
+  }
+  function chooseSharedDay(id){
+    if(!['all','unassigned'].includes(id) && !getDay(id)) return;
+    sharedDayScope=id;
+    if(getDay(id)){
+      syncAllDaySelections(id);
+      const date=getDay(id).date;
+      if(date){const [year,month]=date.split('-').map(Number);calCursor={year,month:month-1};}
+      saveSchedDayFilter({mode:'selected',selected:[id]});
+    }else if(id==='all')saveSchedDayFilter({mode:'all',selected:[]});
+    if(el('elxDay'))el('elxDay').value=id;
+    showView(document.body.dataset.rodaView || 'dayplan');
+  }
+  function renderDayNavigation(){
+    const scope=sharedDayFilter();
+    if(!window.RodaDayNavigation)return;
+    const main=document.querySelector('.main');if(!main)return;
+    if(!dayNavigation)dayNavigation=RodaDayNavigation.create(main,{onSelect:chooseSharedDay,onCompare:openSchedDayPicker});
+    const view=document.body.dataset.rodaView;
+    const general=view==='schedule'||(view==='callsheet'&&reportsTab==='schedule');
+    const visible=['shooting','dayplan','schedule','shotlist','elements','crew','reports','callsheet'].includes(view);
+    const days=(state.shootDays||[]).map(d=>({id:d.id,title:formatDayTitle(d.date)+(d.label?' · '+d.label:''),detail:[d.location,d.callTime?'Call '+d.callTime:'',(d.sceneIds||[]).length+' escenas'].filter(Boolean).join(' · ')}));
+    let selection=selectedDayId;
+    if(view==='shotlist')selection=selectedShotlistDayId;
+    if(view==='dayplan')selection=selectedDayplanDayId;
+    if(view==='callsheet')selection=callSheetDayId;
+    if(view==='elements')selection=scope;
+    if(view==='crew'||view==='reports')selection=getDay(scope)?scope:'all';
+    if(general){
+      const filter=loadSchedDayFilter(),selected=getScheduleDaysFiltered();
+      selection=filter.mode==='all'?'all':selected.length===1?selected[0].id:filter.mode==='none'?'none':'multiple';
+    }
+    const all=general||['elements','crew','reports'].includes(view);
+    if(!all&&!getDay(selection))selection=days[0]?.id||null;
+    const day=days.find(d=>d.id===selection);
+    const title=day?.title||(selection==='all'?'Todas las jornadas':selection==='unassigned'?'Sin jornada asignada':selection==='multiple'?getScheduleDaysFiltered().length+' jornadas seleccionadas':selection==='none'?'Ninguna jornada seleccionada':'Sin jornadas');
+    dayNavigation.render({visible,days,selection,title,meta:day?.detail||(view==='crew'?'Personas del equipo según su citación o sus personajes':days.length+' jornadas del proyecto'),allowAll:all,allowUnassigned:view==='elements',allowCompare:view==='schedule'});
+  }
+
   let selectedDayplanDayId = null;
   let dayDetailOpenSceneKeys = new Set();
   let reportsTab = (localStorage.getItem("gb_reports_tab") || "callsheet");
@@ -2053,6 +2104,8 @@ async function setShotThumb(sh, file){
       daySel.addEventListener("change", ()=>{
         const id = daySel.value;
         if(!id) return;
+        sharedDayScope=id;
+        saveSchedDayFilter({mode:'selected',selected:[id]});
         selectedDayId = id;
         selectedDayplanDayId = id;
         selectedShotlistDayId = id;
@@ -2211,6 +2264,7 @@ function setupScheduleWheelScroll(){
     if(name==="crew"){ renderCrew(); }
     if(name==="reports"){ renderReportsFilters(); renderReports(); }
     if(name==="callsheet"){ renderCallSheetCalendar(); applyReportsTabUI(); renderReportsDetail(); }
+    renderDayNavigation();
 }
 
   // ======= Script parser (INT/EXT) =======
@@ -3029,6 +3083,8 @@ function setupScheduleWheelScroll(){
         d.sceneIds = (d.sceneIds||[]).filter(x=>x!==scene.id);
         if(d.times) delete d.times[scene.id];
         if(d.durations) delete d.durations[scene.id];
+        sharedDayScope=d.id;
+        saveSchedDayFilter({mode:'selected',selected:[d.id]});
         selectedDayId = d.id;
         selectedDayplanDayId = d.id;
         selectedShotlistDayId = selectedShotlistDayId || d.id;
@@ -3106,10 +3162,8 @@ function setupScheduleWheelScroll(){
     };
     state.shootDays.push(d);
     sortShootDaysInPlace();
-    selectedDayId = d.id;
-    selectedDayplanDayId = d.id;
-    selectedShotlistDayId = selectedShotlistDayId || d.id;
-    callSheetDayId = callSheetDayId || d.id;
+    syncAllDaySelections(d.id);
+    saveSchedDayFilter({mode:'selected',selected:[d.id]});
     touch();
     renderDaysBoard();
     renderDayDetail();
@@ -3227,6 +3281,8 @@ function setupScheduleWheelScroll(){
       `;
       bindDaySceneSwap(head,col,d);
       head.addEventListener("click", ()=>{
+        sharedDayScope=d.id;
+        saveSchedDayFilter({mode:'selected',selected:[d.id]});
         selectedDayId = d.id;
         selectedDayplanDayId = d.id;
         selectedShotlistDayId = d.id;
@@ -3301,6 +3357,7 @@ const zone = document.createElement("div");
 
   
 function renderDayDetail(){
+    renderDayNavigation();
   // Asegurar que haya un día seleccionado válido
   if(!selectedDayId || !getDay(selectedDayId)){
     selectedDayId = state.shootDays?.[0]?.id || null;
@@ -4147,12 +4204,14 @@ function renderDayCast(){
   }
 
   function renderElementsExplorer(){
+    renderDayNavigation();
     if(!el("elxCategory")) return;
     populateElementsFilters();
     syncElementsExplorerChips();
 
     const catFilter = el("elxCategory").value || "all";
-    const dayFilter = el("elxDay").value || "all";
+    const dayFilter = sharedDayFilter();
+    el("elxDay").value=dayFilter;
     const q = (el("elxSearch").value || "").toLowerCase();
 
     const scenes = scenesForDayFilter(dayFilter);
@@ -4307,6 +4366,7 @@ function renderDayCast(){
   function addCrew(area){
     area=typeof area==='string'?area:(el('crewAreaFilter')?.value==='Cast'||isReadOnly('crew')?'Cast':'Produccion');
     if(isReadOnly(area==='Cast'?'cast':'crew'))return roToast();
+    sharedDayScope="all";renderDayNavigation();
     if(el('crewSearch'))el('crewSearch').value='';
     if(area==='Cast'&&el('crewAreaFilter')?.value==='technical')el('crewAreaFilter').value='Cast';
     state.crew.push({ id: uid("crew"), area, role:area==='Cast'?'Actor / actriz':'', name:"", phone:"", email:"", notes:"", ...(area==='Cast'?{castPerson:true}:{}) });
@@ -4348,6 +4408,7 @@ function renderDayCast(){
   }
 
   function renderCrew(){
+    renderDayNavigation();
     const historyButton=el("btnCrewMergeHistory");if(historyButton){historyButton.classList.toggle("hidden",!state.crew.some(p=>p.mergedInto));historyButton.onclick=()=>openCrewAction("history");}
     const table = el("crewTable");
     if(!table) return;
@@ -4366,6 +4427,8 @@ function renderDayCast(){
 
     let list = state.crew.filter(c=>normalizeCrewArea(c.area)!=='Cast'||RodaCast.isPerson(c)).map(c=>({ ...c, area: normalizeCrewArea(c.area) }));
     list=list.filter(c=>(!window.RodaAccess||RodaAccess.canView(c.area==='Cast'?'cast':'crew'))&&(areaFilter==='all'||(areaFilter==='Cast'?c.area==='Cast':c.area!=='Cast')));
+    const journey=sharedDayFilter();
+    if(getDay(journey))list=list.filter(c=>crewDays(c.id).some(d=>d.id===journey));
     if(q){
       list = list.filter(c=>{
         const hay = `${c.area} ${c.role} ${c.name} ${c.phone} ${c.email} ${c.notes}`.toLowerCase();
@@ -4472,27 +4535,23 @@ function renderDayCast(){
 
     if(!list.length){
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="8" class="muted">No hay resultados.</td>`;
+      tr.innerHTML = `<td colspan="8" class="muted">${getDay(journey)?'No hay personas citadas en esta jornada. Elegí «Todas las jornadas» para ver el equipo completo.':'No hay resultados.'}</td>`;
       tbody.appendChild(tr);
     }
   }
 
   // ===================== Reports (sin cambios) =====================
   function renderReports(){
+    renderDayNavigation();
     const board = el("reportsBoard");
     if(!board) return;
     board.innerHTML = "";
     sortShootDaysInPlace();
 
-    // Mobile: mostrar un solo día (el seleccionado arriba)
-    const mobileSingleDay = isMobileUI();
-    const focusId = (selectedDayId && state.shootDays.some(d=>d.id===selectedDayId))
-      ? selectedDayId
-      : (state.shootDays[0]?.id || null);
-    const daysToShow = mobileSingleDay && focusId
-      ? state.shootDays.filter(d=>d.id===focusId)
-      : state.shootDays;
-    try{ board.classList.toggle("singleDay", !!(mobileSingleDay && focusId)); }catch(_e){}
+    // Shared journey scope; All remains available on small screens.
+    const reportScope=sharedDayFilter();
+    const daysToShow = getDay(reportScope) ? state.shootDays.filter(d=>d.id===reportScope) : state.shootDays;
+    try{ board.classList.toggle("singleDay", daysToShow.length===1); }catch(_e){}
 
     const sceneById = new Map((state.scenes||[]).map(s=>[s.id,s]));
     const crewById  = new Map((state.crew||[]).map(c=>[c.id,c]));
@@ -4773,6 +4832,7 @@ function getScheduleBoardBaseHour(){
 }
 
 function updateSchedDaysButton(){
+  renderDayNavigation();
   const btn = el("btnSchedDays");
   if(!btn) return;
   const f = loadSchedDayFilter();
@@ -4967,6 +5027,7 @@ function bindSchedDayPickerUI(){
   }
 
   function renderScheduleBoard(){
+    renderDayNavigation();
     syncPlanningView();
     updatePlanningHistoryControls();
     const board = el("schedBoard");
@@ -5554,12 +5615,12 @@ function updateScheduleDayDOM(dayId){
     return total;
   }
 
-  function syncDayDurationsFromShots(day, snapMin=15){
+  function syncDayDurationsFromShots(day, snapMin=15, sceneId=null){
     if(!day) return false;
-    if(isReadOnly()) return false;
+    if(isReadOnly('planning')) return false;
     ensureDayTimingMaps(day);
     let changed = false;
-    for(const sid of (day.sceneIds||[])){
+    for(const sid of (day.sceneIds||[]).filter(id=>!sceneId||id===sceneId)){
       const sc = getScene(sid);
       if(!sc) continue;
       const shotsMin = sceneShotsTotalMin(sc);
@@ -5581,7 +5642,7 @@ function updateScheduleDayDOM(dayId){
     let changed = false;
     for(const d of state.shootDays){
       if((d.sceneIds||[]).includes(sceneId)){
-        if(syncDayDurationsFromShots(d, snapMin)) changed = true;
+        if(syncDayDurationsFromShots(d, snapMin, sceneId)) changed = true;
       }
     }
     return changed;
@@ -5913,6 +5974,7 @@ items.push({
   }
 
   function renderDayPlan(){
+    renderDayNavigation();
     syncPlanningView();
     updatePlanningHistoryControls();
     const sel = el("dayplanSelect");
@@ -7122,12 +7184,11 @@ box.addEventListener("input", (e)=>{
 
 
 function renderShotList(){
+    renderDayNavigation();
     const sel = el("shotDaySelect");
     const wrap = el("shotlistWrap");
     const sum = el("shotlistSummary");
     const btnPrint = el("btnShotPrint");
-    const side = el("shotSceneInfo");
-    const btnGo = el("btnShotSceneGoBreakdown");
     if(!sel || !wrap || !sum) return;
 
     sortShootDaysInPlace();
@@ -7149,6 +7210,7 @@ function renderShotList(){
         const id = sel.value;
         selectedShotlistDayId = id;
         syncAllDaySelections(id);
+        saveSchedDayFilter({mode:'selected',selected:[id]});
         renderShotList();
         try{ renderDayDetail(); }catch(_e){}
         try{ renderDayPlan(); }catch(_e){}
@@ -7160,41 +7222,22 @@ function renderShotList(){
       btnPrint.dataset.bound = "1";
       btnPrint.addEventListener("click", ()=> printShotlistByDayId(selectedShotlistDayId));
     }
-    if(btnGo && !btnGo.dataset.bound){
-      btnGo.dataset.bound = "1";
-      btnGo.addEventListener("click", ()=>{
-        if(selectedShotlistSceneId) jumpToSceneInBreakdown(selectedShotlistSceneId);
-      });
-    }
 
     const d = getDay(selectedShotlistDayId);
     if(!d){
       wrap.innerHTML = `<div class="muted">No hay días cargados.</div>`;
       sum.textContent = "—";
-      if(side) side.innerHTML = `<div class="muted">Seleccioná un día con rodaje.</div>`;
-      if(btnGo) btnGo.disabled = true;
       return;
     }
 
     ensureDayTimingMaps(d);
     ensureDayShotsDone(d);
 
-    // Auto-ajuste: si los planos superan la duración de la escena en cronograma, ampliamos.
+    // Browsing and expanding scenes must never change shooting times.
     const snapMin = Number(el("schedSnap")?.value || 15);
-    const changed = syncDayDurationsFromShots(d, snapMin);
-    if(changed){
-      touch();
-      // re-render de lo que depende del cronograma
-      renderScheduleBoard();
-      renderDayDetail();
-      renderReports();
-      renderCallSheetCalendar();
-      renderReportsDetail();
-      toast("Ajusté duraciones del cronograma según los planos");
-    }
 
     // Selección de escena (si no existe o no está en el día, tomar la primera)
-    const daySceneIds = (d.sceneIds||[]).filter(Boolean);
+    const daySceneIds = (d.sceneIds||[]).filter(id=>getScene(id)).sort((a,b)=>Number(d.times?.[a]||0)-Number(d.times?.[b]||0));
     if(!selectedShotlistSceneId || !daySceneIds.includes(selectedShotlistSceneId)){
       selectedShotlistSceneId = daySceneIds[0] || null;
     }
@@ -7230,70 +7273,10 @@ function renderShotList(){
       </div>
     `;
 
-    function renderSelectedScenePanel(){
-      if(!side) return;
-      const sid = selectedShotlistSceneId;
-      const sc = sid ? getScene(sid) : null;
-      if(!sc){
-        side.innerHTML = `<div class="muted">Seleccioná una escena para ver su info.</div>`;
-        if(btnGo) btnGo.disabled = true;
-        return;
-      }
-      ensureSceneExtras(sc);
-      ensureSceneExtras_toggleThumb(sc);
-
-      const st = Number(d.times?.[sid] ?? 0) || 0;
-      const du = Number(d.durations?.[sid] ?? 60) || 60;
-      const scStart = d.callTime ? fmtClockFromCall(d.callTime, st) : "";
-      const scEnd = d.callTime ? fmtClockFromCall(d.callTime, st+du) : "";
-      const shotsMin = sceneShotsTotalMin(sc);
-      const shotsCount = (sc.shots||[]).length;
-
-      const elems = sc.elements && typeof sc.elements==="object" ? sc.elements : {};
-      const nonEmpty = Object.keys(elems).filter(k=> Array.isArray(elems[k]) && elems[k].length);
-      const elemLine = nonEmpty.length ? nonEmpty.map(k=>`${k}: ${elems[k].length}`).join(" · ") : "—";
-
-      side.innerHTML = `
-        <div class="value">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
-        <div class="spacer"></div>
-
-        <div class="label">Resumen</div>
-        <div class="bigText">${esc(sc.summary||"")}</div>
-
-        <div class="spacer"></div>
-        <div class="label">Horario</div>
-        <div class="value">${esc((scStart && scEnd) ? (scStart+" → "+scEnd) : (scStart||scEnd||"—"))}</div>
-
-        <div class="spacer"></div>
-        <div class="label">Duración escena (cronograma)</div>
-        <div class="value">${esc(formatDuration(du))}</div>
-
-        <div class="spacer"></div>
-        <div class="label">Planos</div>
-        <div class="value">${esc(String(shotsCount))} · ${esc(formatDuration(shotsMin))}</div>
-
-        <div class="spacer"></div>
-        <div class="label">Páginas</div>
-        <div class="value">${esc(fmtPages(sc.pages)||"—")}</div>
-
-        <div class="spacer"></div>
-        <div class="label">Elementos</div>
-        <div class="value">${esc(elemLine)}</div>
-
-        ${sc.notes ? `
-          <div class="spacer"></div>
-          <div class="label">Notas</div>
-          <div class="bigText">${esc(sc.notes||"")}</div>
-        ` : ``}
-      `;
-      if(btnGo) btnGo.disabled = false;
-    }
 
     wrap.innerHTML = "";
     if(!daySceneIds.length){
       wrap.innerHTML = `<div class="muted">No hay escenas asignadas a este día.</div>`;
-      if(side) side.innerHTML = `<div class="muted">No hay escenas para mostrar.</div>`;
-      if(btnGo) btnGo.disabled = true;
       return;
     }
 
@@ -7309,26 +7292,31 @@ function renderShotList(){
       const shotsMin = sceneShotsTotalMin(sc);
       const warn = shotsMin > du ? "Planos > duración" : "";
 
-      const isCollapsed = shotlistCollapsedSceneIds.has(sid);
-      const isSelected = (sid === selectedShotlistSceneId);
+      const isCollapsed = !shotlistExpandedSceneIds.has(sid);
 
       const box = document.createElement("div");
-      box.className = `shotSceneBox${isSelected?" selected":""}${isCollapsed?" collapsed":""}`;
+      box.className = `shotSceneBox${isCollapsed?" collapsed":""}`;
+      box.dataset.sceneId=sid;
       box.innerHTML = `
         <div class="shotSceneHead">
-          <div class="shotSceneHeadLeft">
+          <button type="button" class="shotSceneToggle" data-ro-allow="1" aria-expanded="${!isCollapsed}" aria-controls="shotBody-${esc(sid)}">
             <div class="shotSceneCaret">${isCollapsed ? "▸" : "▾"}</div>
             <div>
               <div class="t">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
-              <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · Escena: ${esc(formatDuration(du))} · Planos: ${esc(formatDuration(shotsMin))}</div>
+              <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · ${esc(formatDuration(du))}</div>
             </div>
-          </div>
+          </button>
           <div class="shotSceneHeadRight">
+            <span class="shotCount">${(sc.shots||[]).length} planos · ${esc(formatDuration(shotsMin))}</span>
             ${warn ? `<div class="warn">${esc(warn)}</div>` : ""}
-            <button class="btn small shotAddBtn noPrint" title="Agregar plano" ${isReadOnly()?"disabled":""}>+ Plano</button>
+            <button class="btn small shotAddBtn noPrint" title="Agregar plano" ${isReadOnly('shotlist')?"disabled":""}>+ Plano</button>
           </div>
         </div>
-        <div class="shotTableWrap">
+        <div class="shotTableWrap" id="shotBody-${esc(sid)}">
+          <div class="shotSceneContext">
+            <details data-ro-allow="1"><summary>Texto de la escena</summary><p>${esc(sc.summary||'Sin resumen cargado.')}</p>${sc.notes?`<p>${esc(sc.notes)}</p>`:''}</details>
+            <button type="button" class="btn small shotBreakdownBtn noPrint" data-ro-allow="1" ${window.RodaAccess&&!RodaAccess.canView('breakdown')?'hidden':''}>Ver desglose ↗</button>
+          </div>
           <div class="tableWrap">
             <table class="table shotTable">
               <thead>
@@ -7337,7 +7325,7 @@ function renderShotList(){
                   <th class="shotNum">#</th>
                   <th class="shotTime">Hora</th>
                   <th class="shotType">Tipo</th>
-                  <th class="shotThumb">Mini</th>
+                  <th class="shotThumb">Referencia</th>
                   <th>Descripción</th>
                   <th class="shotDur">Min</th>
                   <th class="shotAct noPrint"> </th>
@@ -7349,36 +7337,31 @@ function renderShotList(){
         </div>
       `;
 
-      const head = box.querySelector(".shotSceneHead");
+      const head = box.querySelector(".shotSceneToggle");
       const btnAdd = box.querySelector(".shotAddBtn");
-
-      head?.addEventListener("click", (e)=>{
-        // Evitar que clicks en botones/inputs cambien el estado
-        if(e.target && e.target.closest && e.target.closest("button, input, select, a, label")) return;
-
-        if(selectedShotlistSceneId !== sid){
-          selectedShotlistSceneId = sid;
-          renderShotList();
-          return;
-        }
-        // Segundo click (misma escena): colapsar/desplegar
-        if(shotlistCollapsedSceneIds.has(sid)) shotlistCollapsedSceneIds.delete(sid);
-        else shotlistCollapsedSceneIds.add(sid);
-        renderShotList();
+      head.addEventListener("click", ()=>{
+        selectedShotlistSceneId=sid;
+        if(shotlistExpandedSceneIds.has(sid))shotlistExpandedSceneIds.delete(sid);
+        else shotlistExpandedSceneIds.add(sid);
+        // Toggle in place: keep keyboard focus, scroll position and edited fields.
+        const collapsed=!shotlistExpandedSceneIds.has(sid);
+        box.classList.toggle('collapsed',collapsed);
+        head.setAttribute('aria-expanded',String(!collapsed));
+        head.querySelector('.shotSceneCaret').textContent=collapsed?'▸':'▾';
       });
-
-      // Doble click: ir a editar la escena en Breakdown
-      box.addEventListener("dblclick", ()=> jumpToSceneInBreakdown(sc.id));
+      box.querySelector('.shotBreakdownBtn').addEventListener('click',()=>jumpToSceneInBreakdown(sid));
 
       btnAdd?.addEventListener("click", (e)=>{
         e.preventDefault();
         e.stopPropagation();
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         sc.shots = Array.isArray(sc.shots) ? sc.shots : [];
         sc.shots.push({ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN, thumbUrl: "" });
         selectedShotlistSceneId = sid;
-        shotlistCollapsedSceneIds.delete(sid); // asegurar abierto
+        shotlistExpandedSceneIds.add(sid); // asegurar abierto
+        const adjusted=syncAllDaysDurationsFromShotsForScene(sid,snapMin);
         touch();
+        if(adjusted){renderDayPlan();renderScheduleBoard();}
         renderShotList();
       });
 
@@ -7399,34 +7382,34 @@ function renderShotList(){
           const uploading = !!_shotThumbUploading[sh.id];
           const thumbInner = uploading
             ? `<div class="muted small">Subiendo…</div>`
-            : (hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : `<div class="muted small">Mini</div>`);
+            : (hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : `<div class="muted small">Sin imagen</div>`);
 
           const tr = document.createElement("tr");
           if(done) tr.classList.add("shotRowDone");
           tr.innerHTML = `
-            <td class="shotChk"><input type="checkbox" ${done?"checked":""} /></td>
+            <td class="shotChk"><input type="checkbox" aria-label="Plano ${idx+1} realizado" ${done?"checked":""} ${(isReadOnly('shotlist')||isReadOnly('planning'))?"disabled":""} /></td>
             <td class="shotNum">${idx+1}</td>
             <td class="shotTime">${esc(t||"")}</td>
             <td class="shotType">
-              <select class="input compact shotTypeSel" ${isReadOnly()?"disabled":""}>
+              <select class="input compact shotTypeSel" aria-label="Tipo de plano ${idx+1}" ${isReadOnly('shotlist')?"disabled":""}>
                 ${shotTypes.map(tp=>`<option value="${esc(tp)}"${(normalizeShotType(sh.type)===tp)?" selected":""}>${esc(tp)}</option>`).join("")}
               </select>
             </td>
             <td class="shotThumbTd">
               <div class="shotThumbDrop ${hasThumb?"has":""} ${uploading?"uploading":""}" title="Arrastrá una imagen o click para cargar">${thumbInner}</div>
               <div class="row gap noPrint" style="justify-content:center; margin-top:6px;">
-                <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly()?"disabled":""}>📷</button>
-                <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly()||!hasThumb)?"disabled":""}>×</button>
+                <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly('shotlist')?"disabled":""}>📷</button>
+                <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly('shotlist')||!hasThumb)?"disabled":""}>×</button>
               </div>
               <input type="file" accept="image/*" class="shotThumbFile" style="display:none" />
             </td>
-            <td><input class="input shotDescInput" ${isReadOnly()?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
+            <td><textarea class="input shotDescInput" rows="3" ${isReadOnly('shotlist')?"disabled":""} placeholder="Descripción del plano…">${esc(sh.desc||"")}</textarea></td>
             <td class="shotDur">
-              <select class="input compact shotDurSel" ${isReadOnly()?"disabled":""}>
-                ${[5,10,15,20,30,45,60].map(n=>`<option value="${n}"${(dur===n)?" selected":""}>${n}</option>`).join("")}
+              <select class="input compact shotDurSel" aria-label="Minutos del plano ${idx+1}" ${isReadOnly('shotlist')?"disabled":""}>
+                ${[...new Set([5,10,15,20,30,45,60,dur])].sort((a,b)=>a-b).map(n=>`<option value="${n}"${(dur===n)?" selected":""}>${n}</option>`).join("")}
               </select>
             </td>
-            <td class="shotAct noPrint"><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly()?"disabled":""}>×</button></td>
+            <td class="shotAct noPrint"><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly('shotlist')?"disabled":""}>×</button></td>
           `;
 
           const chk = tr.querySelector("input[type=checkbox]");
@@ -7436,13 +7419,14 @@ function renderShotList(){
           const delBtn = tr.querySelector(".shotDelBtn");
 
           chk?.addEventListener("change", ()=>{
+            if(isReadOnly('shotlist')||isReadOnly('planning'))return;
             d.shotsDone[key] = chk.checked;
             touch();
             renderShotList();
           });
 
           selDur?.addEventListener("change", ()=>{
-            if(isReadOnly()) return;
+            if(isReadOnly('shotlist')) return;
             sh.durMin = Number(selDur.value) || DEFAULT_SHOT_MIN;
             const changed2 = syncAllDaysDurationsFromShotsForScene(sid, snapMin);
             touch();
@@ -7458,24 +7442,24 @@ function renderShotList(){
           });
 
           selType?.addEventListener("change", ()=>{
-            if(isReadOnly()) return;
+            if(isReadOnly('shotlist')) return;
             sh.type = selType.value;
             touch();
           });
 
           inpDesc?.addEventListener("input", ()=>{
-            if(isReadOnly()) return;
+            if(isReadOnly('shotlist')) return;
             sh.desc = inpDesc.value;
           });
           inpDesc?.addEventListener("blur", ()=>{
-            if(isReadOnly()) return;
+            if(isReadOnly('shotlist')) return;
             sh.desc = inpDesc.value;
             touch();
           });
 
           delBtn?.addEventListener("click", (e)=>{
             e.preventDefault();
-            if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+            if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
             sc.shots = (sc.shots||[]).filter(x=>x.id!==sh.id);
             // limpiar done map del día para ese plano
             delete d.shotsDone[key];
@@ -7490,7 +7474,7 @@ function renderShotList(){
           const fileIn = tr.querySelector(".shotThumbFile");
 
           const openPicker = ()=>{
-            if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+            if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
             fileIn && fileIn.click();
           };
 
@@ -7505,7 +7489,7 @@ function renderShotList(){
 
           clear?.addEventListener("click", (e)=>{
             e.preventDefault();
-            if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+            if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
             sh.thumbUrl = "";
             delete sh.thumbUpdatedAt;
             touch();
@@ -7513,13 +7497,13 @@ function renderShotList(){
           });
 
           const prevent = (e)=>{ e.preventDefault(); e.stopPropagation(); };
-          drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
-          drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
+          drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly('shotlist')) drop.classList.add("drag"); });
+          drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly('shotlist')) drop.classList.add("drag"); });
           drop?.addEventListener("dragleave", (e)=>{ prevent(e); drop.classList.remove("drag"); });
           drop?.addEventListener("drop", (e)=>{
             prevent(e);
             drop.classList.remove("drag");
-            if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+            if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
             const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
             if(f) setShotThumb(sh, f);
           });
@@ -7532,7 +7516,6 @@ function renderShotList(){
       wrap.appendChild(box);
     }
 
-    renderSelectedScenePanel();
   }
   function renderCallSheetCalendar(){ /* ... sin cambios ... */ 
     const grid = el("calGrid");
@@ -7574,6 +7557,8 @@ function renderShotList(){
         const id = shootByDate.get(ds);
 
         // Sync de día entre Call Sheet / Call Diario / Plan / Shotlist
+        sharedDayScope=id;
+        saveSchedDayFilter({mode:'selected',selected:[id]});
         callSheetDayId = id;
         selectedDayId = id;
         selectedDayplanDayId = id;
@@ -7835,6 +7820,7 @@ grid.appendChild(cell);
   }
 
   function renderReportsDetail(){
+    renderDayNavigation();
     const dayId = getReportsSelectedDayId();
     const d = dayId ? getDay(dayId) : null;
 
@@ -9453,6 +9439,8 @@ el("bdFileInput")?.addEventListener("change", ()=>{
     // Call Diario: selector de día
     el("shootDaySelect")?.addEventListener("change", ()=>{
       selectedDayId = el("shootDaySelect").value;
+      sharedDayScope=selectedDayId;
+      saveSchedDayFilter({mode:'selected',selected:[selectedDayId]});
 
       // Sync global "día enfocado" para que Reportes / Call Sheet no queden mirando otro día
       selectedDayplanDayId = selectedDayId;
@@ -9469,6 +9457,8 @@ el("bdFileInput")?.addEventListener("change", ()=>{
 // Plan del día
     el("dayplanSelect")?.addEventListener("change", ()=>{
       selectedDayplanDayId = el("dayplanSelect").value;
+      sharedDayScope=selectedDayplanDayId;
+      saveSchedDayFilter({mode:'selected',selected:[selectedDayplanDayId]});
 
       // Sync con Call Diario / Call Sheet / Shotlist
       selectedDayId = selectedDayplanDayId;
