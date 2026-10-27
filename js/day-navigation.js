@@ -42,6 +42,7 @@ window.RodaDayNavigation = (() => {
         button.type = 'button'; button.dataset.day = id;
         button.className = 'dayPickerOption';
         button.setAttribute('aria-pressed', String(id === config.selection));
+        button.setAttribute('aria-label', label + (detail ? ' · ' + detail : ''));
         const text = document.createElement('span');
         const name = document.createElement('strong'); name.textContent = label; text.append(name);
         if (detail) { const small = document.createElement('small'); small.textContent = detail; text.append(small); }

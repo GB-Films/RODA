@@ -7307,7 +7307,7 @@ function renderShotList(){
             </div>
           </button>
           <div class="shotSceneHeadRight">
-            <span class="shotCount">${(sc.shots||[]).length} planos · ${esc(formatDuration(shotsMin))}</span>
+            <span class="shotCount">${(sc.shots||[]).length} ${(sc.shots||[]).length===1?'plano':'planos'} · ${esc(formatDuration(shotsMin))}</span>
             ${warn ? `<div class="warn">${esc(warn)}</div>` : ""}
             <button class="btn small shotAddBtn noPrint" title="Agregar plano" ${isReadOnly('shotlist')?"disabled":""}>+ Plano</button>
           </div>
