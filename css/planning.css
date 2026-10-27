@@ -1,0 +1,57 @@
+@media screen{
+  #dpLane .dpBlock,#schedBoard .schedBlock{border-radius:5px;box-shadow:none;border-top:1px solid #ffffff0d;border-right:1px solid #ffffff0d;border-bottom:1px solid #ffffff0d;}
+  #dpLane .dpBlock{padding:5px 9px;}
+  #dpLane .dpBlockTitle{display:flex;align-items:baseline;justify-content:flex-start;text-align:left;gap:7px;padding-right:0;font-size:12px;line-height:18px;font-weight:600;}
+  #dpLane .dpTime{flex:0 0 94px;font-size:11px;font-weight:500;font-variant-numeric:tabular-nums;opacity:.9;}
+  #dpLane .dpNum{font-weight:700;}
+  #dpLane .dpSlug{font-weight:600;min-width:0;}
+  #dpLane .dpBlock.is-short{padding:0 9px;}
+  #dpLane .dpBlock.is-short .dpBlockTitle{line-height:16px;}
+  #schedBoard .schedBlock{padding:5px 9px;}
+  #schedBoard .schedContent{display:flex;flex-direction:column;gap:3px;padding:0;overflow:hidden;}
+  #schedBoard .schedBlock .meta{display:block;margin:0;font-size:10px;line-height:13px;font-variant-numeric:tabular-nums;opacity:.8;white-space:nowrap;}
+  #schedBoard .schedBlock .title{font-size:12px;line-height:16px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  #schedBoard .schedBlock.is-compact{padding:0 7px;}
+  #schedBoard .schedBlock.is-compact .schedContent{flex-direction:row;align-items:baseline;gap:6px;}
+  #schedBoard .schedBlock.is-compact .meta{flex:none;font-size:9px;line-height:16px;}
+  #schedBoard .schedBlock.is-compact .title{display:block;white-space:nowrap;text-overflow:ellipsis;line-height:16px;min-width:0;font-size:11px;}
+  #dpLane .dpResize,#schedBoard .schedBlock .resize{height:8px;bottom:0;left:0;right:0;width:auto;background:transparent;border:0;border-radius:0;}
+  #dpLane .dpBlock.is-short .dpResize,#schedBoard .schedBlock.is-short .resize{height:3px;}
+  #dpLane .dpResize::after,#schedBoard .schedBlock .resize::after{content:'';position:absolute;bottom:2px;left:calc(50% - 14px);width:28px;height:2px;border-radius:2px;background:currentColor;opacity:0;}
+  #dpLane .dpBlock:hover .dpResize::after,#dpLane .dpBlock.sel .dpResize::after,#schedBoard .schedBlock:hover .resize::after,#schedBoard .schedBlock.is-selected .resize::after{opacity:.45;}
+  #dpLane .dpBlock:focus-visible,#schedBoard .schedBlock:focus-visible{outline:2px solid #fff;outline-offset:-2px;}
+  #scheduleCard .scheduleContent.has-selection{display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-rows:12px minmax(0,1fr);gap:8px 14px;}
+  #scheduleCard .scheduleContent.has-selection .schedScrollTop{grid-column:1;grid-row:1;min-width:0;}
+  #scheduleCard .scheduleContent.has-selection .schedWrap{grid-column:1;grid-row:2;min-width:0;min-height:0;}
+  #scheduleCard .planningInspector{grid-column:2;grid-row:1 / -1;height:100%;min-height:0;overflow:auto;}
+  #dayplanCard .dayplanBody.has-selection{grid-template-columns:minmax(0,1fr) 320px;}
+  #dayplanInspector.planningInspector{padding:16px;border:1px solid #363636;background:#191919;border-radius:8px;box-sizing:border-box;scrollbar-width:none;}
+  #dayplanInspector.planningInspector::-webkit-scrollbar{display:none;}
+  .planningInspectorHead{display:flex;align-items:flex-start;gap:10px;margin-bottom:20px;}
+  .planningInspectorHead>div{flex:1;min-width:0;}
+  .planningInspectorHead h3{margin:7px 0 0;font-size:15px;font-weight:650;line-height:1.4;}
+  .planningInspector .inspector-close{float:none;flex:none;margin:0;padding:0;width:28px;height:28px;min-height:28px;font-size:20px;}
+  .inspectorEyebrow{font-size:10px;line-height:1.5;letter-spacing:.05em;color:#aaa;text-transform:uppercase;}
+  .inspectorSectionTitle{font-size:11px;font-weight:650;margin:0 0 10px;}
+  #dayplanInspector .dpGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 10px;}
+  .planningInspector .dpDurRow{gap:4px;}
+  .planningInspector .dpDurH{width:48px;min-width:0;}
+  .planningInspector .dpDurM{width:54px;min-width:0;}
+  .planningInspector .dpFacts{gap:0 10px;margin:0;}
+  .planningInspector .dpFact{background:none;border:0;border-radius:0;padding:9px 0;border-bottom:1px solid #ffffff0c;}
+  .planningInspector .dpFact .k{font-size:10px;font-weight:400;color:#999;}
+  .planningInspector .dpFact .v{font-size:12px;font-weight:500;line-height:1.5;}
+  .planningInspector .dpSceneResText{font-size:12px;line-height:1.6;color:#bbb;}
+  .inspectorColor{margin-top:0;padding:12px 0;border-top:1px solid #333;border-bottom:1px solid #333;}
+  .inspectorColor summary{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;list-style:none;}
+  .inspectorColor summary::after{content:'⌄';margin-left:auto;color:#999;}
+  .inspectorColorDot{width:12px;height:12px;border:1px solid #ffffff30;border-radius:50%;}
+  .inspectorColor .dpSwatches{margin-top:12px;gap:8px;flex-wrap:wrap;}
+  .planningInspector .dpActions{display:flex;flex-wrap:wrap;justify-content:flex-start;padding:12px 0 20px;gap:8px;}
+  .planningInspector .dpActions .btn{font-size:11px;}
+  @media(max-width:1100px){
+    #dayplanCard .dayplanBody.has-selection{grid-template-columns:minmax(0,1fr);}
+    #scheduleCard .scheduleContent.has-selection{display:flex;position:relative;}
+    #scheduleCard .planningInspector,#dayplanCard .planningInspector{position:absolute;right:0;top:0;bottom:0;width:300px;max-width:90%;z-index:80;box-shadow:-12px 0 28px #0007;margin:0;}
+  }
+}
