@@ -2365,8 +2365,18 @@ function setupScheduleWheelScroll(){
   }
   function sceneLinks(scenes){return scenes.map(s=>'<button class="scene-link" data-cast-scene="'+esc(s.id)+'" data-ro-allow="1">#'+esc(s.number)+'</button>').join('');}
   function bindSceneLinks(root){root.querySelectorAll('[data-cast-scene]').forEach(b=>b.onclick=()=>{selectedSceneId=b.dataset.castScene;showView('breakdown');renderScenesTable();renderSceneEditor();});}
+  function castExpansionKey(){
+    const cfg=StorageLayer.loadCfg()||{},params=new URLSearchParams(location.search);
+    return 'gb_roda_cast_expanded_v1__'+[params.get('studioSpace')||cfg.spaceId||'',window.RODA_STUDIO?.project?.id||params.get('studioProject')||cfg.projectId||cfg.binId||'local'].map(encodeURIComponent).join('__');
+  }
+  function loadCastExpansion(key){try{const values=JSON.parse(sessionStorage.getItem(key)||'[]');return new Set(Array.isArray(values)?values.filter(v=>typeof v==='string'):[]);}catch(_e){return new Set();}}
+  function saveCastExpansion(key,expanded){try{sessionStorage.setItem(key,JSON.stringify([...expanded]));}catch(_e){}}
   function renderCastDirectory(){
     const root=el('castDirectory');if(!root)return;
+    const expansionKey=castExpansionKey(),expanded=loadCastExpansion(expansionKey);
+    if(root.dataset.expansionKey===expansionKey)root.querySelectorAll('details[data-cast-key]').forEach(card=>{if(card.open)expanded.add(card.dataset.castKey);else expanded.delete(card.dataset.castKey);});
+    root.dataset.expansionKey=expansionKey;
+    saveCastExpansion(expansionKey,expanded);
     const groups=new Map();
     for(const s of state.scenes)for(const name of s.elements?.cast||[]){const key=normName(name);if(!key)continue;if(!groups.has(key))groups.set(key,{name,scenes:[]});const g=groups.get(key);if(!g.scenes.includes(s))g.scenes.push(s);}
     if(!state.script?.activeVersionId)for(const name of getCastRoster())if(!groups.has(normName(name)))groups.set(normName(name),{name,scenes:[]});
@@ -2378,18 +2388,27 @@ function setupScheduleWheelScroll(){
     const actors=RodaCast.people(state).filter(p=>String(p.name||'').trim()).slice().sort((a,b)=>a.name.localeCompare(b.name,'es'));
     root.innerHTML=entries.map((g,i)=>{
       const person=findCastCrewEntryByName(g.name),days=state.shootDays.filter(d=>g.scenes.some(s=>(d.sceneIds||[]).includes(s.id)));
-      return `<article class="card cast-card"><div class="cardContent"><div class="cast-title"><span class="cast-avatar">${esc(g.name.slice(0,2))}</span><div><h2>${esc(g.name)}</h2><span class="muted small">${g.scenes.length} escenas · ${days.length} jornadas</span></div></div><label>Intérprete<select class="input" data-cast-entry="${i}" aria-label="Intérprete de ${esc(g.name)}"><option value="">${actors.length?'Sin asignar':'Cargá actores en Equipo'}</option>${actors.map(actor=>`<option value="${esc(actor.id)}" ${person?.id===actor.id?'selected':''}>${esc(actor.name)}</option>`).join('')}</select></label><label>Participación<select class="input" data-cast-type="${i}">${[["character","Personaje"],["extra","Figuración / acción"],["voice","Voz"]].map(([value,label])=>`<option value="${value}" ${typeOf(g)===value?"selected":""}>${label}</option>`).join("")}</select></label><div class="scene-links">${sceneLinks(g.scenes)}</div><p class="muted small">${esc(days.map(d=>(d.label||'Jornada')+(d.date?' · '+formatDDMMYYYY(d.date):'')).join(' / ')||'Sin jornadas programadas')}</p><button class="btn small" data-cast-plan="${i}" data-ro-allow="1">Ver plan de rodaje →</button></div></article>`;
+      const assigned=!!String(person?.name||'').trim(),key=normName(g.name);
+      return `<details class="card cast-card ${assigned?'cast-card--assigned':'cast-card--pending'}" data-cast-key="${esc(key)}" ${expanded.has(key)?'open':''}>
+        <summary class="cast-summary" data-ro-allow="1">
+          <span class="cast-avatar" aria-hidden="true">${esc(g.name.slice(0,2))}</span>
+          <div class="cast-summary-person"><h2>${esc(g.name)}</h2><span class="cast-actor-name">${assigned?'✓ '+esc(person.name):'○ Sin intérprete'}</span></div>
+          <span class="cast-summary-counts"><span><strong>${g.scenes.length}</strong> ${g.scenes.length===1?'escena':'escenas'}</span><span><strong>${days.length}</strong> ${days.length===1?'jornada':'jornadas'}</span></span>
+        </summary>
+        <div class="cardContent cast-details">
+          <label>Intérprete<select class="input" data-cast-entry="${i}" aria-label="Intérprete de ${esc(g.name)}"><option value="">${actors.length?'Sin asignar':'Cargá actores en Equipo'}</option>${actors.map(actor=>`<option value="${esc(actor.id)}" ${person?.id===actor.id?'selected':''}>${esc(actor.name)}</option>`).join('')}</select></label>
+          <div class="scene-links">${sceneLinks(g.scenes)}</div><p class="muted small">${esc(days.map(d=>(d.label||'Jornada')+(d.date?' · '+formatDDMMYYYY(d.date):'')).join(' / ')||'Sin jornadas programadas')}</p>
+          <button class="btn small" data-cast-plan="${i}" data-ro-allow="1">Ver plan de rodaje →</button>
+        </div>
+      </details>`;
     }).join('')||'<div class="empty-state">No hay personajes para esta búsqueda. Revisá el reparto detectado en el desglose del guion.</div>';
+    root.querySelectorAll('details[data-cast-key]').forEach(card=>card.addEventListener('toggle',()=>{if(!card.isConnected)return;const current=loadCastExpansion(expansionKey);if(card.open)current.add(card.dataset.castKey);else current.delete(card.dataset.castKey);saveCastExpansion(expansionKey,current);}));
     root.querySelectorAll('[data-cast-entry]').forEach(input=>{input.disabled=isReadOnly();input.onchange=()=>{
       if(isReadOnly())return roToast();const g=entries[Number(input.dataset.castEntry)];
       RodaCast.assign(state,g.name,input.value);touch();refreshElementSuggestions();
-      el('castStats').querySelector('[data-cast-assigned]').textContent=all.filter(g=>findCastCrewEntryByName(g.name)?.name).length;
+      renderCastDirectory();
     };});
     root.querySelectorAll('[data-cast-plan]').forEach(b=>b.onclick=()=>showView('dayplan'));
-    root.querySelectorAll('[data-cast-type]').forEach(select=>{select.disabled=isReadOnly();select.onchange=()=>{
-      if(isReadOnly())return;const g=entries[Number(select.dataset.castType)];
-      RodaCast.setType(state,g.name,select.value);touch();renderCastDirectory();
-    };});
     bindSceneLinks(root);el('castSearch').oninput=renderCastDirectory;el('castKindFilter').onchange=renderCastDirectory;
     el('btnCastTeam').onclick=()=>{showView('crew');el('crewAreaFilter').value='Cast';renderCrew();};
     const review=el('btnCastReview');if(review){review.hidden=!['script','cast','breakdown','planning'].every(section=>!isReadOnly(section));review.onclick=openCastReview;}
