@@ -9,7 +9,7 @@
   <link href="css/styles.css?v=1.21.3" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
 <link rel="stylesheet" href="css/production-blocks.css?v=1.21.2">
-<link rel="stylesheet" href="css/planning.css?v=1.22.0">
+<link rel="stylesheet" href="css/planning.css?v=1.23.0">
 <link rel="stylesheet" href="css/team.css?v=1.20.0">
 <link rel="stylesheet" href="css/dialogs.css?v=1.21.1"/>
 </head>
@@ -421,7 +421,7 @@
               </div>
 
               <div class="row gap" style="align-items:center; flex-wrap:wrap">
-                <label class="row gap small muted" style="align-items:center">Snap
+                <label class="planningScaleControl row gap small muted" style="align-items:center">Snap
                   <select class="input compact" id="dayplanSnap" style="width:90px">
                     <option value="5">5m</option>
                     <option value="10">10m</option>
@@ -430,7 +430,7 @@
                   </select>
                 </label>
 
-                <label class="row gap small muted" style="align-items:center">Zoom
+                <label class="planningScaleControl row gap small muted" style="align-items:center">Zoom
                   <select class="input compact" id="dayplanZoom" style="width:110px">
                     <option value="60">Bajo</option>
                     <option value="72" selected>Medio</option>
@@ -440,6 +440,11 @@
                   </select>
                 </label>
 
+              <label class="row gap small muted planningViewControl">Vista
+                <select class="input compact" id="dayplanView" data-ro-allow="1" aria-label="Vista del plan" title="En Compacta, seleccioná una escena para editarla. Para arrastrar, elegí Por horario.">
+                  <option value="timeline">Por horario</option><option value="compact">Compacta</option>
+                </select>
+              </label>
                 <button class="btn" id="btnDayplanPrint">Imprimir</button>
               </div>
             </div>
@@ -478,8 +483,13 @@
           <div class="cardHeader">
             <h2 class="cardTitle">Plan General</h2>
             <div class="row gap">
+              <label class="row gap small muted planningViewControl">Vista
+                <select class="input compact" id="schedView" data-ro-allow="1" aria-label="Vista del plan" title="En Compacta, seleccioná una escena para editarla. Para arrastrar, elegí Por horario.">
+                  <option value="timeline">Por horario</option><option value="compact">Compacta</option>
+                </select>
+              </label>
               <input class="input" id="schedSearch" placeholder="Buscar…" style="max-width:260px"/>
-              <label class="row gap small muted">Zoom
+              <label class="planningScaleControl row gap small muted">Zoom
                 <select class="input compact" id="schedZoom">
                   <option value="60">Bajo</option>
                   <option selected="" value="90">Medio</option>
@@ -487,7 +497,7 @@
                   <option value="160">Gigante</option>
                 </select>
               </label>
-              <label class="row gap small muted">Snap
+              <label class="planningScaleControl row gap small muted">Snap
                 <select class="input compact" id="schedSnap">
                   <option value="5">5 min</option>
                   <option value="10">10 min</option>

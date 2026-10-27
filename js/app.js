@@ -4866,7 +4866,25 @@ function bindSchedDayPickerUI(){
   updateSchedDaysButton();
 }
 
+  let planningCompact=false;
+  try{planningCompact=localStorage.getItem('gb_planning_view')==='compact';}catch(_e){}
+  function isCompactPlan(){return planningCompact;}
+  function planningDuration(minutes){const h=Math.floor(minutes/60),m=minutes%60;return h?`${h} h${m?' '+m+' min':''}`:`${m} min`;}
+  function syncPlanningView(){
+    for(const [cardId,selectId] of [['dayplanCard','dayplanView'],['scheduleCard','schedView']]){
+      const card=el(cardId),select=el(selectId);if(!card||!select)continue;
+      card.classList.toggle('planning-compact',planningCompact);select.value=planningCompact?'compact':'timeline';
+      if(!select.dataset.bound){select.dataset.bound='1';select.addEventListener('change',()=>{
+        planningCompact=select.value==='compact';
+        try{localStorage.setItem('gb_planning_view',select.value);}catch(_e){}
+        delete el('dpScroller').dataset.focusDay;delete el('schedBoard').dataset.focusDays;
+        renderDayPlan();renderScheduleBoard();
+      });}
+    }
+  }
+
   function renderScheduleBoard(){
+    syncPlanningView();
     const board = el("schedBoard");
     if(!board) return;
     board.innerHTML = "";
@@ -4982,7 +5000,7 @@ function bindSchedDayPickerUI(){
         block.classList.toggle('is-compact',height<44);
         block.innerHTML = `
           <div class="schedContent">
-            <div class="meta">${esc(startTxt)} - ${esc(endTxt)}</div>
+            <div class="meta">${esc(startTxt)} - ${esc(endTxt)} <span class="planDuration">${esc(planningDuration(durMin))}</span></div>
             <div class="title">#${esc(s.number||"")} · ${esc(s.slugline||"")}</div>
           </div>
           <div class="resize" title="Cambiar duración"></div>
@@ -5039,7 +5057,7 @@ for(const b of (d.blocks||[])){
   block.setAttribute('aria-label',`${startTxt}–${endTxt} · ${b.title||'Bloque'}`);
   block.innerHTML = `
     <div class="schedContent">
-      <div class="meta">${esc(startTxt)} - ${esc(endTxt)}</div>
+      <div class="meta">${esc(startTxt)} - ${esc(endTxt)} <span class="planDuration">${esc(planningDuration(durMin))}</span></div>
       <div class="title">${esc(b.title||"Bloque")}</div>
     </div>
     <div class="resize" title="Cambiar duración"></div>
@@ -5053,6 +5071,7 @@ for(const b of (d.blocks||[])){
         const hhay = `${formatDayTitle(d.date)} ${d.label||""} ${d.location||""}`.toLowerCase();
         if(!hhay.includes(q)) continue;
       }
+      [...grid.querySelectorAll('.schedBlock')].sort((a,b)=>parseFloat(a.style.top)-parseFloat(b.style.top)).forEach(node=>grid.appendChild(node));
       dayWrap.appendChild(head);
       dayWrap.appendChild(grid);
       board.appendChild(dayWrap);
@@ -5062,7 +5081,7 @@ for(const b of (d.blocks||[])){
       board.innerHTML = `<div class="muted">Sin resultados.</div>`;
     }
     if(document.body.dataset.rodaView==="schedule" && board.dataset.focusDays!==daysToShow.map(d=>d.id).join(",")){
-      (el("schedWrap")||board).scrollTop=Math.min(...daysToShow.map(d=>minutesFromHHMM(d.callTime||"08:00")))*pxPerMin;
+      (el("schedWrap")||board).scrollTop=isCompactPlan()?0:Math.min(...daysToShow.map(d=>minutesFromHHMM(d.callTime||"08:00")))*pxPerMin;
       board.dataset.focusDays=daysToShow.map(d=>d.id).join(",");
     }
     bindScheduleDnD();
@@ -5126,7 +5145,12 @@ function bindScheduleDnD(){
     }
   }
 
+  board.addEventListener('click',e=>{
+    if(!isCompactPlan())return;const block=e.target.closest('.schedBlock');
+    if(block)selectScheduleItem(block.dataset.dayId,block.dataset.kind,block.dataset.itemId);
+  });
   board.addEventListener("pointerdown", (e)=>{
+    if(isCompactPlan())return;
     const block = e.target.closest(".schedBlock");
     if(!block) return;
 
@@ -5799,6 +5823,7 @@ items.push({
   }
 
   function renderDayPlan(){
+    syncPlanningView();
     const sel = el("dayplanSelect");
     const head = el("dayplanHead");
     const timeCol = el("dpTimeCol");
@@ -6174,6 +6199,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
       ? `<span class="dpNum">#${esc(it.number||"")}</span><span class="dpSlug">${esc(it.slugline||"")}</span>`
       : `<span class="dpSlug">${esc(it.title||"")}</span>`
   }
+  <span class="planDuration">${esc(planningDuration(it.dur))}</span>
 </div>
 
           <div class="dpResize noPrint" data-action="resize" title="Arrastrá para cambiar duración"></div>
@@ -6182,7 +6208,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
     }).join("");
 
     lane.innerHTML = grid.join("") + blocks;
-    if(document.body.dataset.rodaView==='dayplan'&&scroller.dataset.focusDay!==d.id){scroller.scrollTop=base*ppm;scroller.dataset.focusDay=d.id;}
+    if(document.body.dataset.rodaView==='dayplan'&&scroller.dataset.focusDay!==d.id){scroller.scrollTop=isCompactPlan()?0:base*ppm;scroller.dataset.focusDay=d.id;}
 
     // Hover preview (igual que Cronograma + Planos)
     try{
@@ -6201,6 +6227,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
       lane.dataset.sceneDropBound = "1";
 
       lane.addEventListener("dragover", (e)=>{
+        if(isCompactPlan())return;
         try{
           const types = Array.from(e.dataTransfer?.types || []);
           if(types.includes("application/json")){
@@ -6214,6 +6241,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
       lane.addEventListener("dragleave", ()=> lane.classList.remove("dpDropOver"));
 
       lane.addEventListener("drop", (e)=>{
+        if(isCompactPlan()){e.preventDefault();return;}
         e.preventDefault();
         lane.classList.remove("dpDropOver");
 
@@ -6504,6 +6532,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
 
       // Drag / resize
       lane.addEventListener("pointerdown", (e)=>{
+        if(isCompactPlan())return;
         const block = e.target.closest(".dpBlock");
         if(!block) return;
 
