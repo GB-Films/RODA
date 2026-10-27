@@ -653,12 +653,53 @@ const shotlistCollapsedSceneIds = new Set();
       wrap.appendChild(chip);
     }
   }
+  let planningHistory=null,planningHistoryKey='',planningHistoryReady=false,applyingPlanningHistory=false;
+  function planningHistoryProjectKey(){
+    const cfg=StorageLayer.loadCfg()||{},params=new URLSearchParams(location.search);
+    return 'gb_roda_planning_history_v1__'+[params.get('studioSpace')||cfg.spaceId||'',window.RODA_STUDIO?.project?.id||params.get('studioProject')||cfg.projectId||cfg.binId||'local',window.RODA_STUDIO?.userEmail||''].map(encodeURIComponent).join('__');
+  }
+  function updatePlanningHistoryControls(){
+    const status=planningHistory?.status()||{undo:0,redo:0};
+    for(const prefix of ['Dayplan','Sched'])for(const direction of ['Undo','Redo']){
+      const button=el('btn'+prefix+direction);if(!button)continue;
+      const undo=direction==='Undo',action=undo?'Deshacer':'Rehacer',label=status[undo?'undoLabel':'redoLabel'];
+      button.disabled=isReadOnly('planning')||!status[undo?'undo':'redo'];button.title=action+(label?': '+label:'')+(undo?' (Ctrl+Z)':' (Ctrl+Shift+Z / Ctrl+Y)');
+      if(!button.dataset.historyBound){button.dataset.historyBound='1';button.addEventListener('click',()=>applyPlanningHistory(undo?'undo':'redo'));}
+    }
+  }
+  function syncPlanningHistory(mode='rebase'){
+    if(!planningHistoryReady||!window.RodaPlanningHistory||!state?.shootDays)return;
+    const key=planningHistoryProjectKey();
+    if(!planningHistory||key!==planningHistoryKey){let storage=null;try{storage=sessionStorage;}catch(_e){}planningHistoryKey=key;planningHistory=RodaPlanningHistory.create({days:state.shootDays,key,storage,onChange:updatePlanningHistoryControls});}
+    else if(mode==='record'&&!applyingPlanningHistory)planningHistory.record(state.shootDays);else planningHistory.rebase(state.shootDays);
+    updatePlanningHistoryControls();
+  }
+  function applyPlanningHistory(direction){
+    if(isReadOnly('planning')||!['dayplan','schedule'].includes(document.body.dataset.rodaView))return;
+    syncPlanningHistory('record');if(!planningHistory)return;
+    const result=planningHistory[direction](state.shootDays,state.scenes.map(s=>s.id));
+    if(!result.ok){if(result.reason==='conflict')toast('Ese tramo cambió desde otro lugar. Conservamos los cambios actuales y reiniciamos el historial.');return;}
+    applyingPlanningHistory=true;
+    try{
+      if(dayplanSelectedKey?.startsWith('scene:')){const id=dayplanSelectedKey.slice(6),owner=state.shootDays.find(d=>d.sceneIds?.includes(id));if(owner){selectedDayplanDayId=owner.id;selectedDayId=owner.id;}}
+      const board=el('schedBoard');try{const item=JSON.parse(board?.dataset.selectedItem||'null');if(item){const owner=state.shootDays.find(d=>item[1]==='scene'?d.sceneIds?.includes(item[2]):d.blocks?.some(b=>b.id===item[2]));if(owner)board.dataset.selectedItem=JSON.stringify([owner.id,item[1],item[2]]);else delete board.dataset.selectedItem;}}catch(_e){}
+      touch();renderSceneBank();renderDaysBoard();renderDayPlan();renderScheduleBoard();renderDayDetail();renderShotList();renderReportsDetail();renderReports();
+      toast(direction==='undo'?'Cambio deshecho.':'Cambio rehecho.');
+    }finally{applyingPlanningHistory=false;syncPlanningHistory();}
+  }
+  document.addEventListener('keydown',event=>{
+    if(!planningHistoryReady||!['dayplan','schedule'].includes(document.body.dataset.rodaView)||!(event.ctrlKey||event.metaKey)||event.altKey||event.target.closest?.('input,textarea,select,[contenteditable]'))return;
+    const key=event.key.toLowerCase(),direction=key==='z'?(event.shiftKey?'redo':'undo'):key==='y'&&!event.shiftKey?'redo':null;if(!direction)return;
+    event.preventDefault();applyPlanningHistory(direction);
+  });
+
   function touch(){
     if(isReadOnly()){
       const st = el("statusText");
       if(st) st.textContent = "Lector";
       return;
     }
+    syncPlanningHistory(['dayplan','schedule'].includes(document.body.dataset.rodaView)?'record':'rebase');
     state.meta.updatedAt = new Date().toISOString();
     StorageLayer.saveLocal(state);
     const saved = el("savedAtText");
@@ -843,6 +884,7 @@ const shotlistCollapsedSceneIds = new Set();
       applyState:value=>{
         const changed = !Collaboration.equal(state,value);
         Collaboration.reconcile(state,value);
+        syncPlanningHistory();
         StorageLayer.saveLocal(state);
         sessionPulledRemote = true;
         if(changed) scheduleLivePaint();
@@ -4907,6 +4949,7 @@ function bindSchedDayPickerUI(){
 
   function renderScheduleBoard(){
     syncPlanningView();
+    updatePlanningHistoryControls();
     const board = el("schedBoard");
     if(!board) return;
     board.innerHTML = "";
@@ -5852,6 +5895,7 @@ items.push({
 
   function renderDayPlan(){
     syncPlanningView();
+    updatePlanningHistoryControls();
     const sel = el("dayplanSelect");
     const head = el("dayplanHead");
     const timeCol = el("dpTimeCol");
@@ -10079,6 +10123,7 @@ if(!state.scenes.length){
     renderReportsDetail();
     applyBankCollapsedUI();
     initCollapsibles();
+    syncPlanningHistory();
   }
 
   async function init(){
@@ -10150,6 +10195,7 @@ if(!state.scenes.length){
     window.addEventListener("pagehide",()=>liveSession?.flush());
 
     try{ document.body.classList.remove("bootLoading"); }catch(_e){}
+    planningHistoryReady=true;syncPlanningHistory();
   }if(document.readyState === "loading") window.addEventListener("DOMContentLoaded", init);
   else init();
 })();
