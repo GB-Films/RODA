@@ -6306,7 +6306,7 @@ ${
       const tA = clockLabelAbs(absStart);
       const tB = clockLabelAbs(absEnd);
       const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
-      const num = isNote ? "NOTA" : (it.number||"");
+      const num = isNote ? "—" : (it.number||"");
       const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
       const ie = isNote ? "" : (it.intExt||"");
       const locTxt = isNote ? "" : (it.location||"");
@@ -6328,18 +6328,14 @@ ${
 
     printWrap.innerHTML = `
       <div class="catBlock dpPrintBlock">
-        <div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Plan de Rodaje</div>
-        <div class="items">
-          <div><b>${proj}</b> · ${dayTxt}</div>
-          <div><b>Call:</b> ${call||"—"} &nbsp; <b>Locación:</b> ${loc||"—"}</div>
-        </div>
+        ${buildDayplanPrintHeader(d)}
         <div class="items">
           <table class="dayplanPrintTable">
             <colgroup>
               <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
               <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colSum">
             </colgroup>
-            <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Notas</th></tr></thead>
+            <thead><tr><th>Horario</th><th>Dur.</th><th>Esc.</th><th>Escena / actividad</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Notas</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="8" class="muted">—</td></tr>`}</tbody>
           </table>
         </div>
@@ -8005,7 +8001,7 @@ function renderReportDayplanDetail(d){
       const absEnd = clamp(absStart + dur, 0, dpEndAbs);
 
       const isNote = it.kind==="block";
-      const num = isNote ? "NOTA" : (it.number||"");
+      const num = isNote ? "—" : (it.number||"");
       const title = isNote ? (it.title||"Nota") : (it.slugline||it.title||"");
       const ie = isNote ? "" : (it.intExt||"");
       const locTxt = isNote ? "" : (it.location||"");
@@ -8066,7 +8062,7 @@ function renderReportDayplanDetail(d){
       const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
       const absEnd = clamp(absStart + dur, 0, dpEndAbs);
       const isNote = it.kind==="block";
-      const num = isNote ? "NOTA" : (it.number||"");
+      const num = isNote ? "—" : (it.number||"");
       const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
       const ie = isNote ? "" : (it.intExt||"");
       const locTxt = isNote ? "" : (it.location||"");
@@ -8095,13 +8091,14 @@ function renderReportDayplanDetail(d){
     const printWrap = document.createElement("div");
     printWrap.className = "printOnly";
     printWrap.innerHTML = `
+      ${buildDayplanPrintHeader(d)}
       <div class="items">
         <table class="dayplanPrintTable">
           <colgroup>
             <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
             <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colSum">
           </colgroup>
-          <thead><tr><th>Hora</th><th>Dur</th><th>Nro</th><th>Título</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Notas</th></tr></thead>
+          <thead><tr><th>Horario</th><th>Dur.</th><th>Esc.</th><th>Escena / actividad</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Notas</th></tr></thead>
           <tbody>${rows || `<tr><td colspan="8" class="muted">—</td></tr>`}</tbody>
         </table>
       </div>
@@ -8213,6 +8210,34 @@ function renderReportDayplanDetail(d){
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
   }
 
+  function buildDayplanPrintHeader(d){
+    const title = `${formatDayTitle(d.date)}${d.label ? " · " + d.label : ""}`.trim();
+    return `<header class="dpPrintHeader">
+      <div class="dpPrintHeading">
+        <div><div class="dpPrintEyebrow">Plan de rodaje</div><h1>${esc(state?.meta?.title || "Proyecto")}</h1></div>
+        <div class="dpPrintDay">${esc(title || "Jornada de rodaje")}</div>
+      </div>
+      <div class="dpPrintMeta">
+        <div><span>Citación general</span><strong>${esc(d.callTime || "—")}</strong></div>
+        <div><span>Locación de rodaje</span><strong>${esc(d.location || "Sin asignar")}</strong></div>
+        <div><span>Escenas programadas</span><strong>${(d.sceneIds || []).filter(getScene).length}</strong></div>
+      </div>
+    </header>`;
+  }
+
+  function printDayplanContents(html){
+    if(!String(html || "").trim()){
+      toast("No hay Plan de Rodaje para imprimir");
+      return;
+    }
+    const root = ensureGbPrintRoot();
+    root.innerHTML = html;
+    applyPrintDeviceFlag();
+    document.body.classList.add("gbPrintingDayplan");
+    setPrintOrientation("landscape", 12);
+    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+  }
+
   function printCurrentDayplan(){
     try{ renderDayPlan(); }catch(_e){}
     const src = el("dayplanPrint");
@@ -8220,12 +8245,7 @@ function renderReportDayplanDetail(d){
       toast("No hay Plan de Rodaje para imprimir");
       return;
     }
-    const root = ensureGbPrintRoot();
-    root.innerHTML = src.innerHTML;
-    applyPrintDeviceFlag();
-    document.body.classList.add("gbPrintingDayplan");
-    setPrintOrientation("landscape");
-    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+    printDayplanContents(src.innerHTML);
   }
 
   function applyPrintDeviceFlag(){
@@ -8555,7 +8575,7 @@ async function printPlanGeneral(){
   const root = ensureGbPrintRoot();
   root.innerHTML = buildPlanGeneralPrintHTML();
   document.body.classList.add("gbPrintingSchedule");
-  setPrintOrientation("landscape", 6);
+  setPrintOrientation("landscape", 12);
   try{
     await waitForImages(root, 2500);
     window.print();
@@ -9896,8 +9916,8 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         printPlanGeneral();
         return;
       }
-      setPrintOrientation("landscape");
-      window.print();
+      const print = el("reportDayplanDetail")?.querySelector(".printOnly");
+      printDayplanContents(print?.innerHTML);
     });
     window.addEventListener("afterprint", ()=>{ clearPrintOrientation(); cleanupGbPrintRoot(); });
 
