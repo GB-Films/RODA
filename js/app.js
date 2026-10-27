@@ -4883,6 +4883,26 @@ function bindSchedDayPickerUI(){
     }
   }
 
+  function bindCompactPlanningSwap(container,general=false){
+    if(!container||container.dataset.compactSwapBound)return;
+    container.dataset.compactSwapBound='1';
+    RodaDaySwap.bindCompactSceneSwap(container,{
+      enabled:()=>isCompactPlan()&&!isReadOnly('planning'),
+      readItem:node=>({kind:node.dataset.kind,id:general?node.dataset.itemId:node.dataset.id,dayId:general?node.dataset.dayId:selectedDayplanDayId}),
+      getScroller:()=>el(general?'schedWrap':'dpScroller'),
+      onSwap:(dayId,sourceId,targetId)=>{
+        const day=getDay(dayId);if(!day||isReadOnly('planning'))return;
+        if(!RodaDaySwap.swapScenes(day,sourceId,targetId)){toast('No se pudieron intercambiar estos horarios.');return;}
+        const scrollers=['dpScroller','schedWrap'].map(id=>({node:el(id),top:el(id)?.scrollTop||0,left:el(id)?.scrollLeft||0}));
+        selectedDayplanDayId=dayId;dayplanSelectedKey='scene:'+sourceId;dayplanSelectedKeys=new Set([dayplanSelectedKey]);
+        if(general)el('schedBoard').dataset.selectedItem=JSON.stringify([dayId,'scene',sourceId]);
+        touch();renderDayPlan();renderScheduleBoard();renderReportsDetail();renderReports();
+        for(const {node,top,left} of scrollers)if(node){node.scrollTop=top;node.scrollLeft=left;}
+        toast('Escenas intercambiadas; se conservaron sus duraciones.');
+      }
+    });
+  }
+
   function renderScheduleBoard(){
     syncPlanningView();
     const board = el("schedBoard");
@@ -5084,6 +5104,7 @@ for(const b of (d.blocks||[])){
       (el("schedWrap")||board).scrollTop=isCompactPlan()?0:Math.min(...daysToShow.map(d=>minutesFromHHMM(d.callTime||"08:00")))*pxPerMin;
       board.dataset.focusDays=daysToShow.map(d=>d.id).join(",");
     }
+    bindCompactPlanningSwap(board,true);
     bindScheduleDnD();
     setupScheduleTopScrollbar(); // ✅
     if(document.body.dataset.rodaView==='schedule') renderDayplanInspector(null,[]);
@@ -6208,6 +6229,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
     }).join("");
 
     lane.innerHTML = grid.join("") + blocks;
+    bindCompactPlanningSwap(lane);
     if(document.body.dataset.rodaView==='dayplan'&&scroller.dataset.focusDay!==d.id){scroller.scrollTop=isCompactPlan()?0:base*ppm;scroller.dataset.focusDay=d.id;}
 
     // Hover preview (igual que Cronograma + Planos)

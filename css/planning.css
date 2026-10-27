@@ -87,3 +87,9 @@
     .planning-compact #dpLane [data-kind="block"] .dpSlug{grid-column:1 / -1;}
   }
 }
+
+@media screen{
+  .planning-compact #dpLane .dpBlock[data-kind="scene"],.planning-compact #schedBoard .schedBlock[data-kind="scene"]{cursor:grab;}
+  .planning-compact #dpLane .dpBlock.compact-swap-source,.planning-compact #schedBoard .schedBlock.compact-swap-source{cursor:grabbing;pointer-events:none;box-shadow:0 8px 24px #0008;opacity:.94;}
+  .compact-swapping{user-select:none;}
+}

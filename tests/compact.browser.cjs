@@ -57,7 +57,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   assert.equal(await page.locator('#dpLane .dpBlock[data-id="night"] .planDuration').textContent(),'1 h 30 min');
   await page.locator('#dayplanSelect').selectOption('day');
   // Pointer gestures on the list must never be interpreted as minutes on a timeline.
-  const a=await long.boundingBox();await page.mouse.move(a.x+80,a.y+15);await page.mouse.down();await page.mouse.move(a.x+80,a.y+120,{steps:5});await page.mouse.up();
+  const a=await long.boundingBox();await page.mouse.move(a.x+80,a.y+15);await page.mouse.down();await page.mouse.move(a.x-30,a.y+120,{steps:5});await page.mouse.up();
   await page.locator('.navBtn[data-view="schedule"]').click();
   assert.equal(await page.locator('#schedView').inputValue(),'compact');
   assert.deepEqual(await page.locator('.schedGrid[data-day-id="day"] .schedBlock').evaluateAll(nodes=>nodes.slice(0,3).map(n=>n.dataset.itemId)),['arrival','setup','scene0']);
