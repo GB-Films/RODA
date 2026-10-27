@@ -106,4 +106,20 @@
     .shotSceneHead .warn { max-width:90px; }
     #shotlistCard .cardContent { padding:8px; }
   }
+  .shotDragHandle { display:inline-flex; align-items:center; gap:3px; padding:2px 0; border:0; background:none; color:#c1c8cf; font:inherit; cursor:grab; touch-action:none; user-select:none; }
+  .shotDragHandle .shotGrip { font-size:17px; color:#929ba7; }
+  .shotDragHandle:focus-visible { outline:2px solid #eee; outline-offset:3px; border-radius:3px; }
+  .shotDragHandle:disabled { cursor:default; }
+  .shotDragHandle:disabled .shotGrip { visibility:hidden; }
+  .shotDragging .shotDragHandle { cursor:grabbing; }
+  .shotTable .shotDragging { opacity:.55; }
+  .shotTable .shotDropBefore td { box-shadow:inset 0 3px #c8d8eb; }
+  .shotTable .shotDropAfter td { box-shadow:inset 0 -3px #c8d8eb; }
+  @media (max-width:1150px) {
+    #shotlistCard .shotTable tr { grid-template-columns:26px 38px minmax(0,1fr) 84px 30px; }
+    #shotlistCard .shotTable .shotNum::before { content:none; }
+    #shotlistCard .shotTable .shotDropBefore { box-shadow:0 -3px #c8d8eb; }
+    #shotlistCard .shotTable .shotDropAfter { box-shadow:0 3px #c8d8eb; }
+    #shotlistCard .shotTable .shotDropBefore td,#shotlistCard .shotTable .shotDropAfter td { box-shadow:none; }
+  }
 }

@@ -7183,6 +7183,77 @@ box.addEventListener("input", (e)=>{
 
 
 
+// Shot clocks are derived from cumulative durations; a reorder only changes IDs' order.
+function reorderShot(sceneId,shotId,targetId,after=false){
+  if(isReadOnly('shotlist'))return false;
+  const shots=getScene(sceneId)?.shots;
+  if(!Array.isArray(shots)||shotId===targetId)return false;
+  const from=shots.findIndex(s=>s.id===shotId),to=shots.findIndex(s=>s.id===targetId);
+  if(from<0||to<0)return false;
+  const next=shots.slice(),[shot]=next.splice(from,1);
+  next.splice(next.findIndex(s=>s.id===targetId)+(after?1:0),0,shot);
+  if(next.every((s,i)=>s===shots[i]))return false;
+  shots.splice(0,shots.length,...next);
+  const scroll=el('shotlistWrap')?.closest('.shotlistMain'),top=scroll?.scrollTop;
+  touch();renderShotList();
+  if(scroll)scroll.scrollTop=top;
+  const row=Array.from(el('shotlistWrap').querySelectorAll('tr[data-shot-id]')).find(r=>r.dataset.sceneId===sceneId&&r.dataset.shotId===shotId);
+  row?.querySelector('.shotDragHandle')?.focus({preventScroll:true});
+  toast(`Plano movido al lugar ${next.indexOf(shot)+1}. Horarios actualizados.`);
+  return true;
+}
+
+function bindShotReorder(handle,row,tbody,sceneId,shotId){
+  handle.addEventListener('keydown',e=>{
+    if(!['ArrowUp','ArrowDown'].includes(e.key)||isReadOnly('shotlist'))return;
+    e.preventDefault();
+    const shots=getScene(sceneId)?.shots||[],at=shots.findIndex(s=>s.id===shotId),target=shots[at+(e.key==='ArrowUp'?-1:1)];
+    if(target)reorderShot(sceneId,shotId,target.id,e.key==='ArrowDown');
+  });
+  handle.addEventListener('pointerdown',e=>{
+    if(e.button!==0||isReadOnly('shotlist'))return;
+    e.preventDefault();handle.focus({preventScroll:true});
+    const pointerId=e.pointerId,startX=e.clientX,startY=e.clientY,scroll=tbody.closest('.shotlistMain');
+    let x=startX,y=startY,moving=false,target=null,after=false,frame=0,finished=false;
+    const clear=()=>tbody.querySelectorAll('.shotDropBefore,.shotDropAfter').forEach(n=>n.classList.remove('shotDropBefore','shotDropAfter'));
+    const locate=()=>{
+      clear();target=null;
+      const rows=Array.from(tbody.querySelectorAll('tr[data-shot-id]')),bounds=tbody.getBoundingClientRect();
+      // Dropping into a different scene is never allowed.
+      if(x<bounds.left||x>bounds.right||y<bounds.top-12||y>bounds.bottom+12)return;
+      target=rows.find(n=>y<n.getBoundingClientRect().bottom)||rows.at(-1);
+      if(!target||target===row){target=null;return;}
+      const b=target.getBoundingClientRect();after=y>b.top+b.height/2;
+      target.classList.add(after?'shotDropAfter':'shotDropBefore');
+    };
+    const tick=()=>{
+      if(finished||!moving)return;
+      if(scroll){const b=scroll.getBoundingClientRect();if(x>=b.left&&x<=b.right){
+        const delta=y<b.top+40?-10:y>b.bottom-40?10:0;
+        if(delta){scroll.scrollTop+=delta;locate();}
+      }}
+      frame=requestAnimationFrame(tick);
+    };
+    const move=event=>{
+      if(event.pointerId!==pointerId)return;x=event.clientX;y=event.clientY;
+      if(!moving&&Math.hypot(x-startX,y-startY)<5)return;
+      if(!moving){moving=true;row.classList.add('shotDragging');frame=requestAnimationFrame(tick);}
+      locate();
+    };
+    const finish=event=>{
+      if(finished||(event.pointerId!==undefined&&event.pointerId!==pointerId))return;
+      finished=true;cancelAnimationFrame(frame);
+      window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',finish);window.removeEventListener('blur',finish);window.removeEventListener('keydown',escape);
+      handle.removeEventListener('lostpointercapture',finish);clear();row.classList.remove('shotDragging');
+      if(handle.hasPointerCapture(pointerId))handle.releasePointerCapture(pointerId);
+      if(event.type==='pointerup'&&moving&&target)reorderShot(sceneId,shotId,target.dataset.shotId,after);
+    };
+    const escape=event=>{if(event.key==='Escape'){event.preventDefault();finish(event);}};
+    window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',finish);window.addEventListener('blur',finish);window.addEventListener('keydown',escape);handle.addEventListener('lostpointercapture',finish);
+    handle.setPointerCapture(pointerId);
+  });
+}
+
 function renderShotList(){
     renderDayNavigation();
     const sel = el("shotDaySelect");
@@ -7385,10 +7456,11 @@ function renderShotList(){
             : (hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : `<div class="muted small">Sin imagen</div>`);
 
           const tr = document.createElement("tr");
+          tr.dataset.shotId=sh.id;tr.dataset.sceneId=sid;
           if(done) tr.classList.add("shotRowDone");
           tr.innerHTML = `
             <td class="shotChk"><input type="checkbox" aria-label="Plano ${idx+1} realizado" ${done?"checked":""} ${(isReadOnly('shotlist')||isReadOnly('planning'))?"disabled":""} /></td>
-            <td class="shotNum">${idx+1}</td>
+            <td class="shotNum"><button type="button" class="shotDragHandle" aria-label="Reordenar plano ${idx+1}" title="Arrastrá para reordenar · ↑ / ↓ con el teclado" ${isReadOnly('shotlist')?"disabled":""}><span class="shotGrip" aria-hidden="true">⠿</span><span>${idx+1}</span></button></td>
             <td class="shotTime">${esc(t||"")}</td>
             <td class="shotType">
               <select class="input compact shotTypeSel" aria-label="Tipo de plano ${idx+1}" ${isReadOnly('shotlist')?"disabled":""}>
@@ -7411,6 +7483,8 @@ function renderShotList(){
             </td>
             <td class="shotAct noPrint"><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly('shotlist')?"disabled":""}>×</button></td>
           `;
+
+          bindShotReorder(tr.querySelector('.shotDragHandle'),tr,tbody,sid,sh.id);
 
           const chk = tr.querySelector("input[type=checkbox]");
           const selDur = tr.querySelector(".shotDurSel");
