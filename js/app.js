@@ -4877,15 +4877,19 @@ function bindSchedDayPickerUI(){
     updateSchedDaysButton();
 
     const daysToShow = getScheduleDaysFiltered();
+    try{const selected=JSON.parse(board.dataset.selectedItem||'null');if(selected&&!daysToShow.some(d=>d.id===selected[0]))delete board.dataset.selectedItem;}catch(_e){}
+
 
     if(!state.shootDays.length){
       board.innerHTML = `<div class="muted">No hay días cargados.</div>`;
+      if(document.body.dataset.rodaView==='schedule')renderDayplanInspector(null,[]);
       setupScheduleTopScrollbar();
       return;
     }
 
     if(!daysToShow.length){
       board.innerHTML = `<div class="muted">No hay días seleccionados.</div>`;
+      if(document.body.dataset.rodaView==='schedule')renderDayplanInspector(null,[]);
       setupScheduleTopScrollbar();
       return;
     }
@@ -4975,18 +4979,17 @@ function bindSchedDayPickerUI(){
                 const startTxt = clockLabelFromCall(d, startMin);
         const endTxt   = clockLabelFromCall(d, startMin + durMin);
 
-        const noteTxt = (notesOrShortSummary(s.notes, s.summary) || "").replace(/\s+/g," ").trim();
-
+        block.classList.toggle('is-compact',height<44);
         block.innerHTML = `
           <div class="schedContent">
-            <div class="title">#${esc(s.number||"")} — ${esc(s.slugline||"")}</div>
-            <div class="meta">${esc(startTxt)} - ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
-            ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
+            <div class="meta">${esc(startTxt)} - ${esc(endTxt)}</div>
+            <div class="title">#${esc(s.number||"")} · ${esc(s.slugline||"")}</div>
           </div>
           <div class="resize" title="Cambiar duración"></div>
         `;
 
-        attachSceneHover(block, s);
+        block.tabIndex=0;block.setAttribute('role','button');block.dataset.roAllow='1';
+        block.setAttribute('aria-label',`${startTxt}–${endTxt} · Escena ${s.number||''} · ${s.slugline||''}`);
 
         // Doble click robusto (algunos browsers no disparan dblclick si hay pointerdown preventDefault)
         block.addEventListener("dblclick", (e)=>{ e.stopPropagation(); jumpToSceneInBreakdown(s.id); });
@@ -5031,13 +5034,13 @@ for(const b of (d.blocks||[])){
     const startTxt = clockLabelFromCall(d, startMin);
   const endTxt   = clockLabelFromCall(d, startMin + durMin);
 
-  const noteTxt = String(b.detail||"").replace(/\s+/g," ").trim();
-
+  block.classList.toggle('is-compact',height<44);
+  block.tabIndex=0;block.setAttribute('role','button');block.dataset.roAllow='1';
+  block.setAttribute('aria-label',`${startTxt}–${endTxt} · ${b.title||'Bloque'}`);
   block.innerHTML = `
     <div class="schedContent">
-      <div class="title">🗒 ${esc(b.title||"Tarea")}</div>
-      <div class="meta">${esc(startTxt)} - ${esc(endTxt)} (${esc(formatDuration(durMin))})</div>
-      ${noteTxt ? `<div class="schedNote">${esc(noteTxt)}</div>` : ``}
+      <div class="meta">${esc(startTxt)} - ${esc(endTxt)}</div>
+      <div class="title">${esc(b.title||"Bloque")}</div>
     </div>
     <div class="resize" title="Cambiar duración"></div>
   `;
@@ -5064,7 +5067,16 @@ for(const b of (d.blocks||[])){
     }
     bindScheduleDnD();
     setupScheduleTopScrollbar(); // ✅
+    if(document.body.dataset.rodaView==='schedule') renderDayplanInspector(null,[]);
   }
+
+function selectScheduleItem(dayId,kind,id){
+  selectedDayplanDayId=dayId;dayplanSelectedKey=kind+':'+id;
+  dayplanSelectedKeys=new Set([dayplanSelectedKey]);
+  el('schedBoard').dataset.selectedItem=JSON.stringify([dayId,kind,id]);
+  el('schedBoard').querySelectorAll('.schedBlock').forEach(node=>node.classList.toggle('is-selected',node.dataset.dayId===dayId&&node.dataset.kind===kind&&node.dataset.itemId===id));
+  renderDayplanInspector(getDay(dayId),buildDayplanItems(getDay(dayId)));
+}
 
 function bindScheduleDnD(){
   const board = el("schedBoard");
@@ -5073,7 +5085,11 @@ function bindScheduleDnD(){
   board.dataset.dndBound = "1";
 
   schedDrag = null;
-
+  board.addEventListener('keydown',e=>{
+    if(e.key!=='Enter'&&e.key!==' ')return;
+    const block=e.target.closest('.schedBlock');if(!block)return;
+    e.preventDefault();selectScheduleItem(block.dataset.dayId,block.dataset.kind,block.dataset.itemId);
+  });
 
   function getPxPerMin(){
     const zoom = Number(el("schedZoom")?.value || 90); // px por hora
@@ -5263,6 +5279,7 @@ function bindScheduleDnD(){
 
     // Si fue solo click (sin drag), no tocamos layout: permite doble click y evita re-render innecesario
     if((d0.mode === "move" || d0.mode === "tap") && !d0.moved){
+      selectScheduleItem(d0.dayId,d0.kind,d0.itemId);
       const now = Date.now();
       if(d0.kind === "scene" && d0.itemId){
         if(schedTap && schedTap.sceneId === d0.itemId && (now - schedTap.t) < 380){
@@ -5401,7 +5418,9 @@ function updateScheduleDayDOM(dayId){
 
     const meta = block.querySelector(".meta");
     if(meta){
-      meta.textContent = `${clockLabelFromCall(d, startMin)} · ${formatDuration(durMin)}`;
+      meta.textContent = `${clockLabelFromCall(d, startMin)} - ${clockLabelFromCall(d, startMin+durMin)}`;
+      block.classList.toggle('is-compact',height<44);
+      block.classList.toggle('is-short',height<30);
     }
   }
 }
@@ -6143,19 +6162,11 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
       const isSel = (dayplanSelectedKeys?.has?.(it.key) || dayplanSelectedKey === it.key);
       const showPal = (dayplanPaletteKey === it.key);
 
-      const actionBtns = it.kind==="block"
-        ? `<button class="dpMiniBtn noPrint" data-action="delete" title="Eliminar">🗑</button>`
-        : `<button class="dpMiniBtn noPrint" data-action="removeScene" title="Quitar del Plan">🗑</button>
-           <button class="dpMiniBtn noPrint" data-action="openScene" title="Abrir escena">↗</button>`;
-
       return `
         <div class="dpBlock ${height<30?"is-short":""} ${isSel?"sel":""} ${showPal?"showPalette":""}"
+             tabindex="0" role="button" data-ro-allow="1" aria-label="${eattr(`${startTxt}–${endTxt} · ${it.kind==='scene'?'Escena '+it.number+' · '+it.slugline:it.title}`)}"
              data-key="${eattr(it.key)}" data-kind="${eattr(it.kind)}" data-id="${eattr(it.id)}"
              style="top:${top}px;height:${height}px;background:${eattr(bg)};border-left:8px solid ${eattr(col)};--production-ink:${appearance.ink};">
-          <div class="dpBlockBtns dpBlockBtns--abs">
-              <button class="dpMiniBtn noPrint" data-action="palette" title="Color">🎨</button>
-              ${actionBtns}
-            </div>
 <div class="dpBlockTitle">
   <span class="dpTime">${esc(startTxt)}–${esc(endTxt)}</span>
   ${
@@ -6164,25 +6175,6 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
       : `<span class="dpSlug">${esc(it.title||"")}</span>`
   }
 </div>
-
-${
-  it.kind==="scene"
-    ? `
-      <div class="dpBlockMeta">
-        <div class="dpMetaItem"><div class="v">${esc(it.intExt||"—")}</div></div>
-        <div class="dpMetaItem"><div class="v">${esc(it.location||"—")}</div></div>
-        <div class="dpMetaItem"><div class="v">${esc(it.timeOfDay||"—")}</div></div>
-      </div>
-      ${(()=>{ const t = notesOrShortSummary(it.notes, it.summary); return t ? `<div class="dpBlockSummary">${esc(t)}</div>` : ``; })()}
-    `
-    : (it.detail ? `<div class="dpBlockDetail">${esc(it.detail)}</div>` : ``)
-}
-
-          <div class="dpPalettePop noPrint" data-role="palette">
-            <div class="dpSwatches">
-              ${DAYPLAN_COLORS.map(c=>`<button class="dpSwatchBtn" data-action="pickColor" data-color="${eattr(c)}" style="background:${eattr(c)}" title="${eattr(c)}"></button>`).join("")}
-            </div>
-          </div>
 
           <div class="dpResize noPrint" data-action="resize" title="Arrastrá para cambiar duración"></div>
         </div>
@@ -6493,6 +6485,12 @@ ${
         renderDayPlan();
       });
 
+      lane.addEventListener('keydown',e=>{
+        if(e.key!=='Enter'&&e.key!==' ')return;
+        const block=e.target.closest('.dpBlock');if(!block)return;
+        e.preventDefault();block.click();
+      });
+
       // Doble click en una escena: ir directo al Breakdown de esa escena
       lane.addEventListener("dblclick", (e)=>{
         const block = e.target?.closest?.(".dpBlock");
@@ -6696,6 +6694,7 @@ dayplanPointer = {
         const dayId = p.dayId;
         const d2 = dayId ? getDay(dayId) : null;
         if(!d2) { dayplanPointer = null; return; }
+        if(!p.moved){dayplanPointer=null;renderDayplanInspector(d2,buildDayplanItems(d2));return;}
         if(event.type==='pointercancel'||p.moved&&p.mode==='drag'&&!p.inside){
           RodaDaySwap.restoreLayout(d2,p.before);dayplanPointer=null;renderDayPlan();renderScheduleBoard();return;
         }
@@ -6726,12 +6725,27 @@ dayplanPointer = {
   function renderDayplanInspector(d, items){
     const box = el("dayplanInspector");
     if(!box) return;
+    const general=document.body.dataset.rodaView==='schedule';
+    const dayHost=document.querySelector('.dayplanBody'),generalHost=document.querySelector('.scheduleContent');
+    const host=general?generalHost:dayHost;
+    if(host&&box.parentElement!==host)host.appendChild(box);
+    box.classList.add('planningInspector');
+    if(general){
+      let selected;try{selected=JSON.parse(el('schedBoard')?.dataset.selectedItem||'null');}catch(_e){}
+      d=selected?getDay(selected[0]):null;items=d?buildDayplanItems(d):[];
+      selectedDayplanDayId=d?.id||selectedDayplanDayId;
+      dayplanSelectedKey=selected?selected[1]+':'+selected[2]:null;
+    }
+    if(!d){box.hidden=true;generalHost?.classList.remove('has-selection');return;}
 
     const snapMin = dayplanSelectedKey?.startsWith("block:") ? 5 : getDayplanSnap();
     const base = minutesFromHHMM(d.callTime || "08:00");
     const dpEndAbs = dayplanEndAbs(d);
 
     const it = dayplanSelectedKey ? items.find(x=>x.key===dayplanSelectedKey) : null;
+    box.hidden=!it;
+    dayHost?.classList.toggle('has-selection',!general&&!!it);
+    generalHost?.classList.toggle('has-selection',general&&!!it);
     if(!it){
       box.innerHTML = `<div class="muted">Seleccioná una escena o tarea para editarla.</div>`;
       return;
@@ -6750,21 +6764,22 @@ dayplanPointer = {
     const isBlock = it.kind==="block";
 
     box.innerHTML = `
-      <div class="row gap" style="align-items:center;justify-content:space-between;flex-wrap:wrap">
-        <div><b>${it.kind==="scene" ? "Escena" : "Bloque"}</b> <span class="muted">(${esc(it.title||"")})</span></div>
-        <div class="row gap" style="align-items:center">
-          <span class="muted small">Color</span>
-          <div class="dpSwatches">
-            ${DAYPLAN_COLORS.map(c=>`<button class="dpSwatchBtn" data-action="pickColorInspector" data-color="${esc(c)}" style="background:${esc(c)}" title="${esc(c)}"></button>`).join("")}
-          </div>
-        </div>
+      <div class="planningInspectorHead">
+        <div><div class="inspectorEyebrow">${isBlock?'Bloque':'Escena '+esc(it.number||'')} · ${esc(formatDayTitle(d.date))}</div>
+        <h3>${esc(isBlock?it.title:it.slugline)}</h3></div>
+        <button class="btn icon inspector-close" id="dpCloseInspector" type="button" data-ro-allow="1" aria-label="Cerrar detalle">×</button>
       </div>
-
-      <div class="spacer"></div>
-
+      <details class="inspectorColor"><summary><span class="inspectorColorDot" style="background:${esc(col)}"></span>Color de la tarjeta</summary>
+        <div class="dpSwatches">${DAYPLAN_COLORS.map(c=>`<button class="dpSwatchBtn" data-action="pickColorInspector" data-color="${esc(c)}" style="background:${esc(c)}" title="${esc(c)}" aria-label="Color ${esc(c)}"></button>`).join('')}</div>
+      </details>
+      <div class="dpActions">
+        ${it.kind==="scene" ? `<button class="btn" id="dpi_openScene" data-ro-allow="1">Abrir escena</button><button class="btn danger" id="dpi_removeScene">Quitar del día</button>` : ``}
+        ${it.kind==="block" ? `<button class="btn danger" id="dpi_delete">Eliminar</button>` : ``}
+      </div>
+      <div class="inspectorSectionTitle">Horario de rodaje</div>
       <div class="dpGrid">
         <div class="field">
-          <label>Hora</label>
+          <label for="dpi_time">Inicio</label>
           <input class="input" type="time" id="dpi_time" value="${esc(timeVal)}">
           ${d.night ? `<select class="input" id="dpi_dayOffset" aria-label="Día del horario"><option value="0" ${absStart<DAY_SPAN_MIN?"selected":""}>Mismo día</option><option value="1" ${absStart>=DAY_SPAN_MIN?"selected":""}>Día siguiente</option></select>` : ""}
         </div>
@@ -6778,7 +6793,7 @@ dayplanPointer = {
             </select>
             <span class="muted small">m</span>
           </div>
-          <div class="muted small" style="margin-top:6px">Total: <b>${esc(formatDurHHMM(dur))}</b></div>
+          <div class="muted small" style="margin-top:6px">Finaliza <b>${esc(clockLabelAbs(absStart+dur))}</b></div>
         </div>
 
         ${isBlock ? `
@@ -6793,7 +6808,6 @@ dayplanPointer = {
                 ` : `
           <div class="field" style="grid-column:1/-1">
             <label>Datos de escena</label>
-            <div class="dpSceneTop"><b>#${esc(it.number||"")}</b> ${esc(it.slugline||"")}</div>
             <div class="dpFacts">
               <div class="dpFact"><div class="k">Int/Ext</div><div class="v">${esc(it.intExt||"—")}</div></div>
               <div class="dpFact"><div class="k">Lugar</div><div class="v">${esc(it.location||"—")}</div></div>
@@ -6803,15 +6817,11 @@ dayplanPointer = {
           </div>
           <div class="field" style="grid-column:1/-1">
             <label>Notas</label>
-            <div class="muted dpSceneResText">${esc(notesOrShortSummary(it.notes, it.summary) || "—")}</div>
+            <div class="muted dpSceneResText">${esc(it.notes || it.summary || "Sin notas")}</div>
           </div>
         `}
 </div>
 
-      <div class="dpActions">
-        ${it.kind==="scene" ? `<button class="btn" id="dpi_openScene">Abrir escena</button>` : ``}
-        ${it.kind==="block" ? `<button class="btn danger" id="dpi_delete">Eliminar</button>` : ``}
-      </div>
     `;
 
     // Bind once per render (clean approach: delegation)
@@ -6819,6 +6829,7 @@ dayplanPointer = {
       box.dataset.bound = "1";
 
       box.addEventListener("click", (e)=>{
+        if(e.target.closest('#dpCloseInspector')){dayplanSelectedKey=null;dayplanSelectedKeys.clear();dayplanPaletteKey=null;delete el('schedBoard').dataset.selectedItem;renderDayPlan();renderScheduleBoard();return;}
         const act = e.target.closest("[data-action]")?.dataset.action || "";
         if(act === "pickColorInspector"){
           const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
@@ -6909,27 +6920,11 @@ if(e.target.id === "dpi_title" || e.target.id === "dpi_detail"){
 const dpTextSave = window.U.debounce(()=>{ touch(); }, 450);
 
 function updateLaneBlock(bid, title, detail){
-  const escAttr = (v)=> String(v||"").replace(/\\/g,"\\\\").replace(/"/g,'\\"');
   const node = document.querySelector(`.dpBlock[data-kind="block"][data-id="${escAttr(bid)}"]`);
-  if(!node) return;
-
-  const t = node.querySelector(".dpBlockTitle");
-  if(t) t.textContent = title || "";
-
-  let dEl = node.querySelector(".dpBlockDetail");
-  const should = String(detail||"").trim();
-  if(should){
-    if(!dEl){
-      dEl = document.createElement("div");
-      dEl.className = "dpBlockDetail";
-      const before = node.querySelector(".dpPalettePop") || node.querySelector(".dpResize");
-      if(before) node.insertBefore(dEl, before);
-      else node.appendChild(dEl);
-    }
-    dEl.textContent = detail;
-  }else{
-    if(dEl) dEl.remove();
-  }
+  const heading=node?.querySelector('.dpSlug');if(heading)heading.textContent=title||'';
+  const general=document.querySelector(`.schedBlock[data-kind="block"][data-item-id="${escAttr(bid)}"] .title`);
+  if(general)general.textContent=title||'';
+  const inspectorTitle=box.querySelector('h3');if(inspectorTitle)inspectorTitle.textContent=title||'';
 }
 
 box.addEventListener("input", (e)=>{
@@ -6971,6 +6966,12 @@ box.addEventListener("input", (e)=>{
           renderSceneEditor();
           renderShotsEditor();
           return;
+        }
+        if(e.target.id === "dpi_removeScene" && it0.kind==='scene'){
+          d0.sceneIds=(d0.sceneIds||[]).filter(id=>id!==it0.id);
+          delete d0.times[it0.id];delete d0.durations[it0.id];delete d0.sceneColors[it0.id];
+          dayplanSelectedKey=null;dayplanSelectedKeys.clear();delete el('schedBoard').dataset.selectedItem;
+          touch();renderDayPlan();renderScheduleBoard();renderSceneBank();renderDayDetail();renderReports();renderReportsDetail();return;
         }
         if(e.target.id === "dpi_delete" && it0.kind==="block"){
           deleteDayplanBlock(selectedDayplanDayId, it0.id);
