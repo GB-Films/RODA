@@ -16,3 +16,12 @@
 .dpBlock.swap-target,.schedBlock.swap-target{outline:2px dashed #eee;outline-offset:2px;}
 @media(max-width:640px){.dpBlockChoices{left:auto;right:0;}}
 @media print{.dpBlockMenu{display:none!important;}}
+
+/* The visible card must fit its real slot, independently of the drag grid. */
+.dpBlock.is-short,.schedBlock.is-short{padding:0 4px;border-radius:5px;}
+.dpBlock.is-short .dpBlockTitle{font-size:10px;line-height:11px;}
+.schedBlock.is-short .title{font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.schedBlock.is-short .meta,.schedBlock.is-short .schedNote{display:none;}
+
+.dpBlock.is-short .dpResize{height:4px;}
+.schedBlock.is-short .resize{height:3px;bottom:1px;left:4px;right:4px;}

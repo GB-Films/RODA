@@ -1152,13 +1152,7 @@ function enforceScriptVersionsLimit(notify=false){
     const mm = String(m).padStart(2,"0");
     return `${hh}h${mm}m`;
   }
-  function minuteOptionsFromSnap(snapMin){
-    const step = Math.max(1, Math.round(Number(snapMin)||1));
-    if(step >= 60) return [0];
-    const arr = [];
-    for(let m=0; m<60; m+=step) arr.push(m);
-    return arr.length ? arr : [0];
-  }
+  function durationMinuteOptions(current=0){return [...new Set([...Array.from({length:12},(_,i)=>i*5),current])].sort((a,b)=>a-b);}
 
 
   function preOffsetFromCall(callHHMM){
@@ -1615,7 +1609,8 @@ async function setShotThumb(sh, file){
   function resolveOverlapsPushDown(d, snapMin){
     ensureDayTimingMaps(d);
 
-    // Límite del día (desde Call hasta fin de jornada)
+    // Snap controls the active gesture. Existing slots retain their own duration.
+    // A collision moves the following item to the exact end, without new gaps.
     const span = Math.max(5, dayplanAvailSpan(d));
 
     const blockById = new Map((d.blocks||[]).map(b=>[b.id, b]));
@@ -1643,13 +1638,13 @@ async function setShotThumb(sh, file){
     let cursor = dayplanMinOffset(d);
     for(const it of items){
       let st = it.start ?? 0;
-      let du = it.dur ?? snapMin;
+      let du = it.dur ?? 15;
 
-      du = clamp(du, it.kind==="block" ? 5 : snapMin, dayplanEndAbs(d));
-      st = clamp(st, dayplanMinOffset(d), span - snapMin);
+      du = clamp(du, 5, dayplanEndAbs(d));
+      st = clamp(st, dayplanMinOffset(d), span - du);
 
       if(st < cursor){
-        st = snapCeil(cursor, it.kind==="block" ? 5 : snapMin);
+        st = cursor;
       }
 
       st = clamp(st, dayplanMinOffset(d), span - du);
@@ -4965,9 +4960,10 @@ function bindSchedDayPickerUI(){
         const durMin   = clamp(d.durations[sid] ?? 60, 5, dayplanEndAbs(d));
 
         const top = (preOffset + startMin) * pxPerMin;
-        const height = Math.max(34, durMin * pxPerMin);
+        const height = Math.max(1, durMin * pxPerMin);
         const block = document.createElement("div");
         block.className = "schedBlock";
+        block.classList.toggle("is-short",height<30);
         const rowColor = d.sceneColors?.[sid];
         if(rowColor) block.style.borderLeft = `6px solid ${rowColor}`;
         block.dataset.sceneId = sid;
@@ -5015,13 +5011,14 @@ for(const b of (d.blocks||[])){
   const durMin   = clamp(Number(b.durMin ?? 30) || 30, 5, dayplanEndAbs(d));
 
   const top = (preOffset + startMin) * pxPerMin;
-  const height = Math.max(34, durMin * pxPerMin);
+  const height = Math.max(1, durMin * pxPerMin);
 
   const col = safeHexColor(b.color || "#E5E7EB", "#E5E7EB");
   const appearance=RodaProductionBlocks.appearance(col),bg=appearance.background;
 
   const block = document.createElement("div");
   block.className = "schedBlock";
+        block.classList.toggle("is-short",height<30);
   block.dataset.kind = "block";
   block.dataset.itemId = b.id;
       block.classList.toggle('is-selected',board.dataset.selectedItem===JSON.stringify([d.id,'block',b.id]));
@@ -5185,7 +5182,7 @@ function bindScheduleDnD(){
       }
     }
 
-    if(drag.ro || isReadOnly()) return;
+    if(drag.ro || isReadOnly() || !drag.moved) return;
     if(drag.moved)drag.el.classList.add('is-dragging');
 
     const pxPerMin = getPxPerMin();
@@ -5290,6 +5287,7 @@ function bindScheduleDnD(){
     ensureDayTimingMaps(fromDay);
 
     if(d0.mode === "resize"){
+      resolveOverlapsPushDown(fromDay,d0.snapMin);
       touch();
       renderScheduleBoard();
       renderDayPlan();
@@ -5377,8 +5375,7 @@ function updateScheduleDayDOM(dayId){
   const baseHour = getScheduleBoardBaseHour();
   const preOffset = minutesFromHHMM(d.callTime || "08:00") - baseHour;
 
-  // Normalizar overlaps (incluye bloques)
-  resolveOverlapsPushDown(d, snapMin);
+  // Updating a preview must not change the saved plan.
 
   for(const block of grid.querySelectorAll(".schedBlock")){
     const kind = block.dataset.kind || (block.dataset.sceneId ? "scene" : "block");
@@ -5398,7 +5395,7 @@ function updateScheduleDayDOM(dayId){
     }
 
     const top = (preOffset + startMin) * pxPerMin;
-    const height = Math.max(34, durMin * pxPerMin);
+    const height = Math.max(1, durMin * pxPerMin);
     block.style.top = `${top}px`;
     block.style.height = `${height}px`;
 
@@ -5690,7 +5687,7 @@ items.push({
 
     const getDur = (it, startOff)=>{
       const absStart = clamp(base + startOff, 0, dpEndAbs);
-      return clamp(Math.max(snapMin, it.dur||snapMin), snapMin, Math.max(snapMin, dpEndAbs - absStart));
+      return clamp(Math.max(5, it.dur||15), 5, Math.max(5, dpEndAbs - absStart));
     };
 
     // cuánto hay que correr el grupo para que ningún seleccionado quede "atrapado" detrás de un no-seleccionado
@@ -6134,12 +6131,12 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
       const appearance=RodaProductionBlocks.appearance(col);
       const bg=it.kind==='block'?appearance.background:hexToRgba(col,0.75);
-const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMin);
-const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, dpEndAbs - absStart);
-const absEnd = clamp(absStart + dur, absStart + snapMin, dpEndAbs);
+const absStart = clamp(base + (it.start||0), 0, dpEndAbs - 5);
+const dur = clamp(Math.max(5, it.dur||15), 5, dpEndAbs - absStart);
+const absEnd = clamp(absStart + dur, absStart + 5, dpEndAbs);
 
 const top = Math.round((absStart - dpStartAbs) * ppm);
-const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMin*ppm));
+const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
 
       const startTxt = clockLabelAbs(absStart);
       const endTxt = clockLabelAbs(absEnd);
@@ -6152,7 +6149,7 @@ const height = Math.max(Math.round((absEnd - absStart) * ppm), Math.round(snapMi
            <button class="dpMiniBtn noPrint" data-action="openScene" title="Abrir escena">↗</button>`;
 
       return `
-        <div class="dpBlock ${isSel?"sel":""} ${showPal?"showPalette":""}"
+        <div class="dpBlock ${height<30?"is-short":""} ${isSel?"sel":""} ${showPal?"showPalette":""}"
              data-key="${eattr(it.key)}" data-kind="${eattr(it.kind)}" data-id="${eattr(it.id)}"
              style="top:${top}px;height:${height}px;background:${eattr(bg)};border-left:8px solid ${eattr(col)};--production-ink:${appearance.ink};">
           <div class="dpBlockBtns dpBlockBtns--abs">
@@ -6299,9 +6296,9 @@ ${
     const snapMinPrint = Number(el("schedSnap")?.value || snapMin || 15);
 
     const rows = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMinPrint);
-      const durMax = Math.max(snapMinPrint, dpEndAbs - absStart);
-      const dur = clamp(Math.max(snapMinPrint, it.dur||snapMinPrint), snapMinPrint, durMax);
+      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - 5);
+      const durMax = Math.max(5, dpEndAbs - absStart);
+      const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
       const absEnd = clamp(absStart + dur, 0, dpEndAbs);
       const isNote = it.kind==="block";
       const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
@@ -6577,7 +6574,7 @@ const ppm = getDayplanPPM() || DAYPLAN_PPM;
         const selItems = items.filter(x=>selSet.has(x.key)).map(x=>{
           const start0 = clamp(x.start||0, dayplanMinOffset(d), availSpan);
           const absStartX = clamp(base + start0, 0, dpEndAbs);
-          const durX = clamp(Math.max(snapMin, x.dur||snapMin), snapMin, Math.max(snapMin, dpEndAbs - absStartX));
+          const durX = clamp(Math.max(5, x.dur||15), 5, Math.max(5, dpEndAbs - absStartX));
           return { key:x.key, kind:x.kind, id:x.id, start0, dur0: durX, el: domMap.get(x.key) || null };
         });
 
@@ -6585,14 +6582,14 @@ const ppm = getDayplanPPM() || DAYPLAN_PPM;
         let maxDelta = Infinity;
         for(const s of selItems){
           const start0 = clamp(s.start0||0, dayplanMinOffset(d), availSpan);
-          const dur0i = clamp(Math.max(snapMin, s.dur0||snapMin), snapMin, Math.max(snapMin, availSpan - start0));
+          const dur0i = clamp(Math.max(5, s.dur0||15), 5, Math.max(5, availSpan - start0));
           const maxStart = availSpan - dur0i;
           minDelta = Math.max(minDelta, dayplanMinOffset(d) - start0);
           maxDelta = Math.min(maxDelta, maxStart - start0);
         }
 
         const absStart0 = clamp(base + (it.start||0), 0, dpEndAbs);
-        const dur0 = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, Math.max(snapMin, dpEndAbs - absStart0));
+        const dur0 = clamp(Math.max(5, it.dur||15), 5, Math.max(5, dpEndAbs - absStart0));
 
         const mode = (action === "resize") ? "resize" : "drag";
         const grabOffset = clamp(pressAbsMin - absStart0, 0, dur0);
@@ -6636,7 +6633,7 @@ dayplanPointer = {
         const y = (e.clientY - rect.top) + (sc?.scrollTop||0);
         const p = dayplanPointer;
         if(Math.abs(e.clientX-p.startClientX)>4||Math.abs(e.clientY-p.startClientY)>4)p.moved=true;
-        if(p.mode==='drag'&&!p.moved)return;
+        if(!p.moved)return;
         p.el.classList.add('is-dragging');
 
         const d = p.dayId ? getDay(p.dayId) : null;
@@ -6670,11 +6667,11 @@ dayplanPointer = {
     const group = Array.isArray(p.sel) ? p.sel : [];
     if(group.length > 1){
       // place active based on clamped delta (keeps group together)
-      const newActiveOff = clamp((p.activeStart0||0) + delta, dayplanMinOffset(d), availSpan - snapMin);
+      const newActiveOff = clamp((p.activeStart0||0) + delta, dayplanMinOffset(d), availSpan - p.dur0);
       absStart = clamp(base + newActiveOff, 0, dpEndAbs - p.dur0);
 
       for(const s of group){
-        const newStart = clamp((s.start0||0) + delta, dayplanMinOffset(d), availSpan - snapMin);
+        const newStart = clamp((s.start0||0) + delta, dayplanMinOffset(d), availSpan - s.dur0);
         setDayplanStart(d, s.kind, s.id, newStart);
         const absS = base + newStart;
         if(s.el) s.el.style.top = Math.round((absS - dpStartAbs)*ppm) + "px";
@@ -6682,7 +6679,7 @@ dayplanPointer = {
     }else{
       absStart = clamp(absStart, 0, dpEndAbs - p.dur0);
       const offset = absStart - base;
-      setDayplanStart(d, p.kind, p.id, clamp(offset, dayplanMinOffset(d), availSpan - snapMin));
+      setDayplanStart(d, p.kind, p.id, clamp(offset, dayplanMinOffset(d), availSpan - p.dur0));
       // update UI live
       p.el.style.top = Math.round((absStart - dpStartAbs)*ppm) + "px";
     }
@@ -6745,12 +6742,12 @@ dayplanPointer = {
     }
 
     const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
-    const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMin);
-    const durMax = Math.max(snapMin, dpEndAbs - absStart);
-    const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, durMax);
+    const absStart = clamp(base + (it.start||0), 0, dpEndAbs - 5);
+    const durMax = Math.max(5, dpEndAbs - absStart);
+    const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
     const timeVal = hhmmFromMinutes(absStart);
     const hm = durToHM(dur);
-    const minOpts = minuteOptionsFromSnap(snapMin);
+    const minOpts = durationMinuteOptions(hm.m);
     let selM = hm.m;
     if(!minOpts.includes(selM)) selM = minOpts[0];
 
@@ -6865,10 +6862,10 @@ dayplanPointer = {
           let abs = minutesFromHHMM(box.querySelector("#dpi_time").value || "00:00");
           abs += Number(box.querySelector("#dpi_dayOffset")?.value || 0)*DAY_SPAN_MIN;
 
-          abs = clamp(abs, 0, dpEndAbs0 - snap0);
+          abs = clamp(abs, 0, dpEndAbs0 - 5);
           let offset = abs - base0;
-          offset = clamp(offset, dayplanMinOffset(d0), availSpan0 - snap0);
-          offset = snap(offset, snap0);
+          offset = clamp(offset, dayplanMinOffset(d0), availSpan0 - 5);
+
           setDayplanStart(d0, it0.kind, it0.id, offset);
           resolveOverlapsPushDown(d0, snap0);
           touch();
@@ -6882,11 +6879,11 @@ dayplanPointer = {
           const h = Number(el("dpi_dur_h")?.value || 0);
           const m = Number(el("dpi_dur_m")?.value || 0);
           let dur = (Number.isFinite(h)?h:0) * 60 + (Number.isFinite(m)?m:0);
-          if(!Number.isFinite(dur) || dur<=0) dur = snap0;
-          dur = snap(dur, snap0);
+          if(!Number.isFinite(dur) || dur<=0) dur = 5;
+
           const absS = base0 + (it0.start||0);
-          const maxDur = Math.max(snap0, dpEndAbs0 - absS);
-          dur = clamp(dur, snap0, maxDur);
+          const maxDur = Math.max(5, dpEndAbs0 - absS);
+          dur = clamp(dur, 5, maxDur);
           setDayplanDur(d0, it0.kind, it0.id, dur);
           resolveOverlapsPushDown(d0, snap0);
           touch();
@@ -7518,7 +7515,7 @@ grid.appendChild(cell);
     wrap.appendChild(header);
 
     const snapMin = Number(el("schedSnap")?.value || 15);
-    try{ resolveOverlapsPushDown(d, snapMin); }catch(e){ console.warn('CallSheet overlaps:', e); }
+
 
     const scenesBox = document.createElement("div");
     scenesBox.className = "catBlock callScenes";
@@ -7996,15 +7993,15 @@ function renderReportDayplanDetail(d){
     const base = minutesFromHHMM(d.callTime || "08:00");
     const dpEndAbs = dayplanEndAbs(d);
     const snapMin = Number(el("schedSnap")?.value || 15);
-    resolveOverlapsPushDown(d, snapMin);
+
 
     const pretty = document.createElement("div");
     pretty.className = "dayplanPretty screenOnly";
 
     const cards = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMin);
-      const durMax = Math.max(snapMin, dpEndAbs - absStart);
-      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, durMax);
+      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - 5);
+      const durMax = Math.max(5, dpEndAbs - absStart);
+      const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
       const absEnd = clamp(absStart + dur, 0, dpEndAbs);
 
       const isNote = it.kind==="block";
@@ -8064,9 +8061,9 @@ function renderReportDayplanDetail(d){
 
     // ========= Vista de impresión (intacta) =========
     const rows = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - snapMin);
-      const durMax = Math.max(snapMin, dpEndAbs - absStart);
-      const dur = clamp(Math.max(snapMin, it.dur||snapMin), snapMin, durMax);
+      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - 5);
+      const durMax = Math.max(5, dpEndAbs - absStart);
+      const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
       const absEnd = clamp(absStart + dur, 0, dpEndAbs);
       const isNote = it.kind==="block";
       const num = isNote ? "NOTA" : (it.number||"");
@@ -9849,8 +9846,6 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       printPlanGeneral();
     });
     el("schedSnap")?.addEventListener("change", ()=>{
-      for(const d of state.shootDays) resolveOverlapsPushDown(d, Number(el("schedSnap").value||15));
-      touch();
       renderScheduleBoard();
     });
 
