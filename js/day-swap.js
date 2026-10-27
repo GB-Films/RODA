@@ -78,6 +78,10 @@
         const speed=p.y<r.top+edge?-Math.min(12,(r.top+edge-p.y)/4):p.y>r.bottom-edge?Math.min(12,(p.y-r.bottom+edge)/4):0;
         if(speed)p.scroller.scrollTop+=speed;
       }
+      if(allowCrossDay&&p.y>=r.top&&p.y<=r.bottom&&p.x>=r.left-12&&p.x<=r.right+12){
+        const speed=p.x<r.left+edge?-Math.min(12,(r.left+edge-p.x)/4):p.x>r.right-edge?Math.min(12,(p.x-r.right+edge)/4):0;
+        if(speed)p.scroller.scrollLeft+=speed;
+      }
       paint();frameId=view.requestAnimationFrame(tick);
     }
     function finish(commit){

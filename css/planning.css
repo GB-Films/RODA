@@ -93,3 +93,5 @@
   .planning-compact #dpLane .dpBlock.compact-swap-source,.planning-compact #schedBoard .schedBlock.compact-swap-source{cursor:grabbing;pointer-events:none;box-shadow:0 8px 24px #0008;opacity:.94;}
   .compact-swapping{user-select:none;}
 }
+
+@media screen{#schedBoard.compact-swapping .schedDay{overflow:visible;}}
