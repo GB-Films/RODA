@@ -95,3 +95,12 @@
 }
 
 @media screen{#schedBoard.compact-swapping .schedDay{overflow:visible;}}
+
+@media screen{.planningHistoryButtons{display:flex;flex-wrap:nowrap;gap:4px!important;}.planningHistoryButtons .btn{white-space:nowrap;font-size:11px;} .planningHistoryButtons .btn:disabled{opacity:.4;cursor:default;}}
+
+@media screen{
+  #scheduleCard>.cardHeader{flex-wrap:wrap;gap:10px;}
+  #scheduleCard>.cardHeader>.row.gap{flex:1 1 760px;flex-wrap:wrap;justify-content:flex-end;min-width:0;}
+  #scheduleCard>.cardHeader #schedSearch{flex:1 1 140px;min-width:80px;width:140px;}
+  #scheduleCard>.cardHeader .planningHistoryButtons{flex:none;}
+}

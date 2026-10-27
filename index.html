@@ -9,7 +9,7 @@
   <link href="css/styles.css?v=1.21.3" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
 <link rel="stylesheet" href="css/production-blocks.css?v=1.21.2">
-<link rel="stylesheet" href="css/planning.css?v=1.25.1">
+<link rel="stylesheet" href="css/planning.css?v=1.26.0">
 <link rel="stylesheet" href="css/team.css?v=1.20.0">
 <link rel="stylesheet" href="css/dialogs.css?v=1.21.1"/>
 </head>
@@ -445,6 +445,7 @@
                   <option value="timeline">Por horario</option><option value="compact">Compacta</option>
                 </select>
               </label>
+                <div class="planningHistoryButtons row gap noPrint" aria-label="Historial del plan"><button class="btn small" type="button" id="btnDayplanUndo" disabled>↶ Deshacer</button><button class="btn small" type="button" id="btnDayplanRedo" disabled>↷ Rehacer</button></div>
                 <button class="btn" id="btnDayplanPrint">Imprimir</button>
               </div>
             </div>
@@ -506,7 +507,8 @@
                 </select>
               </label>
               <button class="btn iconBtn" id="btnSchedDays" title="Días: Todos" aria-label="Seleccionar días">Días: Todos</button>
-              <button class="btn" id="btnSchedPrint">Imprimir</button>
+              <div class="planningHistoryButtons row gap noPrint" aria-label="Historial del plan"><button class="btn small" type="button" id="btnSchedUndo" disabled>↶ Deshacer</button><button class="btn small" type="button" id="btnSchedRedo" disabled>↷ Rehacer</button></div>
+                <button class="btn" id="btnSchedPrint">Imprimir</button>
             </div>
           </div>
           <div class="cardContent scheduleContent">
@@ -738,7 +740,7 @@
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
     ];
-    const appFiles = ["js/firebase-config.js","js/dialogs.js","js/cast.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/app.js"];
+    const appFiles = ["js/firebase-config.js","js/dialogs.js","js/cast.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/planning-history.js","js/app.js"];
 
     function loadScript(src){
       return new Promise((res)=>{
