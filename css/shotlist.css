@@ -1,0 +1,85 @@
+/* Journey navigation and the Shotlist workspace. Printing keeps its own layout. */
+@media screen {
+  .main.hasDayNavigation { display:flex; flex-direction:column; gap:12px; }
+  .main.hasDayNavigation > .view:not(.hidden) { height:auto; flex:1; min-height:0; }
+  .dayNavigation { display:flex; align-items:center; gap:12px; flex:none; position:relative; z-index:100; min-height:42px; }
+  .hasSharedDayNavigation #mDayBar,.hasDayNavigation #callCalCard { display:none !important; }
+  .hasDayNavigation #view-callsheet > .grid2 { grid-template-columns:minmax(0,1fr); }
+  .dayNavigation[hidden] { display:none; }
+  .dayNavigationLabel { font-size:11px; color:#aaa; }
+  .dayPicker { position:relative; min-width:260px; max-width:490px; }
+  .dayPicker > summary { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:42px; padding:8px 12px; border:1px solid #45484c; border-radius:8px; background:#25282c; cursor:pointer; list-style:none; font-size:12px; }
+  .dayPicker > summary::-webkit-details-marker { display:none; }
+  .dayPickerTitle { font-weight:650; }
+  .dayPickerChevron { color:#bfc5cb; }
+  .dayPicker[open] > summary { border-color:#a0a5aa; }
+  .dayPickerMenu { position:absolute; top:calc(100% + 6px); left:0; width:max(100%,360px); max-width:calc(100vw - 40px); padding:5px; border:1px solid #484c51; border-radius:10px; background:#202225; box-shadow:0 12px 32px #0006; }
+  .dayPickerOptions { max-height:min(420px,55vh); overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+  .dayPickerOption { width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px; border:0; border-radius:6px; text-align:left; background:transparent; color:#eee; cursor:pointer; font:inherit; }
+  .dayPickerOption strong,.dayPickerOption small { display:block; }
+  .dayPickerOption strong { font-size:12px; font-weight:600; }
+  .dayPickerOption small { margin-top:4px; color:#abb2bb; font-size:11px; line-height:1.4; }
+  .dayPickerOption[aria-pressed="true"] { background:#34383d; }
+  .dayPickerOption:hover { background:#3a3e43; }
+  .dayPickerOption:focus-visible,.dayPicker > summary:focus-visible,.shotSceneToggle:focus-visible { outline:2px solid #eee; outline-offset:1px; }
+  .dayPickerCheck { color:#a9d9bc; }
+  .dayPickerEmpty { padding:10px; font-size:12px; color:#bbb; }
+  .dayNavigationMeta { color:#aeb4bc; font-size:11px; line-height:1.5; }
+  .hasDayNavigation #shootDaySelect,.hasDayNavigation #dayplanSelect,.hasDayNavigation #shotDaySelect,.hasDayNavigation #btnSchedDays,.hasDayNavigation #elxDayChips { display:none !important; }
+  .shotlistLayout { display:block; }
+  #shotlistCard .cardHeader { padding:12px 14px; }
+  #shotlistCard .cardHeader h2 { text-transform:none; font-size:16px; letter-spacing:0; }
+  #shotlistCard .cardContent { padding:14px; }
+  .shotlistMain { padding:0 2px 0 0; }
+  .shotDayKpis { display:flex; gap:8px 20px; flex-wrap:wrap; margin-bottom:16px; }
+  .shotDayKpis .pill { padding:0; border:0; background:transparent; font-size:11px; color:#aeb4bc; font-weight:400; }
+  .shotDayKpis .pill { gap:4px; }
+  #shotlistCard .shotDurSel { min-width:60px; width:70px; }
+  .shotDayKpis b { color:#eee; font-weight:650; }
+  .shotSceneBox { margin:0 0 8px; border:1px solid #3a3e43; border-radius:9px; background:#202225; box-shadow:none; overflow:hidden; }
+  .shotSceneBox:not(.collapsed) { border-color:#656b73; }
+  .shotSceneHead { display:flex; align-items:center; gap:10px; padding:0 12px 0 0; border:0; background:#25282c; box-shadow:none; }
+  .shotSceneHead::before { display:none; }
+  .shotSceneToggle { display:flex; align-items:center; flex:1; gap:12px; min-width:0; padding:14px; border:0; background:transparent; color:inherit; text-align:left; font:inherit; cursor:pointer; }
+  .shotSceneCaret { flex:none; width:16px; height:auto; border:0; background:none; color:#b2b9c2; }
+  .shotSceneHead .t { font-weight:650; font-size:12px; line-height:1.5; }
+  .shotSceneHead .m { font-weight:400; font-size:11px; color:#b0b7c0; margin-top:5px; line-height:1.5; }
+  .shotSceneHeadRight { flex:none; gap:10px; }
+  .shotSceneHead .warn { font-size:10px; color:#f4c68b; background:none; border:0; }
+  .shotCount { color:#c1c8cf; font-size:11px; white-space:nowrap; }
+  .shotTableWrap { padding:0 14px 14px; border-top:1px solid #3a3e43; }
+  .shotSceneContext { display:flex; align-items:start; justify-content:space-between; gap:20px; padding:12px 0; font-size:12px; }
+  .shotSceneContext details { flex:1; min-width:0; }
+  .shotSceneContext summary { cursor:pointer; color:#adb5c0; }
+  .shotSceneContext p { color:#c8cbd1; white-space:pre-wrap; line-height:1.65; max-width:85ch; }
+  .shotSceneContext .btn { flex:none; }
+  .shotTableWrap .tableWrap { border:0; border-radius:6px; }
+  .shotTable { min-width:800px; table-layout:auto; }
+  .shotTable th,.shotTable td { padding:9px 7px; font-size:11px; border-color:#35393e; vertical-align:top; }
+  .shotTable thead th { background:#17191c; color:#aeb4bc; font-weight:500; }
+  .shotTable tbody td { background:#202225; }
+  .shotTable .input { background:#17191c; border:1px solid #40454b; border-radius:6px; font-size:12px; }
+  .shotTable .shotChk { width:28px; }
+  .shotTable .shotNum { width:30px; color:#b8c0ca; }
+  .shotTable .shotTime { width:64px; white-space:nowrap; color:#b8c0ca; font-variant-numeric:tabular-nums; }
+  .shotTable .shotType { width:170px; }
+  .shotTable .shotThumbTd,.shotTable .shotThumb { width:90px; }
+  .shotTable .shotDur { width:70px; }
+  .shotTable .shotAct { width:30px; }
+  .shotTable .shotDescInput { width:100%; min-width:170px; min-height:82px; resize:vertical; line-height:1.5; }
+  #shotlistCard .shotThumbDrop { width:78px !important; height:50px !important; min-height:0; border:1px dashed #4b5159; background:#17191c; border-radius:5px !important; }
+  #shotlistCard .shotThumbImg { width:100% !important; height:100% !important; object-fit:contain !important; border-radius:4px !important; }
+  #shotlistCard { --gb-shot-thumb-col:90px; }
+  .shotRowDone td { opacity:.65; }
+  .shotRowDone .shotDescInput { text-decoration:line-through; }
+  @media (max-width:820px) {
+    .main.hasDayNavigation { padding-top:70px; }
+    .dayNavigation { flex-wrap:wrap; gap:6px 10px; }
+    .dayPicker { min-width:0; flex:1; }
+    .dayNavigationMeta { flex-basis:100%; }
+    .shotSceneHeadRight { flex-direction:column; padding:8px 0; }
+    .shotSceneToggle { padding:12px 9px; gap:6px; }
+    .shotSceneHead .warn { max-width:90px; }
+    #shotlistCard .cardContent { padding:8px; }
+  }
+}

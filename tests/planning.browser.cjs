@@ -33,7 +33,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   },seed);
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
-  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
+  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','day-navigation','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
   await page.waitForFunction(isStudio=>isStudio?!!window.RODA_READY:!document.body.classList.contains('bootLoading'),studio);await page.evaluate(()=>{document.querySelector('.shell').hidden=false;window.RodaAccess?.bind();});
   const before=await page.evaluate(()=>JSON.stringify(savedState.shootDays)),writes=await page.evaluate(()=>savedWrites);
 
@@ -48,7 +48,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await page.screenshot({path:path.join(output,'plan-dia-limpio.png')});
   await page.locator('#dpCloseInspector').click();
   assert.equal(await page.locator('#dayplanInspector').isVisible(),false);
-  await page.locator('.navBtn[data-view="schedule"]').click();
+  await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();
   assert.equal(await page.locator('#schedBoard .schedNote').count(),0);
   await page.locator('#schedBoard .schedBlock[data-item-id="scene1"]').click();
   assert.equal(await page.locator('.scheduleContent #dayplanInspector').isVisible(),true);
@@ -78,7 +78,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await page.locator('#dpLane .dpBlock[data-id="scene0"]').click();
   const bounds=await page.locator('#dayplanInspector').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=780);
   await page.screenshot({path:path.join(output,'detalle-compacto.png')});
-  if(studio){await page.setViewportSize({width:1600,height:1000});await page.evaluate(()=>{RODA_STUDIO.canEdit=false;RODA_STUDIO.project.rodaAccess={admin:false,sections:{planning:'read'}};RodaAccess.apply();});await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('#schedBoard .schedBlock[data-item-id="scene3"]').click();assert.match(await page.locator('#dayplanInspector h3').textContent(),/SALA 4/);assert.equal(await page.locator('#dpi_time').isEnabled(),false);}
+  if(studio){await page.setViewportSize({width:1600,height:1000});await page.evaluate(()=>{RODA_STUDIO.canEdit=false;RODA_STUDIO.project.rodaAccess={admin:false,sections:{planning:'read'}};RodaAccess.apply();});await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();await page.locator('#schedBoard .schedBlock[data-item-id="scene3"]').click();assert.match(await page.locator('#dayplanInspector h3').textContent(),/SALA 4/);assert.equal(await page.locator('#dpi_time').isEnabled(),false);}
   assert.deepEqual(errors,[]);console.log('OK: clean cards; shared inspector, color, removal, keyboard, compact viewport; selection preserves timings and does not save. '+output);
  }finally{await browser?.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

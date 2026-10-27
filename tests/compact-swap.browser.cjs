@@ -33,13 +33,13 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   },seed);
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
-  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
+  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','day-navigation','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
   await page.waitForFunction(isStudio=>isStudio?!!window.RODA_READY:!document.body.classList.contains('bootLoading'),studio);await page.evaluate(()=>{document.querySelector('.shell').hidden=false;window.RodaAccess?.bind();});
   let baseline=await page.evaluate(()=>structuredClone(savedState));
   const current=()=>page.evaluate(()=>structuredClone(savedState));
   const writes=()=>page.evaluate(()=>savedWrites);
   await page.getByRole('button',{name:'Plan de Rodaje',exact:true}).click();await page.locator('#dayplanView').selectOption('compact');
-  await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.navBtn[data-view="dayplan"]').click();
+  await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();await page.locator('.navBtn[data-view="dayplan"]').click();
   const daily=id=>page.locator('#dpLane .dpBlock[data-id="'+id+'"]'),general=id=>page.locator('#schedBoard .schedBlock[data-item-id="'+id+'"]');
   async function begin(source,target){
     const a=await source.boundingBox(),b=await target.boundingBox();
@@ -53,7 +53,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await page.mouse.up();
   let saved=await current();assert.deepEqual(saved.shootDays[0].times,{before:0,a:165,middle:135,b:15,after:195});assert.deepEqual(saved.shootDays[0].durations,baseline.shootDays[0].durations);assert.equal(saved.shootDays[0].blocks[0].startMin,90);assert.deepEqual(saved.shootDays[1],baseline.shootDays[1]);assert.equal(await writes(),startWrites+1);
   assert.equal(await daily('a').locator('.dpTime').textContent(),'10:45–11:15');assert.equal(await daily('a').locator('.planDuration').textContent(),'30 min');
-  await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="schedule"]').click();
+  await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();
   await begin(general('a'),general('b'));await page.mouse.up();saved=await current();assert.deepEqual(saved.shootDays,baseline.shootDays);assert.equal(await writes(),startWrites+2);
   await page.locator('#dpCloseInspector').click();
   // Cancel with Escape, pointercancel, invalid production block, outside the list; cancel a valid cross-day preview.
@@ -70,10 +70,10 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await begin(general('a'),general('after'));await page.mouse.up();saved=await current();assert.deepEqual(saved.shootDays[0].times,{before:30,a:195,middle:105,b:135,after:0});assert.deepEqual(saved.shootDays[0].durations,baseline.shootDays[0].durations);
   await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="dayplan"]').click();
   await unchanged(async()=>{
-    await page.locator('#dayplanSelect').selectOption('longday');const source=daily('long0'),a=await source.boundingBox(),r=await page.locator('#dpScroller').boundingBox();
+    await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="longday"]').click();const source=daily('long0'),a=await source.boundingBox(),r=await page.locator('#dpScroller').boundingBox();
     await page.mouse.move(a.x+100,a.y+a.height/2);await page.mouse.down();await page.mouse.move(a.x+100,r.y+r.height-8,{steps:8});
     await page.waitForFunction(()=>document.getElementById('dpScroller').scrollTop>180);
-    await page.keyboard.press('Escape');await page.mouse.up();await page.locator('#dayplanSelect').selectOption('day');
+    await page.keyboard.press('Escape');await page.mouse.up();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="day"]').click();
   });
   await page.screenshot({path:path.join(output,'intercambio-compacto-resultado.png')});
   if(studio){

@@ -34,7 +34,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   },seed);
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
-  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
+  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','day-navigation','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
   await page.waitForFunction(isStudio=>isStudio?!!window.RODA_READY:!document.body.classList.contains('bootLoading'),studio);await page.evaluate(()=>{document.querySelector('.shell').hidden=false;window.RodaAccess?.bind();});
   const before=await page.evaluate(()=>JSON.stringify(savedState.shootDays)),writes=await page.evaluate(()=>savedWrites);
 
@@ -52,13 +52,13 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await long.click();assert.equal(await page.locator('#dpi_dur_h').inputValue(),'2');
   await page.locator('#dpCloseInspector').click();
   await page.screenshot({path:path.join(output,'plan-compacto.png')});
-  await page.locator('#dayplanSelect').selectOption('nightday');
+  await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="nightday"]').click();
   assert.match(await page.locator('#dpLane .dpBlock[data-id="night"] .dpTime').textContent(),/23:30.*01:00/);
   assert.equal(await page.locator('#dpLane .dpBlock[data-id="night"] .planDuration').textContent(),'1 h 30 min');
-  await page.locator('#dayplanSelect').selectOption('day');
+  await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="day"]').click();
   // Pointer gestures on the list must never be interpreted as minutes on a timeline.
   const a=await long.boundingBox();await page.mouse.move(a.x+80,a.y+15);await page.mouse.down();await page.mouse.move(a.x-30,a.y+120,{steps:5});await page.mouse.up();
-  await page.locator('.navBtn[data-view="schedule"]').click();
+  await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();
   assert.equal(await page.locator('#schedView').inputValue(),'compact');
   assert.deepEqual(await page.locator('.schedGrid[data-day-id="day"] .schedBlock').evaluateAll(nodes=>nodes.slice(0,3).map(n=>n.dataset.itemId)),['arrival','setup','scene0']);
   const general=page.locator('#schedBoard .schedBlock[data-item-id="scene0"]');
