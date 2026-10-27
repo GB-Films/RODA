@@ -55,3 +55,35 @@
     #scheduleCard .planningInspector,#dayplanCard .planningInspector{position:absolute;right:0;top:0;bottom:0;width:300px;max-width:90%;z-index:80;box-shadow:-12px 0 28px #0007;margin:0;}
   }
 }
+
+/* Compact is an ordered list, never a different time scale. */
+@media screen{
+  .planDuration{display:none;}
+  .planning-compact .planningScaleControl{display:none!important;}
+  .planningViewControl{align-items:center;flex:none;}
+  .planningViewControl select{width:125px;min-width:125px;}
+  .planning-compact #dpScroller{display:block;padding:8px;}
+  .planning-compact #dpTimeCol,.planning-compact .dpLine,.planning-compact .dpNowLine,.planning-compact .hourLine,.planning-compact .hourLabel{display:none!important;}
+  .planning-compact #dpLane,.planning-compact .schedGrid{display:flex;flex-direction:column;gap:5px;height:auto!important;min-height:0;border:0;background:none;}
+  .planning-compact #dpLane .dpBlock,.planning-compact #schedBoard .schedBlock{position:relative!important;top:auto!important;left:auto!important;right:auto!important;height:auto!important;min-height:48px;flex:none;padding:10px;cursor:pointer;touch-action:pan-y;box-sizing:border-box;}
+  .planning-compact #dpLane .dpBlockTitle{display:grid;grid-template-columns:96px 70px 30px minmax(0,1fr);align-items:center;gap:8px;line-height:18px;}
+  .planning-compact #dpLane .dpTime{grid-column:1;grid-row:1;white-space:nowrap;font-size:11px;}
+  .planning-compact #dpLane .planDuration{grid-column:2;grid-row:1;}
+  .planning-compact #dpLane .dpNum{grid-column:3;grid-row:1;}
+  .planning-compact #dpLane .dpSlug{grid-column:4;grid-row:1;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .planning-compact #dpLane [data-kind="block"] .dpSlug{grid-column:3 / -1;}
+  .planning-compact .planDuration{display:inline-block;white-space:nowrap;font-size:11px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums;opacity:1;}
+  .planning-compact #schedBoard .schedGrid{padding:8px 0;}
+  .planning-compact #schedBoard .schedBlock .schedContent{display:flex;flex-direction:column;align-items:stretch;gap:5px;height:auto;}
+  .planning-compact #schedBoard .schedBlock .meta{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;line-height:18px;opacity:.9;}
+  .planning-compact #schedBoard .schedBlock .title{font-size:12px;line-height:18px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  .planning-compact .dpResize,.planning-compact .resize{display:none!important;}
+  .planningInspector .dpDurRow{flex-wrap:nowrap;}
+  @media(max-width:1100px){
+    .planning-compact #dpLane .dpBlockTitle{grid-template-columns:96px 1fr 32px;gap:3px 8px;}
+    .planning-compact #dpLane .planDuration{grid-column:2 / -1;grid-row:1;text-align:right;}
+    .planning-compact #dpLane .dpNum{grid-column:1;grid-row:2;width:auto;}
+    .planning-compact #dpLane .dpSlug{grid-column:2 / -1;grid-row:2;}
+    .planning-compact #dpLane [data-kind="block"] .dpSlug{grid-column:1 / -1;}
+  }
+}
