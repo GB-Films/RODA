@@ -56,13 +56,13 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="schedule"]').click();
   await begin(general('a'),general('b'));await page.mouse.up();saved=await current();assert.deepEqual(saved.shootDays,baseline.shootDays);assert.equal(await writes(),startWrites+2);
   await page.locator('#dpCloseInspector').click();
-  // Cancel with Escape, pointercancel, invalid production block, outside the list or another day.
+  // Cancel with Escape, pointercancel, invalid production block, outside the list; cancel a valid cross-day preview.
   async function unchanged(action){const before=await current(),count=await writes();await action();assert.deepEqual(await current(),before);assert.equal(await writes(),count);assert.equal(await page.locator('.compact-swap-source,.swap-target').count(),0);}
   await unchanged(async()=>{await begin(general('a'),general('b'));await page.keyboard.press('Escape');await page.mouse.up();});
   await unchanged(async()=>{await begin(general('a'),general('b'));await page.locator('#schedBoard').dispatchEvent('pointercancel',{pointerId:1});await page.mouse.up();});
   async function invalidDrag(source,target){const a=await source.boundingBox(),b=await target.boundingBox();await page.mouse.move(a.x+100,a.y+15);await page.mouse.down();await page.mouse.move(b.x+100,b.y+15,{steps:6});assert.equal(await target.evaluate(el=>el.classList.contains('swap-target')),false);await page.mouse.up();}
   await unchanged(()=>invalidDrag(general('a'),general('meal')));
-  await unchanged(()=>invalidDrag(general('a'),general('other')));
+  await unchanged(async()=>{await begin(general('a'),general('other'));await page.keyboard.press('Escape');await page.mouse.up();});
   await unchanged(async()=>{const a=await general('a').boundingBox();await page.mouse.move(a.x+100,a.y+15);await page.mouse.down();await page.mouse.move(50,100,{steps:8});await page.mouse.up();});
   // Adjacent scenes with unequal duration leave the following scene, meal and next day fixed.
   await begin(general('a'),general('before'));await page.mouse.up();saved=await current();assert.deepEqual(saved.shootDays[0].times,{before:30,a:0,middle:105,b:135,after:195});assert.deepEqual(saved.shootDays[0].durations,baseline.shootDays[0].durations);assert.equal(saved.shootDays[0].blocks[0].startMin,60);assert.deepEqual(saved.shootDays[1],baseline.shootDays[1]);

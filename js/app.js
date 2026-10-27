@@ -1300,7 +1300,7 @@ function enforceScriptVersionsLimit(notify=false){
       b.startMin = clamp(b.startMin, dayplanMinOffset(d), _dpSpan-1);
       if(typeof b.title !== "string") b.title = String(b.title||"");
       if(typeof b.detail !== "string") b.detail = String(b.detail||"");
-      if(typeof b.color !== "string" || !b.color) b.color = "#bdbdbd";
+      if(typeof b.color !== "string" || !b.color) b.color = RodaProductionBlocks.palette.block;
     }
     for(const sid of d.sceneIds){
       if(typeof d.durations[sid] !== "number") d.durations[sid] = 60;
@@ -4888,15 +4888,17 @@ function bindSchedDayPickerUI(){
     container.dataset.compactSwapBound='1';
     RodaDaySwap.bindCompactSceneSwap(container,{
       enabled:()=>isCompactPlan()&&!isReadOnly('planning'),
+      allowCrossDay:general,
       readItem:node=>({kind:node.dataset.kind,id:general?node.dataset.itemId:node.dataset.id,dayId:general?node.dataset.dayId:selectedDayplanDayId}),
       getScroller:()=>el(general?'schedWrap':'dpScroller'),
-      onSwap:(dayId,sourceId,targetId)=>{
+      onSwap:(dayId,sourceId,targetId,targetDayId=dayId)=>{
         const day=getDay(dayId);if(!day||isReadOnly('planning'))return;
-        if(!RodaDaySwap.swapScenes(day,sourceId,targetId)){toast('No se pudieron intercambiar estos horarios.');return;}
+        const success=targetDayId===dayId?RodaDaySwap.swapScenes(day,sourceId,targetId):RodaDaySwap.swapScenesBetweenDays(day,sourceId,getDay(targetDayId),targetId);
+        if(!success){toast('No se pudo intercambiar: revisá superposiciones o el límite de la jornada.');return;}
         const scrollers=['dpScroller','schedWrap'].map(id=>({node:el(id),top:el(id)?.scrollTop||0,left:el(id)?.scrollLeft||0}));
-        selectedDayplanDayId=dayId;dayplanSelectedKey='scene:'+sourceId;dayplanSelectedKeys=new Set([dayplanSelectedKey]);
-        if(general)el('schedBoard').dataset.selectedItem=JSON.stringify([dayId,'scene',sourceId]);
-        touch();renderDayPlan();renderScheduleBoard();renderReportsDetail();renderReports();
+        selectedDayplanDayId=targetDayId;dayplanSelectedKey='scene:'+sourceId;dayplanSelectedKeys=new Set([dayplanSelectedKey]);
+        if(general)el('schedBoard').dataset.selectedItem=JSON.stringify([targetDayId,'scene',sourceId]);
+        touch();renderDayPlan();renderScheduleBoard();renderSceneBank();renderDayDetail();renderReportsDetail();renderReports();
         for(const {node,top,left} of scrollers)if(node){node.scrollTop=top;node.scrollLeft=left;}
         toast('Escenas intercambiadas; se conservaron sus duraciones.');
       }
@@ -5006,7 +5008,8 @@ function bindSchedDayPickerUI(){
         const block = document.createElement("div");
         block.className = "schedBlock";
         block.classList.toggle("is-short",height<30);
-        const rowColor = d.sceneColors?.[sid];
+        const rowColor = d.sceneColors?.[sid] || RodaProductionBlocks.palette.sceneAccent;
+        block.style.background=RodaProductionBlocks.palette.sceneBackground;
         if(rowColor) block.style.borderLeft = `6px solid ${rowColor}`;
         block.dataset.sceneId = sid;
         block.dataset.kind = "scene";block.dataset.itemId = sid;
@@ -5054,7 +5057,7 @@ for(const b of (d.blocks||[])){
   const top = (preOffset + startMin) * pxPerMin;
   const height = Math.max(1, durMin * pxPerMin);
 
-  const col = safeHexColor(b.color || "#E5E7EB", "#E5E7EB");
+  const col = safeHexColor(b.color || RodaProductionBlocks.palette.block, RodaProductionBlocks.palette.block);
   const appearance=RodaProductionBlocks.appearance(col),bg=appearance.background;
 
   const block = document.createElement("div");
@@ -5271,7 +5274,7 @@ function bindScheduleDnD(){
 
     const rect = targetGrid.getBoundingClientRect();
     const y = clamp(e.clientY - rect.top, 0, rect.height);
-    drag.swapTarget=drag.mode==='move'&&drag.kind==='scene'&&targetDayId===drag.dayId?RodaDaySwap.sceneAt(drag.before,drag.itemId,y/pxPerMin-preOffset):null;
+    drag.swapTarget=drag.mode==='move'&&drag.kind==='scene'?RodaDaySwap.sceneAt(targetDayId===drag.dayId?drag.before:targetDay,drag.itemId,y/pxPerMin-preOffset):null;
     for(const node of board.querySelectorAll('.schedBlock'))node.classList.toggle('swap-target',node.dataset.dayId===targetDayId&&node.dataset.kind==='scene'&&node.dataset.itemId===drag.swapTarget);
 
     if(drag.mode === "resize"){
@@ -5366,6 +5369,10 @@ function bindScheduleDnD(){
     if(toDayId===d0.dayId&&d0.kind==='scene'&&d0.swapTarget){
       if(!RodaDaySwap.swapScenes(fromDay,d0.itemId,d0.swapTarget)){renderScheduleBoard();toast('No se pudieron intercambiar estos horarios.');return;}
       toast('Escenas intercambiadas; se conservaron sus duraciones.');
+    }else if(toDayId!==d0.dayId&&d0.kind==='scene'&&d0.swapTarget){
+      if(!RodaDaySwap.swapScenesBetweenDays(fromDay,d0.itemId,getDay(toDayId),d0.swapTarget)){renderScheduleBoard();toast('No se pudo intercambiar: revisá superposiciones o el límite de la jornada.');return;}
+      selectedDayplanDayId=toDayId;dayplanSelectedKey='scene:'+d0.itemId;dayplanSelectedKeys=new Set([dayplanSelectedKey]);
+      toast('Escenas intercambiadas entre jornadas; los horarios se adaptaron a sus duraciones.');
     }else if(toDayId !== d0.dayId){
       const toDay = getDay(toDayId);
       if(!toDay) return;
@@ -6193,9 +6200,9 @@ for(let m=dpStartAbs; m<=dpEndAbs; m+=30){
 
     const blocks = items.map((it)=>{
       const snapMin=it.kind==="block" ? 5 : getDayplanSnap();
-      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const col = safeHexColor(it.color || (it.kind==="scene" ? RodaProductionBlocks.palette.sceneAccent : RodaProductionBlocks.palette.block));
       const appearance=RodaProductionBlocks.appearance(col);
-      const bg=it.kind==='block'?appearance.background:hexToRgba(col,0.75);
+      const bg=it.kind==='block'?appearance.background:RodaProductionBlocks.palette.sceneBackground;
 const absStart = clamp(base + (it.start||0), 0, dpEndAbs - 5);
 const dur = clamp(Math.max(5, it.dur||15), 5, dpEndAbs - absStart);
 const absEnd = clamp(absStart + dur, absStart + 5, dpEndAbs);
@@ -6343,7 +6350,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
       const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
       const absEnd = clamp(absStart + dur, 0, dpEndAbs);
       const isNote = it.kind==="block";
-      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const col = safeHexColor(it.color || (it.kind==="scene" ? RodaProductionBlocks.palette.sceneAccent : RodaProductionBlocks.palette.block));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
       const tA = clockLabelAbs(absStart);
       const tB = clockLabelAbs(absEnd);
@@ -6802,7 +6809,7 @@ dayplanPointer = {
       return;
     }
 
-    const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+    const col = safeHexColor(it.color || (it.kind==="scene" ? RodaProductionBlocks.palette.sceneAccent : RodaProductionBlocks.palette.block));
     const absStart = clamp(base + (it.start||0), 0, dpEndAbs - 5);
     const durMax = Math.max(5, dpEndAbs - absStart);
     const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
@@ -6822,6 +6829,7 @@ dayplanPointer = {
       </div>
       <details class="inspectorColor"><summary><span class="inspectorColorDot" style="background:${esc(col)}"></span>Color de la tarjeta</summary>
         <div class="dpSwatches">${DAYPLAN_COLORS.map(c=>`<button class="dpSwatchBtn" data-action="pickColorInspector" data-color="${esc(c)}" style="background:${esc(c)}" title="${esc(c)}" aria-label="Color ${esc(c)}"></button>`).join('')}</div>
+        <button class="btn small" id="dpi_resetPlanColors" type="button" style="margin-top:12px">Unificar colores de todo el plan</button>
       </details>
       <div class="dpActions">
         ${it.kind==="scene" ? `<button class="btn" id="dpi_openScene" data-ro-allow="1">Abrir escena</button><button class="btn danger" id="dpi_removeScene">Quitar del día</button>` : ``}
@@ -6881,6 +6889,11 @@ dayplanPointer = {
 
       box.addEventListener("click", (e)=>{
         if(e.target.closest('#dpCloseInspector')){dayplanSelectedKey=null;dayplanSelectedKeys.clear();dayplanPaletteKey=null;delete el('schedBoard').dataset.selectedItem;renderDayPlan();renderScheduleBoard();return;}
+        if(e.target.closest('#dpi_resetPlanColors')){
+          if(isReadOnly('planning'))return;
+          for(const day of state.shootDays){day.sceneColors={};for(const block of day.blocks||[])block.color=RodaProductionBlocks.palette.block;}
+          touch();renderDayPlan();renderScheduleBoard();renderSceneBank();renderDayDetail();renderReportsDetail();renderReports();toast('Colores unificados en todas las jornadas.');return;
+        }
         const act = e.target.closest("[data-action]")?.dataset.action || "";
         if(act === "pickColorInspector"){
           const d0 = selectedDayplanDayId ? getDay(selectedDayplanDayId) : null;
@@ -8061,7 +8074,7 @@ function renderReportDayplanDetail(d){
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
       const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
 
-      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const col = safeHexColor(it.color || (it.kind==="scene" ? RodaProductionBlocks.palette.sceneAccent : RodaProductionBlocks.palette.block));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
 
       const tA = clockLabelAbs(absStart);
@@ -8121,7 +8134,7 @@ function renderReportDayplanDetail(d){
       const todTxt = isNote ? "" : (it.timeOfDay||"");
       const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
       const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
-      const col = safeHexColor(it.color || (it.kind==="scene" ? "#BFDBFE" : "#E5E7EB"));
+      const col = safeHexColor(it.color || (it.kind==="scene" ? RodaProductionBlocks.palette.sceneAccent : RodaProductionBlocks.palette.block));
       const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
       const tA = clockLabelAbs(absStart);
       const tB = clockLabelAbs(absEnd);

@@ -25,15 +25,43 @@
     return true;
   }
 
+
+  function swapScenesBetweenDays(first,sourceId,second,targetId){
+    if(!first||!second||first.id===second.id||!first.sceneIds?.includes(sourceId)||!second.sceneIds?.includes(targetId)||first.sceneIds.includes(targetId)||second.sceneIds.includes(sourceId))return false;
+    function prepare(day,outgoing,incomingDuration){
+      const start=Number(day.times?.[outgoing]??0),duration=Number(day.durations?.[outgoing]??60),end=start+duration,delta=incomingDuration-duration;
+      const items=[...day.sceneIds.filter(id=>id!==outgoing).map(id=>({id,kind:'scene',start:Number(day.times?.[id]??0),dur:Number(day.durations?.[id]??60)})),...(day.blocks||[]).map(b=>({id:b.id,kind:'block',start:Number(b.startMin??0),dur:Number(b.durMin??30)}))];
+      if(!Number.isFinite(start)||!Number.isFinite(duration)||duration<=0||!Number.isFinite(incomingDuration)||incomingDuration<=0||items.some(it=>!Number.isFinite(it.start)||!Number.isFinite(it.dur)||it.dur<=0||it.start<end&&it.start+it.dur>start))return null;
+      const parts=String(day.callTime||'08:00').split(':').map(Number),call=parts[0]*60+parts[1];
+      const tail=items.filter(it=>it.start>=end).map(it=>({...it,start:it.start+delta}));
+      const last=Math.max(start+incomingDuration,...items.filter(it=>it.start<end).map(it=>it.start+it.dur),...tail.map(it=>it.start+it.dur));
+      if(!Number.isFinite(call)||call+start<0||call+last>1800)return null;
+      return {start,tail,night:call+last>1440};
+    }
+    const sourceDuration=Number(first.durations?.[sourceId]??60),targetDuration=Number(second.durations?.[targetId]??60);
+    const a=prepare(first,sourceId,targetDuration),b=prepare(second,targetId,sourceDuration);if(!a||!b)return false;
+    const maps=['sceneColors','shotsDone'];
+    const metadata=maps.map(key=>({key,source:first[key]?.[sourceId],target:second[key]?.[targetId]}));
+    function apply(day,outgoing,incoming,duration,plan){
+      day.sceneIds=day.sceneIds.map(id=>id===outgoing?incoming:id);day.times??={};day.durations??={};
+      delete day.times[outgoing];delete day.durations[outgoing];day.times[incoming]=plan.start;day.durations[incoming]=duration;
+      for(const it of plan.tail){if(it.kind==='scene')day.times[it.id]=it.start;else day.blocks.find(block=>block.id===it.id).startMin=it.start;}
+      if(plan.night)day.night=true;
+    }
+    apply(first,sourceId,targetId,targetDuration,a);apply(second,targetId,sourceId,sourceDuration,b);
+    for(const {key,source,target} of metadata){first[key]??={};second[key]??={};delete first[key][sourceId];delete second[key][targetId];delete first[key][targetId];delete second[key][sourceId];if(target!==undefined)first[key][targetId]=target;if(source!==undefined)second[key][sourceId]=source;}
+    return true;
+  }
+
   // Compact rows have no pixel-to-minute scale: hit-test another scene instead.
-  function bindCompactSceneSwap(container,{enabled,readItem,getScroller,onSwap}){
+  function bindCompactSceneSwap(container,{enabled,readItem,getScroller,onSwap,allowCrossDay=false}){
     let drag=null,frameId=null,ignoreClick=false;
     const doc=container.ownerDocument,view=doc.defaultView;
     function targetAt(p){
       const node=doc.elementFromPoint(p.x,p.y)?.closest('.dpBlock,.schedBlock');
       if(!node||node===p.el||!container.contains(node))return null;
       const item=readItem(node);
-      return item?.kind==='scene'&&item.dayId===p.item.dayId?{node,item}:null;
+      return item?.kind==='scene'&&(allowCrossDay||item.dayId===p.item.dayId)?{node,item}:null;
     }
     function paint(){
       const p=drag;if(!p?.moved)return;
@@ -60,7 +88,7 @@
       p.el.style.transform=p.transform;container.classList.remove('compact-swapping');
       try{p.el.releasePointerCapture(p.pointerId);}catch(_e){}
       if(p.moved){ignoreClick=true;}
-      if(commit&&p.moved&&p.target&&enabled())onSwap(p.item.dayId,p.item.id,p.target.item.id);
+      if(commit&&p.moved&&p.target&&enabled())onSwap(p.item.dayId,p.item.id,p.target.item.id,p.target.item.dayId);
     }
     container.addEventListener('click',e=>{
       if(ignoreClick&&e.detail!==0){ignoreClick=false;e.preventDefault();e.stopImmediatePropagation();}
@@ -178,7 +206,7 @@
       }
     };
   }
-  const api = {bindCompactSceneSwap,swapDayScenes,createDaySwapController,captureLayout,restoreLayout,sceneAt,swapScenes};
+  const api = {swapScenesBetweenDays,bindCompactSceneSwap,swapDayScenes,createDaySwapController,captureLayout,restoreLayout,sceneAt,swapScenes};
   root.RodaDaySwap = api;
   if(typeof module !== "undefined") module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
