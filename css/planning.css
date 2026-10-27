@@ -104,3 +104,10 @@
   #scheduleCard>.cardHeader #schedSearch{flex:1 1 140px;min-width:80px;width:140px;}
   #scheduleCard>.cardHeader .planningHistoryButtons{flex:none;}
 }
+
+/* Keep each shooting day identifiable while the shared board scrolls. */
+@media screen{
+  .schedWrap{scroll-padding-top:100px;}
+  .schedBoard .schedDay{overflow:visible;}
+  .schedBoard .schedHead{position:sticky;top:0;z-index:70;background:linear-gradient(180deg,#292929,#202020);border-top-left-radius:inherit;border-top-right-radius:inherit;box-shadow:0 4px 8px #0003;}
+}
