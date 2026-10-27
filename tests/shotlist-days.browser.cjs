@@ -101,7 +101,9 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await nav('shotlist');await pick('d1');
   await page.setViewportSize({width:780,height:900});
   await page.waitForFunction(()=>document.querySelector('.sidebar').getBoundingClientRect().right<=0);
-  assert.ok((await page.locator('.dayPicker').boundingBox()).x>=0);await page.screenshot({path:path.join(output,'shotlist-compacta.png')});
+  assert.ok((await page.locator('.dayPicker').boundingBox()).x>=0);
+  const fit=await card('s1').locator('.tableWrap').evaluate(n=>({width:n.clientWidth,content:n.scrollWidth}));assert.ok(fit.content<=fit.width+1,'all shot fields fit in a narrow window');
+  assert.equal(await card('s1').locator('.shotDelBtn').first().isVisible(),true);await page.screenshot({path:path.join(output,'shotlist-compacta.png')});
   if(studio){
    await page.setViewportSize({width:1600,height:1000});
    await page.evaluate(()=>{RODA_STUDIO.canEdit=false;RODA_STUDIO.project.rodaAccess={admin:false,sections:Object.fromEntries(['script','breakdown','locations','cast','planning','shotlist','crew','reports'].map(k=>[k,'read']))};RodaAccess.apply();});
