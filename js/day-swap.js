@@ -24,6 +24,74 @@
     day.times??={};for(const it of changes){if(it.kind==='scene')day.times[it.id]=it.start;else day.blocks.find(b=>b.id===it.id).startMin=it.start;}
     return true;
   }
+
+  // Compact rows have no pixel-to-minute scale: hit-test another scene instead.
+  function bindCompactSceneSwap(container,{enabled,readItem,getScroller,onSwap}){
+    let drag=null,frameId=null,ignoreClick=false;
+    const doc=container.ownerDocument,view=doc.defaultView;
+    function targetAt(p){
+      const node=doc.elementFromPoint(p.x,p.y)?.closest('.dpBlock,.schedBlock');
+      if(!node||node===p.el||!container.contains(node))return null;
+      const item=readItem(node);
+      return item?.kind==='scene'&&item.dayId===p.item.dayId?{node,item}:null;
+    }
+    function paint(){
+      const p=drag;if(!p?.moved)return;
+      p.el.style.transform=`translate3d(${p.x-p.startX+(p.scroller.scrollLeft-p.scrollLeft)}px,${p.y-p.startY+(p.scroller.scrollTop-p.scrollTop)}px,0)`;
+      const target=targetAt(p);
+      if(p.target?.node!==target?.node){p.target?.node.classList.remove('swap-target');target?.node.classList.add('swap-target');}
+      p.target=target;
+    }
+    function tick(){
+      frameId=null;const p=drag;if(!p?.moved)return;
+      if(!enabled()||!p.el.isConnected){finish(false);return;}
+      const r=p.scroller.getBoundingClientRect(),edge=42;
+      if(p.x>=r.left&&p.x<=r.right&&p.y>=r.top-12&&p.y<=r.bottom+12){
+        const speed=p.y<r.top+edge?-Math.min(12,(r.top+edge-p.y)/4):p.y>r.bottom-edge?Math.min(12,(p.y-r.bottom+edge)/4):0;
+        if(speed)p.scroller.scrollTop+=speed;
+      }
+      paint();frameId=view.requestAnimationFrame(tick);
+    }
+    function finish(commit){
+      const p=drag;if(!p)return;
+      if(commit)paint();drag=null;
+      if(frameId!==null)view.cancelAnimationFrame(frameId);frameId=null;
+      p.target?.node.classList.remove('swap-target');p.el.classList.remove('is-dragging','compact-swap-source');
+      p.el.style.transform=p.transform;container.classList.remove('compact-swapping');
+      try{p.el.releasePointerCapture(p.pointerId);}catch(_e){}
+      if(p.moved){ignoreClick=true;}
+      if(commit&&p.moved&&p.target&&enabled())onSwap(p.item.dayId,p.item.id,p.target.item.id);
+    }
+    container.addEventListener('click',e=>{
+      if(ignoreClick&&e.detail!==0){ignoreClick=false;e.preventDefault();e.stopImmediatePropagation();}
+    },true);
+    container.addEventListener('pointerdown',e=>{
+      ignoreClick=false;
+      if(drag||e.button!==0||!enabled())return;
+      const node=e.target.closest('.dpBlock,.schedBlock');if(!node)return;
+      const item=readItem(node);if(item?.kind!=='scene')return;
+      const scroller=getScroller();if(!scroller)return;
+      drag={el:node,item,scroller,pointerId:e.pointerId,startX:e.clientX,startY:e.clientY,x:e.clientX,y:e.clientY,scrollTop:scroller.scrollTop,scrollLeft:scroller.scrollLeft,transform:node.style.transform,moved:false,target:null};
+    });
+    view.addEventListener('pointermove',e=>{
+      const p=drag;if(!p||p.pointerId!==e.pointerId)return;
+      p.x=e.clientX;p.y=e.clientY;
+      if(!p.moved&&Math.hypot(p.x-p.startX,p.y-p.startY)<6)return;
+      if(!enabled()){finish(false);return;}
+      e.preventDefault();
+      if(!p.moved){
+        p.moved=true;p.el.classList.add('is-dragging','compact-swap-source');container.classList.add('compact-swapping');
+        try{p.el.setPointerCapture(p.pointerId);}catch(_e){}
+        frameId=view.requestAnimationFrame(tick);
+      }
+      paint();
+    },{passive:false});
+    view.addEventListener('pointerup',e=>{if(drag?.pointerId===e.pointerId){drag.x=e.clientX;drag.y=e.clientY;finish(true);}});
+    view.addEventListener('pointercancel',e=>{if(drag?.pointerId===e.pointerId)finish(false);});
+    view.addEventListener('keydown',e=>{if(drag&&e.key==='Escape'){e.preventDefault();finish(false);}});
+    view.addEventListener('blur',()=>finish(false));
+    return ()=>finish(false);
+  }
   function swapDayScenes(first, second){
     if(!first || !second || first.id === second.id) return false;
     for(const key of ["sceneIds","times","durations","sceneColors","shotsDone"]){
@@ -110,7 +178,7 @@
       }
     };
   }
-  const api = {swapDayScenes,createDaySwapController,captureLayout,restoreLayout,sceneAt,swapScenes};
+  const api = {bindCompactSceneSwap,swapDayScenes,createDaySwapController,captureLayout,restoreLayout,sceneAt,swapScenes};
   root.RodaDaySwap = api;
   if(typeof module !== "undefined") module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
