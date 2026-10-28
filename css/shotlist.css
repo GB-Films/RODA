@@ -26,7 +26,14 @@
   .dayPickerEmpty { padding:10px; font-size:12px; color:#bbb; }
   .dayNavigationMeta { color:#aeb4bc; font-size:11px; line-height:1.5; }
   .hasDayNavigation #shootDaySelect,.hasDayNavigation #dayplanSelect,.hasDayNavigation #shotDaySelect,.hasDayNavigation #btnSchedDays,.hasDayNavigation #elxDayChips { display:none !important; }
-  .shotlistLayout { display:block; }
+  /* Bound the whole flex chain: one vertical scroller for scenes and shots. */
+  #view-shotlist:not(.hidden) { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+  #shotlistCard { height:auto; flex:1; min-height:0; }
+  #shotlistCard > .cardHeader { flex:none; }
+  #shotlistCard > .cardContent { display:flex; flex-direction:column; min-height:0; }
+  .shotlistLayout { display:flex; flex-direction:column; flex:1; height:auto; min-height:0; overflow:hidden; }
+  .shotlistMain { flex:1; min-height:0; overflow:auto; overscroll-behavior-y:contain; }
+  #shotlistCard .shotTableWrap .tableWrap { max-height:none; overflow-x:auto; overflow-y:hidden; }
   #shotlistCard .cardHeader { padding:12px 14px; }
   #shotlistCard .cardHeader h2 { text-transform:none; font-size:16px; letter-spacing:0; }
   #shotlistCard .cardContent { padding:14px; }
