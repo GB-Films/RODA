@@ -8616,18 +8616,60 @@ function renderReportDayplanDetail(d){
   }
 
   
+  // Print has its own layout; use the same timing/assignment helpers as Call Diario.
+  function buildCallSheetPrint(d){
+    const scenes=(d.sceneIds||[]).map(getScene).filter(Boolean);
+    const timeline=[...scenes.map(s=>({scene:s,start:Number(d.times?.[s.id]??0),dur:Number(d.durations?.[s.id]??60)})),
+      ...(d.blocks||[]).map(b=>({block:b,start:Number(b.startMin??0),dur:Number(b.durMin??0)}))].sort((a,b)=>a.start-b.start);
+    const clock=min=>fmtClockFromCall(baseDayCall(d),min);
+    const title=state.meta?.title||'Proyecto';
+    const dayTitle=[formatDayTitle(d.date),d.label].filter(Boolean).join(' · ');
+    const table=(kind,heading,columns,rows)=>`<table class="csPrintTable csPrintTable--${kind}"><colgroup>${columns.map(c=>`<col${c.width?` style="width:${c.width}"`:''}>`).join('')}</colgroup><thead><tr class="csPrintSection"><th colspan="${columns.length}"><span>${heading}</span><small>${esc(title)} · ${esc(dayTitle)}</small></th></tr><tr>${columns.map(c=>`<th scope="col">${c.label}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td colspan="${columns.length}">Sin integrantes asignados a esta jornada.</td></tr>`}</tbody></table>`;
+    const timeCell=(value,main=false)=>`<td class="csPrintTime${main?' csPrintCall':''}">${esc(value||'—')}</td>`;
+    const agenda=timeline.map(it=>{
+      const s=it.scene,b=it.block;
+      const heading=s?.slugline||'';
+      const sceneDetail=s?[s.intExt,s.location,s.timeOfDay].filter(value=>value&&!heading.toLocaleLowerCase('es').includes(String(value).toLocaleLowerCase('es'))).join(' · '):'';
+      const detail=s?[sceneDetail,Number(s.pages)>0?`${fmtPages(s.pages)} pág`:'' ].filter(Boolean).join(' · '):(b.detail||'');
+      return `<tr class="${b?'csPrintBlock':''}"><td class="csPrintTime"><b>${esc(clock(it.start))}</b><span>${esc(clock(it.start+it.dur))}</span></td><td class="csPrintTime">${esc(formatDuration(Math.round(it.dur)))}</td><td class="csPrintScene">${s?esc(s.number||'—'):'—'}</td><td><strong>${esc(s?s.slugline:(b.title||'Bloque'))}</strong>${detail?`<p>${esc(detail)}</p>`:''}</td></tr>`;
+    }).join('')||'<tr><td colspan="4">Sin escenas ni bloques programados.</td></tr>';
+    const castColumns=[{label:'Actor / actriz · personaje',width:''},...(d.pickupCastEnabled?[{label:'Recogida<br>(PU)',width:'15%'}]:[]),{label:'Citación',width:'15%'},{label:'Primera<br>escena',width:'15%'},{label:'Fin<br>estimado',width:'15%'},...(d.rtsEnabled?[{label:'Listo en set<br>(RTS)',width:'15%'}]:[])];
+    // Group only identical calls for the same person; retain any role-specific overrides.
+    const castGroups=new Map();
+    for(const role of RodaCast.dayRoster(state,d)){
+      const actor=findCastCrewEntryByName(role),window=RodaCast.workWindow(state,d,role);
+      const times=[d.pickupCastEnabled?effectiveCastPU(d,role):'',effectiveCastCall(d,role),window?.first||'—',window?.end||'—',d.rtsEnabled?effectiveCastRTS(d,role):''];
+      const key=JSON.stringify([actor?.id||role,...times]);
+      const group=castGroups.get(key);
+      if(group)group.roles.push(role);else castGroups.set(key,{name:actor?.name||'Sin asignar',roles:[role],times});
+    }
+    const castRows=[...castGroups.values()].map(row=>`<tr><td><strong>${esc(row.name)}</strong><span class="csPrintSecondary">${esc(row.roles.join(' · '))}</span></td>${d.pickupCastEnabled?timeCell(row.times[0]):''}${timeCell(row.times[1],true)}${timeCell(row.times[2])}${timeCell(row.times[3])}${d.rtsEnabled?timeCell(row.times[4]):''}</tr>`).join('');
+    const crew=(d.crewIds||[]).map(id=>state.crew.find(c=>c.id===id)).filter(Boolean).map(c=>({...c,area:normalizeCrewArea(c.area)})).filter(c=>c.area!=='Cast');
+    const crewPickup=!!d.pickupCrewEnabled;
+    const crewColumns=[{label:'Nombre · rol / área'},...(crewPickup?[{label:'Recogida<br>(PU)',width:'15%'}]:[]),{label:'Citación',width:'15%'},{label:'Teléfono',width:'25%'}];
+    const crewRows=groupCrewByArea(crew).flatMap(([area,list])=>list.map(c=>`<tr><td><strong>${esc(c.name||'Sin nombre')}</strong><span class="csPrintSecondary">${esc([c.role,area].filter(Boolean).join(' · '))}</span></td>${crewPickup?timeCell(effectiveCrewPU(d,c)):''}${timeCell(effectiveCrewCall(d,c),true)}<td>${esc(c.phone||'—')}</td></tr>`)).join('');
+    const close=timeline.length?clock(Math.max(...timeline.map(it=>it.start+it.dur))):'—';
+    return `<article class="csPrint">
+      <header class="csPrintHeader"><div class="csPrintEyebrow">Call diario · Hoja de llamado</div><h1>${esc(title)}</h1><p class="csPrintDay">${esc(dayTitle)}</p>
+        <div class="csPrintSummary"><div><span>Citación general</span><strong>${esc(baseDayCall(d))}</strong></div><div><span>Fin de jornada estimado</span><strong>${esc(close)}</strong></div><div><span>Locación</span><strong>${esc(d.location||'Sin asignar')}</strong></div></div>
+      </header>
+      ${table('agenda','01 / Itinerario',[{label:'Inicio / fin',width:'15%'},{label:'Duración',width:'14%'},{label:'Esc.',width:'8%'},{label:'Escena / actividad'}],agenda)}
+      <section class="csPrintPeople">${table('cast','02 / Elenco · citaciones',castColumns,castRows)}
+        ${d.castTransportNote?`<div class="csPrintNote"><h2>Traslados del elenco</h2><p>${esc(d.castTransportNote)}</p></div>`:''}
+        ${table('crew','03 / Equipo · contactos',crewColumns,crewRows)}
+        ${d.notes?`<div class="csPrintNote"><h2>Notas de la jornada</h2><p>${esc(d.notes)}</p></div>`:''}
+      </section>
+    </article>`;
+  }
+
   function printCallSheetByDayId(dayId){
     const d = dayId ? getDay(dayId) : null;
     if(!d){ toast("Elegí un día con rodaje"); return; }
-    ensureDayTimingMaps(d);
     applyPrintDeviceFlag();
     const root = ensureGbPrintRoot();
-    root.innerHTML = `<div id="callSheetPrintRoot" class="callSheetPrintPage"></div>`;
-    const target = root.querySelector("#callSheetPrintRoot");
-    renderCallSheetDetail(target, dayId);
+    root.innerHTML = buildCallSheetPrint(d);
     document.body.classList.add("gbPrintingCallsheet");
-    // Menos margen para que arranque más arriba
-    setPrintOrientation("portrait", 6);
+    setPrintOrientation("portrait", 12);
     try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 

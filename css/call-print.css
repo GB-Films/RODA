@@ -1,0 +1,51 @@
+/* Dedicated Call Diario document. Screen cards and their column widths stay out of print. */
+body.gbPrintingCallsheet #gbPrintRoot .csPrint {
+  font: 9pt/1.35 Arial, Helvetica, sans-serif;
+  color: #151515;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.csPrint, .csPrint * { box-sizing: border-box; }
+.csPrintHeader { border-top: 4px solid #151515; padding-top: 3mm; margin-bottom: 4mm; break-inside: avoid; }
+.csPrintEyebrow { font-size: 9pt; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; }
+.csPrint h1 { font-size: 20pt; line-height: 1.1; margin: 2mm 0; overflow-wrap: anywhere; }
+.csPrintDay { font-size: 11pt; margin: 0 0 3mm; }
+.csPrintSummary { display: grid; grid-template-columns: 1fr 1.25fr 1.6fr; border-top: 1px solid #bbb; border-bottom: 1px solid #bbb; padding: 2.5mm 0; gap: 4mm; }
+.csPrintSummary span { display: block; font-size: 8pt; margin-bottom: 1mm; }
+.csPrintSummary strong { display: block; font-size: 13pt; line-height: 1.15; overflow-wrap: anywhere; }
+.csPrintTable { font: 9pt/1.3 Arial, Helvetica, sans-serif; width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0 0 4mm; }
+.csPrintTable thead { display: table-header-group; }
+.csPrintTable tbody { break-inside: auto; }
+.csPrintTable tr { break-inside: avoid; page-break-inside: avoid; }
+.csPrintTable th, .csPrintTable td { position: static; text-align: left; vertical-align: top; padding: 1.7mm 2mm; border-bottom: 1px solid #d5d5d5; font-size: inherit; overflow-wrap: anywhere; }
+.csPrintTable th { font-size: 8pt; line-height: 1.2; background: #ededed; font-weight: 700; border-bottom-color: #999; }
+.csPrintTable .csPrintSection th { padding: 0 0 2.5mm; border: 0; background: white; }
+.csPrintSection span { display: block; font-size: 11pt; line-height: 1.3; font-weight: 700; }
+.csPrintSection small { display: block; font-weight: 400; font-size: 7.5pt; line-height: 1.35; margin-top: 1mm; }
+.csPrintTable p { margin: 1mm 0 0; font-size: 8pt; line-height: 1.35; white-space: pre-wrap; }
+.csPrintTime { white-space: nowrap; font-size: 9pt; }
+.csPrintTime span { display: block; font-size: 8pt; }
+.csPrintCall { font-weight: 700; background: #ededed; }
+.csPrintScene { font-weight: 700; }
+.csPrintSecondary { display: block; margin-top: 1mm; font-size: 8pt; }
+.csPrintBlock { background: #fff2e8; }
+.csPrintBlock td:first-child { border-left: 3px solid #ed701c; }
+.csPrintPeople { break-before: page; page-break-before: always; }
+.csPrintNote { margin: 5mm 0; border-top: 1px solid #aaa; padding-top: 3mm; }
+.csPrintNote h2 { margin: 0 0 2mm; font-size: 10pt; break-after: avoid; }
+.csPrintNote p { margin: 0; font-size: 8.5pt; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; orphans: 3; widows: 3; }
+@media print {
+  body.gbPrintingCallsheet #gbPrintRoot { position: static !important; }
+  .csPrint { page: rodaCallSheet; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}
+
+.csPrintTable--agenda td, .csPrintTable--cast td { padding: 1.1mm 2mm; }
+
+@page rodaCallSheet {
+  size: A4 portrait;
+  margin: 12mm;
+  @bottom-left { content: "RODA · CALL DIARIO"; font: 7pt Arial, sans-serif; color: #666; }
+  @bottom-right { content: counter(page) " / " counter(pages); font: 7pt Arial, sans-serif; color: #666; }
+}
