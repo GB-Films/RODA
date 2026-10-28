@@ -123,3 +123,7 @@
     #shotlistCard .shotTable .shotDropBefore td,#shotlistCard .shotTable .shotDropAfter td { box-shadow:none; }
   }
 }
+
+.shotBatchFields{display:grid;gap:5px;margin-top:8px;font-size:10px;color:#aaa;}
+.shotBatchFields label{display:grid;gap:4px;}
+.shotBatchFields select{max-width:100%;width:100%;font-size:10px;}

@@ -2675,7 +2675,7 @@ function setupScheduleWheelScroll(){
             ${shotTypes.map(t=>`<option value="${esc(t)}"${(normalizeShotType(sh.type)===t)?" selected":""}>${esc(t)}</option>`).join("")}
           </select>
         </td>
-        <td><input class="input shotDescInput" ${isReadOnly()?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" /></td>
+        <td><input class="input shotDescInput" ${isReadOnly()?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" />${shotBatchFields(sh,s)}</td>
         <td class="shotThumbTd">
           <div class="shotThumbDrop ${hasThumb?"has":""} ${uploading?"uploading":""}" title="Arrastrá una imagen o click para cargar">${thumbInner}</div>
           <div class="row gap" style="justify-content:center; margin-top:6px;">
@@ -2687,6 +2687,7 @@ function setupScheduleWheelScroll(){
         <td><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly()?"disabled":""}>×</button></td>
       `;
 
+      bindShotBatchSelect(tr,sh,s);
       const sel = tr.querySelector(".shotTypeSel");
       const inp = tr.querySelector(".shotDescInput");
       const del = tr.querySelector(".shotDelBtn");
@@ -5627,7 +5628,7 @@ function updateScheduleDayDOM(dayId){
     ensureDayTimingMaps(day);
     let changed = false;
     for(const sid of (day.sceneIds||[]).filter(id=>!sceneId||id===sceneId)){
-      const sc = getScene(sid);
+      const sc = shootingScene(sid);
       if(!sc) continue;
       const shotsMin = sceneShotsTotalMin(sc);
       if(!shotsMin) continue;
@@ -7189,17 +7190,45 @@ box.addEventListener("input", (e)=>{
 
 
 
+
+  // A shot stays in its screenplay scene; its shooting anchor supplies the day/time.
+  function shotOwner(shotId){return state.scenes.find(s=>(s.shots||[]).some(sh=>sh.id===shotId));}
+  function shootingScene(sceneId){
+    const scene=getScene(sceneId);if(!scene)return null;
+    const shots=state.scenes.flatMap(owner=>(owner.shots||[]).filter(sh=>(getScene(sh.shootingSceneId)?sh.shootingSceneId:owner.id)===sceneId));
+    shots.sort((a,b)=>(a.shootingOrder??100000)-(b.shootingOrder??100000));
+    return {...scene,shots};
+  }
+  function shotBatchFields(sh,owner){
+    return `<details class="shotBatchFields" data-ro-allow="1"><summary>Escena original <b>#${esc(owner?.number||'')}</b> · Tanda #${esc(getScene(sh.shootingSceneId||owner?.id)?.number||'')}</summary><label>Tanda de rodaje<select class="input compact shotBatchSelect" aria-label="Tanda de rodaje del plano" ${(isReadOnly('shotlist')||isReadOnly('planning'))?'disabled':''}>${state.scenes.map(s=>{const day=state.shootDays.find(d=>d.sceneIds.includes(s.id));return `<option value="${esc(s.id)}" ${(sh.shootingSceneId||owner?.id)===s.id?'selected':''}>#${esc(s.number)} · ${esc(day?.label||'Sin jornada')} · ${esc(s.slugline||'')}</option>`;}).join('')}</select></label></details>`;
+  }
+  function bindShotBatchSelect(row,sh,owner){
+    row.querySelector('.shotBatchSelect')?.addEventListener('change',e=>{
+      if(isReadOnly('shotlist')||isReadOnly('planning')||!getScene(e.target.value))return;
+      const old=sh.shootingSceneId||owner.id,target=e.target.value;
+      if(target===owner.id)delete sh.shootingSceneId;else sh.shootingSceneId=target;
+      delete sh.shootingOrder;
+      const key=owner.id+'|'+sh.id,destination=state.shootDays.find(d=>d.sceneIds.includes(target));
+      for(const day of state.shootDays.filter(d=>d.sceneIds.includes(old)&&d!==destination))if(Object.hasOwn(day.shotsDone||{},key)){
+        if(destination){destination.shotsDone??={};destination.shotsDone[key]=!!destination.shotsDone[key]||!!day.shotsDone[key];}delete day.shotsDone[key];
+      }
+      touch();renderShotList();try{renderShotsEditor();}catch{}
+    });
+  }
+
 // Shot clocks are derived from cumulative durations; a reorder only changes IDs' order.
 function reorderShot(sceneId,shotId,targetId,after=false){
   if(isReadOnly('shotlist'))return false;
-  const shots=getScene(sceneId)?.shots;
+  const shots=shootingScene(sceneId)?.shots;
   if(!Array.isArray(shots)||shotId===targetId)return false;
   const from=shots.findIndex(s=>s.id===shotId),to=shots.findIndex(s=>s.id===targetId);
   if(from<0||to<0)return false;
   const next=shots.slice(),[shot]=next.splice(from,1);
   next.splice(next.findIndex(s=>s.id===targetId)+(after?1:0),0,shot);
   if(next.every((s,i)=>s===shots[i]))return false;
-  shots.splice(0,shots.length,...next);
+  const original=getScene(sceneId)?.shots;
+  if(original?.length===shots.length&&shots.every(sh=>original.includes(sh))){original.splice(0,original.length,...next);for(const sh of next)delete sh.shootingOrder;}
+  else next.forEach((sh,i)=>sh.shootingOrder=i);
   const scroll=el('shotlistWrap')?.closest('.shotlistMain'),top=scroll?.scrollTop;
   touch();renderShotList();
   if(scroll)scroll.scrollTop=top;
@@ -7213,7 +7242,7 @@ function bindShotReorder(handle,row,tbody,sceneId,shotId){
   handle.addEventListener('keydown',e=>{
     if(!['ArrowUp','ArrowDown'].includes(e.key)||isReadOnly('shotlist'))return;
     e.preventDefault();
-    const shots=getScene(sceneId)?.shots||[],at=shots.findIndex(s=>s.id===shotId),target=shots[at+(e.key==='ArrowUp'?-1:1)];
+    const shots=shootingScene(sceneId)?.shots||[],at=shots.findIndex(s=>s.id===shotId),target=shots[at+(e.key==='ArrowUp'?-1:1)];
     if(target)reorderShot(sceneId,shotId,target.id,e.key==='ArrowDown');
   });
   handle.addEventListener('pointerdown',e=>{
@@ -7224,6 +7253,7 @@ function bindShotReorder(handle,row,tbody,sceneId,shotId){
     const clear=()=>tbody.querySelectorAll('.shotDropBefore,.shotDropAfter').forEach(n=>n.classList.remove('shotDropBefore','shotDropAfter'));
     const locate=()=>{
       clear();target=null;
+      if(scroll){const visible=scroll.getBoundingClientRect();if(y<visible.top||y>visible.bottom)return;}
       const rows=Array.from(tbody.querySelectorAll('tr[data-shot-id]')),bounds=tbody.getBoundingClientRect();
       // Dropping into a different scene is never allowed.
       if(x<bounds.left||x>bounds.right||y<bounds.top-12||y>bounds.bottom+12)return;
@@ -7324,7 +7354,7 @@ function renderShotList(){
     let totalMin = 0;
     let lastEnd = 0;
     for(const sid of daySceneIds){
-      const sc = getScene(sid);
+      const sc = shootingScene(sid);
       if(!sc) continue;
       ensureSceneExtras_toggleThumb(sc);
       totalShots += (sc.shots||[]).length;
@@ -7358,7 +7388,7 @@ function renderShotList(){
     }
 
     for(const sid of daySceneIds){
-      const sc = getScene(sid);
+      const sc = shootingScene(sid);
       if(!sc) continue;
       ensureSceneExtras_toggleThumb(sc);
 
@@ -7379,7 +7409,7 @@ function renderShotList(){
           <button type="button" class="shotSceneToggle" data-ro-allow="1" aria-expanded="${!isCollapsed}" aria-controls="shotBody-${esc(sid)}">
             <div class="shotSceneCaret">${isCollapsed ? "▸" : "▾"}</div>
             <div>
-              <div class="t">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
+              <div class="t">Tanda · #${esc(sc.number||"")} — ${esc(sc.shootingBatchName||sc.slugline||"")}</div>
               <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · ${esc(formatDuration(du))}</div>
             </div>
           </button>
@@ -7433,7 +7463,7 @@ function renderShotList(){
         e.stopPropagation();
         if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         sc.shots = Array.isArray(sc.shots) ? sc.shots : [];
-        sc.shots.push({ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN, thumbUrl: "" });
+        getScene(sid).shots.push({ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN, thumbUrl: "" });
         selectedShotlistSceneId = sid;
         shotlistExpandedSceneIds.add(sid); // asegurar abierto
         const adjusted=syncAllDaysDurationsFromShotsForScene(sid,snapMin);
@@ -7451,7 +7481,8 @@ function renderShotList(){
         let offset = 0;
         (sc.shots||[]).forEach((sh, idx)=>{
           const dur = shotDurMin(sh);
-          const key = `${sid}|${sh.id}`;
+          const owner=shotOwner(sh.id)||getScene(sid);
+          const key = `${owner.id}|${sh.id}`;
           const done = !!d.shotsDone[key];
           const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
 
@@ -7481,7 +7512,7 @@ function renderShotList(){
               </div>
               <input type="file" accept="image/*" class="shotThumbFile" style="display:none" />
             </td>
-            <td><textarea class="input shotDescInput" rows="3" ${isReadOnly('shotlist')?"disabled":""} placeholder="Descripción del plano…">${esc(sh.desc||"")}</textarea></td>
+            <td><textarea class="input shotDescInput" rows="3" ${isReadOnly('shotlist')?"disabled":""} placeholder="Descripción del plano…">${esc(sh.desc||"")}</textarea>${shotBatchFields(sh,owner)}</td>
             <td class="shotDur">
               <select class="input compact shotDurSel" aria-label="Minutos del plano ${idx+1}" ${isReadOnly('shotlist')?"disabled":""}>
                 ${[...new Set([5,10,15,20,30,45,60,dur])].sort((a,b)=>a-b).map(n=>`<option value="${n}"${(dur===n)?" selected":""}>${n}</option>`).join("")}
@@ -7491,6 +7522,7 @@ function renderShotList(){
           `;
 
           bindShotReorder(tr.querySelector('.shotDragHandle'),tr,tbody,sid,sh.id);
+          bindShotBatchSelect(tr,sh,owner);
 
           const chk = tr.querySelector("input[type=checkbox]");
           const selDur = tr.querySelector(".shotDurSel");
@@ -7540,7 +7572,7 @@ function renderShotList(){
           delBtn?.addEventListener("click", (e)=>{
             e.preventDefault();
             if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
-            sc.shots = (sc.shots||[]).filter(x=>x.id!==sh.id);
+            owner.shots = (owner.shots||[]).filter(x=>x.id!==sh.id);
             // limpiar done map del día para ese plano
             delete d.shotsDone[key];
             touch();
@@ -8473,7 +8505,7 @@ function renderReportDayplanDetail(d){
     const dayLabel = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
 
     // KPIs
-    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
+    const scenes = (d.sceneIds||[]).map(id=>shootingScene(id)).filter(Boolean);
     const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
     const totalShots = scenes.reduce((acc, s)=> acc + ((s.shots||[]).length), 0);
 
@@ -8500,7 +8532,7 @@ function renderReportDayplanDetail(d){
 
     let out = header;
     for(const sid of (d.sceneIds||[])){
-      const sc = getScene(sid);
+      const sc = shootingScene(sid);
       if(!sc) continue;
       ensureSceneExtras(sc);
       const st = Number(d.times?.[sid] ?? 0) || 0;
@@ -8519,7 +8551,8 @@ function renderReportDayplanDetail(d){
       }else{
         rows = shots.map((sh, idx)=>{
           const dur = shotDurMin(sh);
-          const key = `${sid}|${sh.id}`;
+          const owner=shotOwner(sh.id)||getScene(sid);
+          const key = `${owner.id}|${sh.id}`;
           const done = !!d.shotsDone?.[key];
           const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
           offset += dur;
@@ -8530,7 +8563,7 @@ function renderReportDayplanDetail(d){
               <td class="shotTime">${esc(t||"")}</td>
               <td class="shotType">${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
               <td class="shotThumb">${(sh.thumbUrl?`<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>`:"")}</td>
-              <td>${esc(sh.desc||"")}</td>
+              <td><b>Escena original #${esc(owner.number)}</b><br>${esc(sh.desc||"")}</td>
               <td class="shotDur">${esc(String(dur||DEFAULT_SHOT_MIN))}</td>
             </tr>
           `;
@@ -8541,7 +8574,7 @@ function renderReportDayplanDetail(d){
         <div class="shotSceneBox">
           <div class="shotSceneHead">
             <div>
-              <div class="t">#${esc(sc.number||"")} — ${esc(sc.slugline||"")}</div>
+              <div class="t">Tanda · #${esc(sc.number||"")} — ${esc(sc.shootingBatchName||sc.slugline||"")}</div>
               <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · Escena: ${esc(formatDuration(du))} · Planos: ${esc(formatDuration(shotsMin))}</div>
             </div>
             ${warn ? `<div class="warn">${esc(warn)}</div>` : ""}
