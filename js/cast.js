@@ -118,5 +118,29 @@
   }
   state.script??={versions:[]};state.script.castAliases=aliases;
  }
- const api={duplicates,reconcileMergedPeople,mergePeople,restorePerson,personNameParts,syncPersonName,setPersonName,key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
+ // Shooting windows follow person IDs, so an actor playing several roles gets one span.
+ function dayRoster(state,day){
+  const aliases=state.script?.castAliases||[];
+  return names([...(day.sceneIds||[]).flatMap(id=>{
+   const scene=state.scenes.find(s=>s.id===id),excluded=new Set((day.castSceneExclusions?.[id]||[]).map(key));
+   return (scene?.elements?.cast||[]).filter(n=>!excluded.has(key(n)));
+  }),...(day.blocks||[]).flatMap(b=>b.castNames||[])],aliases);
+ }
+ function workWindow(state,day,name){
+  const actor=actorFor(state,name),same=n=>key(n)===key(name)||(actor&&actorFor(state,n)?.id===actor.id);
+  const entries=[];
+  for(const id of day.sceneIds||[]){
+   const scene=state.scenes.find(s=>s.id===id),excluded=new Set((day.castSceneExclusions?.[id]||[]).map(key));
+   if((scene?.elements?.cast||[]).some(n=>!excluded.has(key(n))&&same(n))&&Number.isFinite(day.times?.[id]))entries.push({start:day.times[id],end:day.times[id]+Number(day.durations?.[id]||60)});
+  }
+  for(const b of day.blocks||[])if((b.castNames||[]).some(same))entries.push({start:b.startMin,end:b.startMin+b.durMin});
+  if(!entries.length)return null;
+  const [h,m]=String(day.callTime||'08:00').split(':').map(Number),base=h*60+m;
+  const first=base+Math.min(...entries.map(e=>e.start)),last=base+Math.max(...entries.map(e=>e.end));
+  const arrival=(day.blocks||[]).find(b=>b.blockType==='arrival');
+  const call=Math.max(base+(arrival?.startMin||0),first-Number(day.castPrepMin??30));
+  const clock=n=>String(Math.floor(n/60)%24).padStart(2,'0')+':'+String(n%60).padStart(2,'0');
+  return {first:clock(first),end:clock(last),call:clock(call)};
+ }
+ const api={dayRoster,workWindow,duplicates,reconcileMergedPeople,mergePeople,restorePerson,personNameParts,syncPersonName,setPersonName,key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);
