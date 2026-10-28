@@ -1580,7 +1580,7 @@ async function setShotThumb(sh, file){
   function effectiveCastCall(d, name){
     const base = baseCastCall(d);
     const ov = normalizeHHMM(d?.castCallTimes?.[name]);
-    return ov || base;
+    return ov || (d.castCallMode==='scenes'?RodaCast.workWindow(state,d,name)?.call:'') || base;
   }
   function baseCrewAreaCall(d, area){
     const day = baseDayCall(d);
@@ -2450,7 +2450,7 @@ function setupScheduleWheelScroll(){
           <span class="cast-summary-counts"><span><strong>${g.scenes.length}</strong> ${g.scenes.length===1?'escena':'escenas'}</span><span><strong>${days.length}</strong> ${days.length===1?'jornada':'jornadas'}</span></span>
         </summary>
         <div class="cardContent cast-details">
-          <label>Intérprete<select class="input" data-cast-entry="${i}" aria-label="Intérprete de ${esc(g.name)}"><option value="">${actors.length?'Sin asignar':'Cargá actores en Equipo'}</option>${actors.map(actor=>`<option value="${esc(actor.id)}" ${person?.id===actor.id?'selected':''}>${esc(actor.name)}</option>`).join('')}</select></label>
+          <label>Intérprete<select class="input" data-cast-entry="${i}" aria-label="Intérprete de ${esc(g.name)}"><option value="">${actors.length?'Sin asignar':'Cargá actores en Equipo'}</option>${[false,true].map(assigned=>{const group=actors.filter(actor=>!!RodaCast.personRoles(state,actor.id).length===assigned);return group.length?`<optgroup label="${assigned?'Con personajes asignados':'Sin personaje asignado'}">${group.map(actor=>{const roles=RodaCast.personRoles(state,actor.id);return `<option value="${esc(actor.id)}" ${person?.id===actor.id?'selected':''}>${roles.length?'✓ ':''}${esc(actor.name)}${roles.length?' · '+esc(roles.join(', ')):''}</option>`;}).join('')}</optgroup>`:'';}).join('')}</select></label>
           <div class="scene-links">${sceneLinks(g.scenes)}</div><p class="muted small">${esc(days.map(d=>(d.label||'Jornada')+(d.date?' · '+formatDDMMYYYY(d.date):'')).join(' / ')||'Sin jornadas programadas')}</p>
           <button class="btn small" data-cast-plan="${i}" data-ro-allow="1">Ver plan de rodaje →</button>
         </div>
@@ -3570,13 +3570,14 @@ function renderDayCast(){
       cleanupDayExtras(d);
 
       const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
-      const cast = union((scenes||[]).map(sc=> (sc.elements?.cast||[])).flat());
+      const cast = RodaCast.dayRoster(state,d);
 
       if(!cast.length){
         wrap.innerHTML = `<div class="muted">No hay Cast en las escenas del día.</div>`;
         return;
       }
 
+      if(d.castTransportNote){const note=document.createElement('p');note.className='muted small';note.textContent=d.castTransportNote;wrap.append(note);}
       const dayBase = baseDayCall(d);
       const castBase = baseCastCall(d);
       const DEF_RTS = Number(state?.project?.rtsOffsetMin ?? 60);
@@ -3617,6 +3618,8 @@ function renderDayCast(){
           </div>
         </div>
       `;
+      const auto=document.createElement('label');auto.className='muted small';auto.innerHTML=`<input type="checkbox" ${d.castCallMode==='scenes'?'checked':''} ${ro?'disabled':''}/> Citar por primera escena · 30 min de preparación`;
+      auto.querySelector('input').onchange=e=>{d.castCallMode=e.target.checked?'scenes':'manual';touch();rerender();};top.append(auto);
       wrap.appendChild(top);
 
       function rerender(){
@@ -3746,6 +3749,9 @@ function renderDayCast(){
                   <button class="btn icon ghost small" title="Reset CALL" data-kind="callReset" ${ro ? "disabled" : ""}>↺</button>
                 </div>
               </div>
+
+              <div class="timeLine"><div class="k">PRIMERA</div><b>${RodaCast.workWindow(state,d,name)?.first||'—'}</b></div>
+              <div class="timeLine"><div class="k">FIN EST.</div><b>${RodaCast.workWindow(state,d,name)?.end||'—'}</b></div>
 
               ${d.pickupCastEnabled ? `
                 <div class="timeLine">
@@ -7668,7 +7674,7 @@ grid.appendChild(cell);
     const castBase = baseCastCall(d);
 
     const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
-    const cast = union(scenes.flatMap(s=>s.elements?.cast||[]));
+    const cast = RodaCast.dayRoster(state,d);
 
     const crewAll = (d.crewIds||[])
       .map(id=>state.crew.find(c=>String(c.id)===String(id)))
@@ -7760,6 +7766,7 @@ grid.appendChild(cell);
     scenesBox.appendChild(list);
     wrap.appendChild(scenesBox);
 
+    if(d.castTransportNote){const note=document.createElement('p');note.className='muted small';note.textContent=d.castTransportNote;wrap.append(note);}
     const castBox = document.createElement("div");
     castBox.className = "catBlock callCast";
     castBox.innerHTML = `
@@ -7771,7 +7778,7 @@ grid.appendChild(cell);
               <th>Actor / actriz</th>
               <th>Personaje</th>
               <th class="time">PU</th>
-              <th class="time">Citación</th>
+              <th class="time">Citación</th><th class="time">Primera escena</th><th class="time">Fin estimado</th>
               <th class="time">RTS</th>
             </tr>
           </thead>
@@ -7809,9 +7816,10 @@ grid.appendChild(cell);
                 <td>${esc(roleDisp)}</td>
                 <td class="time ${puCls}">${puCell}</td>
                 <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
+                <td class="time"><b>${esc(RodaCast.workWindow(state,d,n)?.first||"—")}</b></td><td class="time"><b>${esc(RodaCast.workWindow(state,d,n)?.end||"—")}</b></td>
                 <td class="time ${rtsCls}">${rtsCell}</td>
               </tr>`;
-            }).join("") : `<tr><td colspan="5" class="mutedCell">—</td></tr>`}
+            }).join("") : `<tr><td colspan="7" class="mutedCell">—</td></tr>`}
           </tbody>
         </table>
       </div>
