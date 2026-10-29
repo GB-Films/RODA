@@ -4378,9 +4378,23 @@ function renderDayCast(){
   }
 
   // ===================== Crew =====================
+  // A local view preference: folding an area never changes people or the shared plan.
+  function crewCollapseKey(){
+    const cfg=StorageLayer.loadCfg()||{},params=new URLSearchParams(location.search);
+    return 'gb_roda_crew_collapsed_v1__'+[params.get('studioSpace')||cfg.spaceId||'',window.RODA_STUDIO?.project?.id||params.get('studioProject')||cfg.projectId||cfg.binId||'local'].map(encodeURIComponent).join('__');
+  }
+  function loadCrewCollapsed(){
+    try{const value=JSON.parse(sessionStorage.getItem(crewCollapseKey())||'[]');return new Set(Array.isArray(value)?value.filter(v=>typeof v==='string'):[]);}catch(_e){return new Set();}
+  }
+  function setCrewAreaCollapsed(area,closed){
+    const collapsed=loadCrewCollapsed();if(closed)collapsed.add(area);else collapsed.delete(area);
+    try{sessionStorage.setItem(crewCollapseKey(),JSON.stringify([...collapsed]));}catch(_e){}
+  }
+
   function addCrew(area){
     area=typeof area==='string'?area:(el('crewAreaFilter')?.value==='Cast'||isReadOnly('crew')?'Cast':'Produccion');
     if(isReadOnly(area==='Cast'?'cast':'crew'))return roToast();
+    setCrewAreaCollapsed(area,false);
     sharedDayScope="all";renderDayNavigation();
     if(el('crewSearch'))el('crewSearch').value='';
     if(area==='Cast'&&el('crewAreaFilter')?.value==='technical')el('crewAreaFilter').value='Cast';
@@ -4458,6 +4472,9 @@ function renderDayCast(){
       return (a.name||"").localeCompare(b.name||"");
     });
 
+    const collapsedAreas=loadCrewCollapsed();
+    const areaCounts=new Map();
+    for(const person of list)areaCounts.set(person.area,(areaCounts.get(person.area)||0)+1);
     let lastArea = null;
 
     for(const c of list){
@@ -4467,7 +4484,17 @@ function renderDayCast(){
       if(c.area !== lastArea){
         const trG = document.createElement("tr");
         trG.className = "groupRow";
-        trG.innerHTML = `<td colspan="8">${esc(c.area)}</td>`;
+        const closed=collapsedAreas.has(c.area)&&!q;
+        const count=areaCounts.get(c.area);
+        trG.innerHTML = `<td colspan="8"><button type="button" class="crewGroupToggle" data-ro-allow="1" aria-expanded="${!closed}"><span class="crewGroupCaret" aria-hidden="true">${closed?'▸':'▾'}</span><span>${esc(c.area)}</span><span class="crewGroupCount">${count} ${count===1?'integrante':'integrantes'}</span></button></td>`;
+        const toggle=trG.querySelector('button');
+        toggle.addEventListener('click',()=>{
+          const close=toggle.getAttribute('aria-expanded')==='true';
+          setCrewAreaCollapsed(c.area,close);
+          toggle.setAttribute('aria-expanded',String(!close));
+          toggle.querySelector('.crewGroupCaret').textContent=close?'▸':'▾';
+          tbody.querySelectorAll('[data-crew-area]').forEach(row=>{if(row.dataset.crewArea===c.area)row.hidden=close;});
+        });
         tbody.appendChild(trG);
         lastArea = c.area;
       }
@@ -4475,6 +4502,7 @@ function renderDayCast(){
       const tr = document.createElement("tr");
       const scope=c.area==='Cast'?'cast':'crew',readonly=isReadOnly(scope);
       tr.dataset.rodaSection=scope;tr.dataset.crewId=c.id;
+      tr.dataset.crewArea=c.area;tr.hidden=collapsedAreas.has(c.area)&&!q;
       const displayRole=c.area==='Cast'&&!c.castPerson?'Actor / actriz':c.role||'';
       const parts=RodaCast.personNameParts(c);
       tr.innerHTML = `
@@ -4510,7 +4538,7 @@ function renderDayCast(){
 
       const [areaSel, role, name, lastName, phone, email, notes] = tr.querySelectorAll("select,input");
       const saveField=(field,value)=>{if(isReadOnly(scope))return false;RodaCast.preparePerson(state,real);if(field==='firstName'||field==='lastName'){const nextParts=RodaCast.personNameParts(real);nextParts[field]=value;RodaCast.setPersonName(real,nextParts.firstName,nextParts.lastName);}else real[field]=value;touch();return true;};
-      areaSel.addEventListener("change", ()=>{const next=normalizeCrewArea(areaSel.value);if(isReadOnly(scope)||isReadOnly(next==='Cast'?'cast':'crew'))return;RodaCast.preparePerson(state,real);if(real.area==='Cast'&&next!=='Cast')for(const p of state.crew)if(p.castProfile&&p.actorId===real.id)p.actorId='';real.area=next;if(next==='Cast')real.castPerson=true;touch();renderCrew();refreshElementSuggestions();renderReports();renderReportsDetail();});
+      areaSel.addEventListener("change", ()=>{const next=normalizeCrewArea(areaSel.value);if(isReadOnly(scope)||isReadOnly(next==='Cast'?'cast':'crew'))return;RodaCast.preparePerson(state,real);if(real.area==='Cast'&&next!=='Cast')for(const p of state.crew)if(p.castProfile&&p.actorId===real.id)p.actorId='';setCrewAreaCollapsed(next,false);real.area=next;if(next==='Cast')real.castPerson=true;touch();renderCrew();refreshElementSuggestions();renderReports();renderReportsDetail();});
       role.addEventListener("input", ()=>{if(saveField('role',role.value)){renderReports();renderReportsDetail();}});
       name.addEventListener("input", ()=>{if(saveField('firstName',name.value)){refreshElementSuggestions();renderReports();renderReportsDetail();}});
       lastName.addEventListener("input", ()=>{if(saveField('lastName',lastName.value)){refreshElementSuggestions();renderReports();renderReportsDetail();}});
@@ -4528,6 +4556,7 @@ function renderDayCast(){
         const days = crewDays(real.id);
         const trD = document.createElement("tr");
         trD.className = "crewDetailRow";
+        trD.dataset.crewArea=c.area;trD.hidden=collapsedAreas.has(c.area)&&!q;
 
         const daysHtml = days.length
           ? `<div class="crewDayPills">${days.map(d=>{
