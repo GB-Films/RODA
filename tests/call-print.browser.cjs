@@ -27,12 +27,20 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
   seed.scenes[0].elements.cast=['ANA','PERSONA SIN ASIGNAR'];seed.scenes[1].elements.cast=['BETO'];
   Object.assign(seed.shootDays[0],{crewIds:['director'],castCallMode:'scenes',castCallTimes:{ANA:'08:20',BETO:'08:20'},crewCallTimes:{director:'07:40'},notes:'Conservar estas notas de producción. <script>texto, no código</script>',castTransportNote:'Traslado compartido. Pasajeros por confirmar.'});
   if(process.env.RODA_CALL_PRINT_EXTRAS)Object.assign(seed.shootDays[0],{pickupCastEnabled:true,pickupCrewEnabled:true,rtsEnabled:true,castPickUpTimes:{ANA:'07:10',BETO:'07:10'},castRTSTimes:{ANA:'08:35',BETO:'08:35'},crewPickUpTimes:{director:'07:00'}});
+  if(process.env.RODA_CALL_PRINT_STRESS){
+    for(let i=0;i<36;i++){
+      seed.crew.push({id:'extra'+i,area:'Cast',castPerson:true,name:'Intérprete de prueba con nombre largo '+i},{id:'extra-role'+i,area:'Cast',castProfile:true,role:'PERSONAJE DE PRUEBA '+i,actorId:'extra'+i});
+      seed.scenes[i%20].elements.cast.push('PERSONAJE DE PRUEBA '+i);
+    }
+    seed.shootDays[0].notes=('Notas internas extensas de continuidad y planificación. Mantener el vestuario indicado y revisar los elementos antes del armado. ').repeat(30);
+  }
   if(process.env.RODA_CALL_PRINT_FIXTURE)seed=JSON.parse(fs.readFileSync(process.env.RODA_CALL_PRINT_FIXTURE,'utf8'));
   await page.evaluate(data=>{
    document.querySelector('.shell').hidden=false;document.body.classList.add('roda-studio');document.body.classList.remove('studio-tool-locked');
    let header=document.querySelector('.studio-global-header');if(!header){header=document.createElement('header');document.body.prepend(header);}
    header.className='studio-global-header studio-shared-header';header.innerHTML='<button>Tus proyectos</button><button>Aplicaciones</button><button>Cuenta privada</button>';
    window.RODA_STUDIO={canEdit:true,project:{rodaAccess:{admin:true,sections:Object.fromEntries(['script','breakdown','locations','cast','planning','shotlist','crew','reports'].map(k=>[k,'edit']))}}};
+   sessionStorage.setItem('gb_edit_unlocked__default','1');
    window.savedState=structuredClone(data);window.savedWrites=0;
    window.StorageLayer=new Proxy({loadCfg:()=>({backend:'local',projects:[]}),loadLocal:()=>data,getProjects:()=>[],saveLocal:s=>{window.savedState=structuredClone(s);window.savedWrites++;}}, {get:(target,key)=>target[key]||(()=>null)});
    window.print=()=>{window.printSnapshot=document.documentElement.outerHTML;};
@@ -51,21 +59,28 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
    assert.equal(await pdf.locator('.studio-global-header').evaluate(e=>getComputedStyle(e).display),'none');
    assert.equal(await pdf.locator('.shell').evaluate(e=>getComputedStyle(e).display),'none');
    assert.equal(await pdf.locator('#gbPrintRoot h1').textContent(),seed.meta.title);
+   const doc=pdf.locator('#gbPrintRoot');
    const day=seed.shootDays[0],items=(day.sceneIds||[]).length+(day.blocks||[]).length;
-   assert.equal(await pdf.locator('.csPrintTable--agenda tbody tr').count(),Math.max(1,items));
-   assert.match(await pdf.locator('.csPrintSummary').textContent(),new RegExp(day.callTime));
-   for(const text of [day.notes,day.castTransportNote].filter(Boolean))assert.ok((await pdf.locator('.csPrintPeople').textContent()).includes(text));
-   assert.equal(await pdf.locator('.csPrintTable--agenda tbody tr').first().evaluate(e=>getComputedStyle(e).breakInside),'avoid');
-   assert.equal(await pdf.locator('.csPrintTable thead').first().evaluate(e=>getComputedStyle(e).display),'table-header-group');
-   assert.equal(await pdf.locator('.csPrintPeople').evaluate(e=>getComputedStyle(e).breakBefore),'page');
-   assert.deepEqual(await pdf.locator('.csPrintTable th,.csPrintTable td').evaluateAll(cells=>cells.filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent)),[],'No clipped or overlapping cells');
+   assert.equal(await doc.locator('.csPrintTable--agenda tbody tr').count(),Math.max(1,items));
+   assert.match(await doc.locator('.csPrintSummary').textContent(),new RegExp(day.callTime));
+   if(day.castTransportNote)assert.ok((await doc.locator('.csPrintPeople').textContent()).includes(day.castTransportNote));
+   if(day.notes){
+    const excerpt=await doc.locator('.csPrintDayNotes p').textContent();
+    if(day.notes.length<=500||day.callPrintFullNotes)assert.equal(excerpt,day.notes.trim());
+    else{assert.ok(excerpt.length<=501);assert.ok(day.notes.startsWith(excerpt.slice(0,-1)));assert.match(await doc.locator('.csPrintDayNotes').textContent(),/Texto completo disponible en Roda/);}
+    assert.equal(await doc.locator('.csPrintPeople > :last-child').evaluate(e=>e.classList.contains('csPrintDayNotes')),true,'Notes belong after itinerary and people');
+   }
+   assert.equal(await doc.locator('.csPrintTable--agenda tbody tr').first().evaluate(e=>getComputedStyle(e).breakInside),'avoid');
+   assert.equal(await doc.locator('.csPrintTable thead').first().evaluate(e=>getComputedStyle(e).display),'table-header-group');
+   assert.equal(await doc.locator('.csPrintPeople').evaluate(e=>getComputedStyle(e).breakBefore),'page');
+   assert.deepEqual(await doc.locator('.csPrintTable th,.csPrintTable td').evaluateAll(cells=>cells.filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent)),[],'No clipped or overlapping cells');
    if(!process.env.RODA_CALL_PRINT_FIXTURE){
-    assert.equal(await pdf.locator('.csPrintTable--cast tbody tr').count(),2);
-    const actor=pdf.locator('.csPrintTable--cast tbody tr').filter({hasText:'Elena Fernández'});
+    assert.equal(await doc.locator('.csPrintTable--cast tbody tr').count(),process.env.RODA_CALL_PRINT_STRESS?38:2);
+    const actor=doc.locator('.csPrintTable--cast tbody tr').filter({hasText:'Elena Fernández'});
     assert.match(await actor.textContent(),/ANA · BETO[\s\S]*08:20[\s\S]*08:45[\s\S]*09:25/);
-    assert.match(await pdf.locator('.csPrintTable--crew').textContent(),/Pablo Pérez[\s\S]*07:40[\s\S]*\+54 11 5555 1234/);
-    assert.equal(await pdf.locator('.csPrintTable--cast thead tr').last().locator('th').count(),process.env.RODA_CALL_PRINT_EXTRAS?6:4,'Transport columns shown only when enabled');
-    if(process.env.RODA_CALL_PRINT_EXTRAS){assert.match(await actor.textContent(),/07:10[\s\S]*08:20[\s\S]*08:35/);assert.match(await pdf.locator('.csPrintTable--crew').textContent(),/07:00[\s\S]*07:40/);}
+    assert.match(await doc.locator('.csPrintTable--crew').textContent(),/Pablo Pérez[\s\S]*07:40[\s\S]*\+54 11 5555 1234/);
+    assert.equal(await doc.locator('.csPrintTable--cast thead tr').last().locator('th').count(),process.env.RODA_CALL_PRINT_EXTRAS?6:4,'Transport columns shown only when enabled');
+    if(process.env.RODA_CALL_PRINT_EXTRAS){assert.match(await actor.textContent(),/07:10[\s\S]*08:20[\s\S]*08:35/);assert.match(await doc.locator('.csPrintTable--crew').textContent(),/07:00[\s\S]*07:40/);}
    }
    await pdf.pdf({path:path.join(output,name+'.pdf'),preferCSSPageSize:true,printBackground:true});
    await pdf.pdf({path:path.join(output,name+'-sin-fondos.pdf'),preferCSSPageSize:true,printBackground:false});
@@ -76,8 +91,33 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
    assert.equal(await page.locator('body').evaluate(e=>e.classList.contains('gbPrintingCallsheet')),false);
    await page.evaluate(()=>{window.printSnapshot=null;});
   }
-  await page.getByRole('button',{name:'Call Diario',exact:true}).click();await page.locator('#btnOpenCallSheet').click();await inspectPrint('call-diario');
+  await page.getByRole('button',{name:'Call Diario',exact:true}).click();
+  const checkActorLayout=async()=>{
+    assert.deepEqual(await page.locator('#dayCast .castTimeStack .timeLine').evaluateAll(rows=>rows.flatMap(row=>{
+      const [label,control]=row.children,a=label.getBoundingClientRect(),b=control.getBoundingClientRect();return a.right>b.left+1?[row.textContent]:[];
+    })),[],'Time labels never overlap their controls');
+    assert.deepEqual(await page.locator('#dayCast .castWorkWindow').evaluateAll(rows=>rows.filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent)),[]);
+  };
+  await checkActorLayout();await page.screenshot({path:path.join(output,'call-screen.png'),fullPage:true});
+  await page.setViewportSize({width:1100,height:850});await checkActorLayout();
+  await page.setViewportSize({width:390,height:844});await checkActorLayout();
+  await page.setViewportSize({width:1600,height:1000});
+  assert.equal(await page.locator('.callNotesBox').getAttribute('open'),null);
+  assert.equal(await page.locator('.dayDetail3col').evaluate(e=>e.compareDocumentPosition(document.querySelector('.callNotesBox'))&Node.DOCUMENT_POSITION_FOLLOWING),4);
+  await page.locator('#btnOpenCallSheet').click();await inspectPrint('call-diario');
+  await page.pdf({path:path.join(output,'call-native.pdf'),preferCSSPageSize:true,printBackground:true});
+  assert.equal(await page.locator('#gbPrintRoot').textContent(),'','Native printing also cleans up');
   await page.getByRole('button',{name:'REPORTES',exact:true}).click();await page.locator('#reportTabs [data-tab="callsheet"]').click();await page.locator('#btnPrintCallSheet').click();await inspectPrint('call-reportes');
+  assert.equal(await page.locator('#callSheetDetail .csPrintTable--agenda').count(),1,'Preview uses the same document');
+  assert.equal(await page.locator('#callSheetDetail .callTimeTable').count(),0,'Legacy cramped table is gone');
+  await page.pdf({path:path.join(output,'call-native-reportes.pdf'),preferCSSPageSize:true,printBackground:true});
+  assert.equal(await page.evaluate(()=>JSON.stringify(savedState.shootDays)),before);
+  assert.equal(await page.evaluate(()=>savedWrites),writes);
+  await page.getByRole('button',{name:'Call Diario',exact:true}).click();
+  await page.locator('.callNotesBox summary').click();await page.locator('#callPrintFullNotes').check();
+  assert.equal(await page.evaluate(()=>savedState.shootDays[0].notes),seed.shootDays[0].notes,'Full original notes are preserved');
+  assert.equal(await page.locator('#callSheetDetail .csPrintDayNotes p').textContent(),seed.shootDays[0].notes.trim());
+  assert.equal(await page.evaluate(()=>savedState.shootDays[0].callPrintFullNotes),true);
   assert.deepEqual(errors,[]);console.log('OK: Call Diario and Reports print, grouped roles, manual calls, contacts and notes preserved, repeated headings, intact rows, 12mm margins, no timing changes or saves. PDFs: '+output);
  }finally{await browser?.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

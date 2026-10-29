@@ -1,5 +1,5 @@
 /* Dedicated Call Diario document. Screen cards and their column widths stay out of print. */
-body.gbPrintingCallsheet #gbPrintRoot .csPrint {
+.csPrint {
   font: 9pt/1.35 Arial, Helvetica, sans-serif;
   color: #151515;
   width: 100%;
@@ -49,3 +49,27 @@ body.gbPrintingCallsheet #gbPrintRoot .csPrint {
   @bottom-left { content: "RODA · CALL DIARIO"; font: 7pt Arial, sans-serif; color: #666; }
   @bottom-right { content: counter(page) " / " counter(pages); font: 7pt Arial, sans-serif; color: #666; }
 }
+
+/* The report preview uses the same document as printing. */
+@media screen {
+  .csPrintPreview{background:#fff;color:#151515;padding:20px;overflow-x:auto;}
+  .csPrintPreview .csPrint{min-width:560px;}
+  #dayCast .callPersonRow{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
+  #dayCast .callPersonRow .title{white-space:normal;overflow-wrap:anywhere;}
+  #dayCast .callPersonRow .meta{font-size:12px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere;}
+  #dayCast .callPersonRow .right{display:block;width:100%;}
+  #dayCast .castTimeStack{align-items:stretch;gap:10px;}
+  #dayCast .castTimeStack .timeLine{display:grid;grid-template-columns:minmax(70px,1fr) auto;gap:12px;align-items:center;}
+  #dayCast .castTimeStack .timeLine .k{width:auto;text-align:left;font-weight:600;letter-spacing:0;}
+  #dayCast .castTimeStack .timeInput{width:112px;}
+  #dayCast .castWorkWindow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;border-top:1px solid var(--border);padding-top:9px;}
+  #dayCast .castWorkWindow span{display:block;font-size:11px;color:var(--muted);line-height:1.4;margin-bottom:3px;}
+  #dayCast .castWorkWindow b{display:block;font-size:14px;font-variant-numeric:tabular-nums;}
+  #dayDetailCard .callNotesBox{margin:24px 0 0;border-top:1px solid var(--border);padding-top:14px;}
+  #dayDetailCard .callNotesBox summary{cursor:pointer;font-weight:600;}
+  #dayDetailCard .callNotesBox .miniLbl{display:block;margin-top:14px;}
+  #dayDetailCard .callNotesPrintOption{display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;}
+}
+.csPrintDayNotes small{display:block;font-size:8pt;color:#555;margin-top:2mm;}
+
+.csPrintTime .csPrintEnd{display:inline;font-size:inherit;font-weight:400;}
