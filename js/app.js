@@ -4346,6 +4346,13 @@ function renderDayCast(){
         inp.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ e.preventDefault(); run(); } });
       }
 
+      // Only the scene list scrolls; the selected element stays visible above it.
+      const sceneList = document.createElement("div");
+      sceneList.className = "elxDetailScenes";
+      sceneList.tabIndex = 0;
+      sceneList.setAttribute("role", "region");
+      sceneList.setAttribute("aria-label", "Escenas con este elemento");
+      detailWrap.appendChild(sceneList);
       const scenesList = Array.from(info.sceneIds).map(getScene).filter(Boolean);
       for(const s of scenesList){
         const r = document.createElement("div");
@@ -4364,8 +4371,9 @@ function renderDayCast(){
           renderSceneEditor();
     renderScriptUI();
         });
-        detailWrap.appendChild(r);
+        sceneList.appendChild(r);
       }
+      detailWrap.scrollTop = 0;
     }
   }
 

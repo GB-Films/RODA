@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="css/dialogs.css?v=1.21.1"/>
 <link rel="stylesheet" href="css/shotlist.css?v=1.32.1">
 <link rel="stylesheet" href="css/call-print.css?v=1.33.0">
+<link rel="stylesheet" href="css/elements.css?v=1.33.1">
 </head>
 <body>
   <div class="shell">
@@ -549,25 +550,27 @@
 
       <!-- ================= ELEMENTOS ================= -->
       <section class="view hidden" id="view-elements">
-        <div class="grid2">
-          <div class="card">
+        <div class="grid2 elementsLayout">
+          <div class="card" id="elementsExplorerCard">
             <div class="cardHeader">
               <h2 class="cardTitle">Explorar elementos</h2>
             </div>
             <div class="cardContent">
-              <div class="row gap" style="flex-wrap:wrap;">
-                <input class="input grow" id="elxSearch" placeholder="Buscar elemento…"/>
+              <div class="elxControls">
+                <div class="row gap" style="flex-wrap:wrap;">
+                  <input class="input grow" id="elxSearch" placeholder="Buscar elemento…"/>
+                </div>
+                <div class="spacer"></div>
+                <div class="chips" id="elxCatChips"></div>
+                <div class="chips" id="elxDayChips" style="margin-top:8px;"></div>
+                <select class="input compact hidden" id="elxCategory"></select>
+                <select class="input compact hidden" id="elxDay"></select>
+                <div class="spacer"></div>
               </div>
-              <div class="spacer"></div>
-              <div class="chips" id="elxCatChips"></div>
-              <div class="chips" id="elxDayChips" style="margin-top:8px;"></div>
-              <select class="input compact hidden" id="elxCategory"></select>
-              <select class="input compact hidden" id="elxDay"></select>
-              <div class="spacer"></div>
-              <div id="elxList"></div>
+              <div id="elxList" tabindex="0" role="region" aria-label="Lista de elementos"></div>
             </div>
           </div>
-          <div class="card">
+          <div class="card" id="elementsDetailCard">
             <div class="cardHeader">
               <h2 class="cardTitle">Detalle</h2>
             </div>
