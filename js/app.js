@@ -3424,6 +3424,15 @@ function renderDayDetail(){
     }
   }
 
+  const printNotes=el('callPrintFullNotes');
+  if(printNotes){
+    printNotes.checked=!!d.callPrintFullNotes;printNotes.disabled=isReadOnly();
+    printNotes.onchange=()=>{
+      if(isReadOnly())return;
+      d.callPrintFullNotes=printNotes.checked;touch();
+      renderCallSheetDetail(el('callSheetDetail'),d.id);
+    };
+  }
   renderDayScenesDetail();
 
   renderDayCast();
@@ -3742,17 +3751,19 @@ function renderDayCast(){
           </div>
 
           <div class="right" style="min-width:0;">
-            <div class="crewTimeStack">
+            <div class="crewTimeStack castTimeStack">
               <div class="timeLine">
-                <div class="k">CALL</div>
+                <div class="k">Citación</div>
                 <div style="display:flex; gap:6px; align-items:center; justify-content:flex-end;">
                   <input type="time" class="input timeInput ${callIsOv ? "timeDiffDay" : ""}" value="${call}" data-kind="call" aria-label="Citación de ${escapeHtml(name)}" ${ro ? "disabled" : ""}/>
                   <button class="btn icon ghost small" title="Reset CALL" data-kind="callReset" ${ro ? "disabled" : ""}>↺</button>
                 </div>
               </div>
 
-              <div class="timeLine"><div class="k">PRIMERA</div><b>${RodaCast.workWindow(state,d,name)?.first||'—'}</b></div>
-              <div class="timeLine"><div class="k">FIN EST.</div><b>${RodaCast.workWindow(state,d,name)?.end||'—'}</b></div>
+              <div class="castWorkWindow">
+                <div><span>Primera escena</span><b>${RodaCast.workWindow(state,d,name)?.first||'—'}</b></div>
+                <div><span>Fin estimado</span><b>${RodaCast.workWindow(state,d,name)?.end||'—'}</b></div>
+              </div>
 
               ${d.pickupCastEnabled ? `
                 <div class="timeLine">
@@ -7724,232 +7735,12 @@ grid.appendChild(cell);
     }
   }
 
-  function renderCallSheetDetail(targetWrap=null, dayIdOverride=null){ /* ... sin cambios ... */ 
-    const wrap = targetWrap || el("callSheetDetail");
-    if(!wrap) return;
-    wrap.innerHTML = "";
-
-    const d = dayIdOverride ? getDay(dayIdOverride) : (callSheetDayId ? getDay(callSheetDayId) : (selectedDayId ? getDay(selectedDayId) : null));
-    if(!d){
-      wrap.innerHTML = `<div class="catBlock"><div class="items">Elegí un día con rodaje.</div></div>`;
-      return;
-    }
-    ensureProjectConfig();
-    ensureDayTimingMaps(d);
-    // Mantener consistencia con Call Diario (evita estados viejos que cambian colores/overrides)
-    cleanupDayCallTimes(d);
-    cleanupDayExtras(d);
-    const dayBase = baseDayCall(d);
-    const castBase = baseCastCall(d);
-
-    const scenes = (d.sceneIds||[]).map(getScene).filter(Boolean);
-    const cast = RodaCast.dayRoster(state,d);
-
-    const crewAll = (d.crewIds||[])
-      .map(id=>state.crew.find(c=>String(c.id)===String(id)))
-      .filter(Boolean)
-      .map(c=>({ ...c, area: normalizeCrewArea(c.area) }))
-      .filter(c=>c.area!=="Cast");
-
-    const crewGrouped = groupCrewByArea(crewAll);
-
-    const header = document.createElement("div");
-    header.className = "catBlock callHeader";
-    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
-    header.innerHTML = `
-      <div class="hdr"><span class="dot" style="background:var(--cat-props)"></span>${esc(state.meta.title||"Proyecto")}</div>
-      <div class="items">
-        <div><b>Día:</b> ${esc(formatDayTitle(d.date))}${d.label? " · "+esc(d.label):""}</div>
-        <div><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
-        <div class="kpiRow" style="margin-top:10px;">
-          <span class="kpi"><b>${scenes.length}</b> escenas</span>
-          <span class="kpi"><b>${fmtPages(pages)}</b> pág</span>
-          <span class="kpi"><b>${cast.length}</b> cast</span>
-          <span class="kpi"><b>${crewAll.length}</b> crew</span>
-        </div>
-        ${d.notes ? `<div style="margin-top:8px;"><b>Notas:</b> ${esc(d.notes)}</div>` : ""}
-      </div>
-    `;
-    wrap.appendChild(header);
-
-    const snapMin = Number(el("schedSnap")?.value || 15);
-
-
-    const scenesBox = document.createElement("div");
-    scenesBox.className = "catBlock callScenes";
-    scenesBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-vehicles)"></span>Itinerario</div>`;
-    const list = document.createElement("div");
-    list.className = "items";
-
-    const timeline = [];
-    try{
-      for(const sid of (d.sceneIds||[])){
-      const s = getScene(sid);
-      if(!s) continue;
-      timeline.push({
-        kind:"scene",
-        id:sid,
-        start: Number(d.times?.[sid] ?? 0) || 0,
-        dur:   Number(d.durations?.[sid] ?? 60) || 0,
-        title: `#${s.number||""} ${s.slugline||""}`.trim(),
-        detail: [
-          s.intExt||"",
-          s.location||"",
-          s.timeOfDay||"",
-          (Number(s.pages)||0) > 0 ? `${fmtPages(s.pages)} pág` : ""
-        ].filter(Boolean).join(" · "),
-        color: d.sceneColors?.[sid] || ""
-      });
-    }
-    for(const b of (d.blocks||[])){
-      timeline.push({
-        kind:"block",
-        id:b.id,
-        start: Number(b.startMin ?? 0) || 0,
-        dur:   Number(b.durMin ?? 0) || 0,
-        title: b.title || "Nota",
-        detail: b.detail || "",
-        color: b.color || ""
-      });
-    }
-    timeline.sort((a,b)=> (a.start||0) - (b.start||0));
-    }catch(e){ console.warn('CallSheet timeline:', e); }
-
-    if(!timeline.length){
-      list.innerHTML = `<div>—</div>`;
-    }else{
-      list.innerHTML = timeline.map(it=>{
-        const time = d.callTime ? fmtClockFromCall(d.callTime, it.start) : `+${it.start}m`;
-        const du = Math.round(it.dur||0);
-        const border = it.color ? `border-left:6px solid ${esc(it.color)}; padding-left:10px;` : "";
-        const main = it.kind==="scene"
-          ? `<b>#${esc(getScene(it.id)?.number||"")}</b> ${esc(getScene(it.id)?.slugline||"")}`
-          : `<b>${esc(it.title||"Nota")}</b>${it.detail ? ` <span class="muted">— ${esc(it.detail)}</span>` : ""}`;
-
-        const sub = (it.kind==="scene" && it.detail) ? `<div class="muted small">${esc(it.detail)}</div>` : ``;
-
-        return `<div style="${border}"><b>${time}</b> · <span class="muted">(${esc(formatDuration(du))})</span> · ${main}${sub}</div>`;
-      }).join("");
-    }
-
-    scenesBox.appendChild(list);
-    wrap.appendChild(scenesBox);
-
-    if(d.castTransportNote){const note=document.createElement('p');note.className='muted small';note.textContent=d.castTransportNote;wrap.append(note);}
-    const castBox = document.createElement("div");
-    castBox.className = "catBlock callCast";
-    castBox.innerHTML = `
-      <div class="hdr"><span class="dot" style="background:${catColors.cast}"></span>Cast</div>
-      <div class="items">
-        <table class="callTimeTable callTimeTable--cast">
-          <thead>
-            <tr>
-              <th>Actor / actriz</th>
-              <th>Personaje</th>
-              <th class="time">PU</th>
-              <th class="time">Citación</th><th class="time">Primera escena</th><th class="time">Fin estimado</th>
-              <th class="time">RTS</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${cast.length ? cast.map(n=>{
-              const castRec = findCastCrewEntryByName(n);
-              const actorName = String(castRec?.name || "").trim();
-              const roleDisp = n;
-              const nameDisp = actorName || 'Sin asignar';
-              const call = effectiveCastCall(d, n);
-              const pu = d.pickupCastEnabled ? effectiveCastPU(d, n) : "—";
-              const rts = d.rtsEnabled ? effectiveCastRTS(d, n) : "—";
-              const diff = call !== castBase;
-              const sem = diff ? "yellow" : "green";
-              const tdCls = diff ? "timeDiffDay" : "";
-
-              // PU/RTS: en Call Diario el resaltado indica *override* (no se hereda del Call)
-              const basePu = shiftHHMM(call, Number(d.pickupCastOffsetMin ?? -30));
-              const puOv = normalizeHHMM(d?.castPickUpTimes?.[n]);
-              const puIsOv = d.pickupCastEnabled && !!puOv && puOv !== basePu;
-
-              const rtsOff = Number(d.rtsOffsetMin ?? Number(state?.project?.rtsOffsetMin ?? 60));
-              const baseRts = shiftHHMM(call, rtsOff);
-              const rtsOv = normalizeHHMM(d?.castRTSTimes?.[n]);
-              const rtsIsOv = d.rtsEnabled && !!rtsOv && rtsOv !== baseRts;
-
-              const puSem = puIsOv ? "yellow" : "green";
-              const rtsSem = rtsIsOv ? "yellow" : "green";
-              const puCls = (puIsOv && pu !== "—") ? "timeDiffDay" : "";
-              const rtsCls = (rtsIsOv && rts !== "—") ? "timeDiffDay" : "";
-              const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${puSem}"></span><b>${esc(pu)}</b>`;
-              const rtsCell = (rts === "—") ? "—" : `<span class="callTimeDot ${rtsSem}"></span><b>${esc(rts)}</b>`;
-              return `<tr>
-                <td class="name">${esc(nameDisp)}</td>
-                <td>${esc(roleDisp)}</td>
-                <td class="time ${puCls}">${puCell}</td>
-                <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
-                <td class="time"><b>${esc(RodaCast.workWindow(state,d,n)?.first||"—")}</b></td><td class="time"><b>${esc(RodaCast.workWindow(state,d,n)?.end||"—")}</b></td>
-                <td class="time ${rtsCls}">${rtsCell}</td>
-              </tr>`;
-            }).join("") : `<tr><td colspan="7" class="mutedCell">—</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    `;
-    wrap.appendChild(castBox);
-
-    const crewBox = document.createElement("div");
-    crewBox.className = "catBlock callCrew";
-    crewBox.innerHTML = `<div class="hdr"><span class="dot" style="background:var(--cat-sound)"></span>Crew</div>`;
-    const crewItems = document.createElement("div");
-    crewItems.className = "items";
-    if(!crewAll.length){
-      crewItems.innerHTML = `<div>—</div>`;
-    }else{
-      crewItems.innerHTML = `
-        <table class="callTimeTable callTimeTable--crew">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Rol</th>
-              <th class="time">PU</th>
-              <th class="time">Call</th>
-              <th>Tel</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${crewGrouped.map(([area, arr])=>{
-              const areaBase = baseCrewAreaCall(d, area);
-              const areaRow = `<tr class="crewAreaRow"><td colspan="5">${esc(area)}</td></tr>`;
-              const rows = arr.map(c=>{
-                const call = effectiveCrewCall(d, c);
-                const pu = d.pickupCrewEnabled ? effectiveCrewPU(d, c) : "—";
-                const diffArea = call !== areaBase;
-                const diffDay = call !== dayBase;
-                const sem = diffArea ? "red" : (diffDay ? "yellow" : "green");
-                const tdCls = diffArea ? "timeDiffArea" : (diffDay ? "timeDiffDay" : "");
-
-                // PU: en Call Diario el resaltado indica override propio (no hereda del Call)
-                const basePu = shiftHHMM(call, Number(d.pickupCrewOffsetMin ?? -30));
-                const puOv = normalizeHHMM(d?.crewPickUpTimes?.[c.id]);
-                const puIsOv = d.pickupCrewEnabled && !!puOv && puOv !== basePu;
-                const puSem = puIsOv ? "yellow" : "green";
-                const puCls = (puIsOv && pu !== "—") ? "timeDiffDay" : "";
-                const puCell = (pu === "—") ? "—" : `<span class="callTimeDot ${puSem}"></span><b>${esc(pu)}</b>`;
-
-                return `<tr>
-                  <td class="name">${esc(c.name||"")}</td>
-                  <td>${esc(c.role||"")}</td>
-                  <td class="time ${puCls}">${puCell}</td>
-                  <td class="time ${tdCls}"><span class="callTimeDot ${sem}"></span><b>${esc(call)}</b></td>
-                  <td class="tel">${c.phone ? esc(c.phone) : "—"}</td>
-                </tr>`;
-              }).join("");
-              return areaRow + rows;
-            }).join("")}
-          </tbody>
-        </table>
-      `;
-    }
-    crewBox.appendChild(crewItems);
-    wrap.appendChild(crewBox);
+  function renderCallSheetDetail(targetWrap=null, dayIdOverride=null){
+    const wrap=targetWrap||el('callSheetDetail');
+    if(!wrap)return;
+    const d=getDay(dayIdOverride||callSheetDayId||selectedDayId);
+    wrap.classList.add('csPrintPreview');
+    wrap.innerHTML=d?buildCallSheetPrint(d):'<p>Elegí un día con rodaje.</p>';
   }
 
   // ===================== REPORTES (Plan de Rodaje / Call Sheet / Shotlist) =====================
@@ -8654,23 +8445,33 @@ function renderReportDayplanDetail(d){
 
   
   // Print has its own layout; use the same timing/assignment helpers as Call Diario.
+  function callSheetNotes(d){
+    const full=String(d.notes||'').trim();
+    if(d.callPrintFullNotes||full.length<=500)return {text:full,excerpt:false};
+    const prefix=full.slice(0,500),sentence=prefix.search(/[.!?]\s+[^.!?]*$/);
+    const end=sentence>=250?sentence+1:prefix.lastIndexOf(' ');
+    return {text:prefix.slice(0,end>0?end:500).trim()+'…',excerpt:true};
+  }
+
   function buildCallSheetPrint(d){
     const scenes=(d.sceneIds||[]).map(getScene).filter(Boolean);
     const timeline=[...scenes.map(s=>({scene:s,start:Number(d.times?.[s.id]??0),dur:Number(d.durations?.[s.id]??60)})),
       ...(d.blocks||[]).map(b=>({block:b,start:Number(b.startMin??0),dur:Number(b.durMin??0)}))].sort((a,b)=>a.start-b.start);
     const clock=min=>fmtClockFromCall(baseDayCall(d),min);
     const title=state.meta?.title||'Proyecto';
+    const notes=callSheetNotes(d);
     const dayTitle=[formatDayTitle(d.date),d.label].filter(Boolean).join(' · ');
     const table=(kind,heading,columns,rows)=>`<table class="csPrintTable csPrintTable--${kind}"><colgroup>${columns.map(c=>`<col${c.width?` style="width:${c.width}"`:''}>`).join('')}</colgroup><thead><tr class="csPrintSection"><th colspan="${columns.length}"><span>${heading}</span><small>${esc(title)} · ${esc(dayTitle)}</small></th></tr><tr>${columns.map(c=>`<th scope="col">${c.label}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td colspan="${columns.length}">Sin integrantes asignados a esta jornada.</td></tr>`}</tbody></table>`;
     const timeCell=(value,main=false)=>`<td class="csPrintTime${main?' csPrintCall':''}">${esc(value||'—')}</td>`;
     const agenda=timeline.map(it=>{
       const s=it.scene,b=it.block;
       const heading=s?.slugline||'';
-      const sceneDetail=s?[s.intExt,s.location,s.timeOfDay].filter(value=>value&&!heading.toLocaleLowerCase('es').includes(String(value).toLocaleLowerCase('es'))).join(' · '):'';
+      const labelKey=value=>String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,' ').trim().toLowerCase();
+      const sceneDetail=s?[s.intExt,s.location,s.timeOfDay].filter(value=>value&&!labelKey(heading).includes(labelKey(value))).join(' · '):'';
       const detail=s?[sceneDetail,Number(s.pages)>0?`${fmtPages(s.pages)} pág`:'' ].filter(Boolean).join(' · '):(b.detail||'');
-      return `<tr class="${b?'csPrintBlock':''}"><td class="csPrintTime"><b>${esc(clock(it.start))}</b><span>${esc(clock(it.start+it.dur))}</span></td><td class="csPrintTime">${esc(formatDuration(Math.round(it.dur)))}</td><td class="csPrintScene">${s?esc(s.number||'—'):'—'}</td><td><strong>${esc(s?s.slugline:(b.title||'Bloque'))}</strong>${detail?`<p>${esc(detail)}</p>`:''}</td></tr>`;
+      return `<tr class="${b?'csPrintBlock':''}"><td class="csPrintTime"><b>${esc(clock(it.start))}</b><span class="csPrintEnd"> - ${esc(clock(it.start+it.dur))}</span></td><td class="csPrintTime">${esc(formatDuration(Math.round(it.dur)))}</td><td class="csPrintScene">${s?esc(s.number||'—'):'—'}</td><td><strong>${esc(s?s.slugline:(b.title||'Bloque'))}</strong>${detail?`<p>${esc(detail)}</p>`:''}</td></tr>`;
     }).join('')||'<tr><td colspan="4">Sin escenas ni bloques programados.</td></tr>';
-    const castColumns=[{label:'Actor / actriz · personaje',width:''},...(d.pickupCastEnabled?[{label:'Recogida<br>(PU)',width:'15%'}]:[]),{label:'Citación',width:'15%'},{label:'Primera<br>escena',width:'15%'},{label:'Fin<br>estimado',width:'15%'},...(d.rtsEnabled?[{label:'Listo en set<br>(RTS)',width:'15%'}]:[])];
+    const castColumns=[{label:'Actor / actriz · personaje',width:''},...(d.pickupCastEnabled?[{label:'Recogida<br>(PU)',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')}]:[]),{label:'Citación',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')},{label:'Primera<br>escena',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')},{label:'Fin<br>estimado',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')},...(d.rtsEnabled?[{label:'Listo en set<br>(RTS)',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')}]:[])];
     // Group only identical calls for the same person; retain any role-specific overrides.
     const castGroups=new Map();
     for(const role of RodaCast.dayRoster(state,d)){
@@ -8690,24 +8491,27 @@ function renderReportDayplanDetail(d){
       <header class="csPrintHeader"><div class="csPrintEyebrow">Call diario · Hoja de llamado</div><h1>${esc(title)}</h1><p class="csPrintDay">${esc(dayTitle)}</p>
         <div class="csPrintSummary"><div><span>Citación general</span><strong>${esc(baseDayCall(d))}</strong></div><div><span>Fin de jornada estimado</span><strong>${esc(close)}</strong></div><div><span>Locación</span><strong>${esc(d.location||'Sin asignar')}</strong></div></div>
       </header>
-      ${table('agenda','01 / Itinerario',[{label:'Inicio / fin',width:'15%'},{label:'Duración',width:'14%'},{label:'Esc.',width:'8%'},{label:'Escena / actividad'}],agenda)}
+      ${table('agenda','01 / Itinerario',[{label:'Inicio / fin',width:'21%'},{label:'Duración',width:'11%'},{label:'Esc.',width:'6%'},{label:'Escena / actividad'}],agenda)}
       <section class="csPrintPeople">${table('cast','02 / Elenco · citaciones',castColumns,castRows)}
+        ${crew.length?table('crew','03 / Equipo · contactos',crewColumns,crewRows):''}
         ${d.castTransportNote?`<div class="csPrintNote"><h2>Traslados del elenco</h2><p>${esc(d.castTransportNote)}</p></div>`:''}
-        ${table('crew','03 / Equipo · contactos',crewColumns,crewRows)}
-        ${d.notes?`<div class="csPrintNote"><h2>Notas de la jornada</h2><p>${esc(d.notes)}</p></div>`:''}
+        ${notes.text?`<div class="csPrintNote csPrintDayNotes"><h2>Notas de la jornada${notes.excerpt?' · extracto':''}</h2><p>${esc(notes.text)}</p>${notes.excerpt?'<small>Texto completo disponible en Roda.</small>':''}</div>`:''}
       </section>
     </article>`;
   }
 
-  function printCallSheetByDayId(dayId){
-    const d = dayId ? getDay(dayId) : null;
-    if(!d){ toast("Elegí un día con rodaje"); return; }
+  function prepareCallSheetPrint(dayId){
+    const d=dayId?getDay(dayId):null;
+    if(!d)return false;
     applyPrintDeviceFlag();
-    const root = ensureGbPrintRoot();
-    root.innerHTML = buildCallSheetPrint(d);
-    document.body.classList.add("gbPrintingCallsheet");
-    setPrintOrientation("portrait", 12);
-    try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+    ensureGbPrintRoot().innerHTML=buildCallSheetPrint(d);
+    document.body.classList.add('gbPrintingCallsheet');
+    setPrintOrientation('portrait',12);
+    return true;
+  }
+  function printCallSheetByDayId(dayId){
+    if(!prepareCallSheetPrint(dayId)){toast('Elegí un día con rodaje');return;}
+    try{window.print();}finally{clearPrintOrientation();cleanupGbPrintRoot();}
   }
 
   function printElementsByDayId(dayId){
@@ -10230,6 +10034,13 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
       }
       const print = el("reportDayplanDetail")?.querySelector(".printOnly");
       printDayplanContents(print?.innerHTML);
+    });
+    // Ctrl+P / browser menu must use the same document as our Print buttons.
+    window.addEventListener('beforeprint',()=>{
+      if([...document.body.classList].some(name=>name.startsWith('gbPrinting')))return;
+      const view=document.body.dataset.rodaView;
+      if(view==='shooting')prepareCallSheetPrint(selectedDayId);
+      else if(view==='callsheet'&&reportsTab==='callsheet')prepareCallSheetPrint(getReportsSelectedDayId());
     });
     window.addEventListener("afterprint", ()=>{ clearPrintOrientation(); cleanupGbPrintRoot(); });
 

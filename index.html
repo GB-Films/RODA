@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="css/team.css?v=1.34.0">
 <link rel="stylesheet" href="css/dialogs.css?v=1.21.1"/>
 <link rel="stylesheet" href="css/shotlist.css?v=1.32.1">
-<link rel="stylesheet" href="css/call-print.css?v=1.33.0">
+<link rel="stylesheet" href="css/call-print.css?v=1.34.1">
 <link rel="stylesheet" href="css/elements.css?v=1.33.1">
 </head>
 <body>
@@ -349,11 +349,6 @@
               </div>
 
               <div class="cardContent">
-                  <div class="callNotesBox">
-                    <div class="miniLbl">Notas</div>
-                    <textarea class="textarea smallArea" id="callDayNotes" placeholder="Notas del día…"></textarea>
-                  </div>
-                  
                   <div class="dayDetail3col">
   <!-- Col 1 -->
   <div class="col">
@@ -373,6 +368,13 @@
     <div id="dayCrewPicker"></div>
   </div>
 </div>
+                  <details class="callNotesBox">
+                    <summary>Notas de la jornada</summary>
+                    <label class="miniLbl" for="callDayNotes">Notas internas y recordatorios</label>
+                    <textarea class="textarea smallArea" id="callDayNotes" placeholder="Notas del día…"></textarea>
+                    <label class="callNotesPrintOption"><input type="checkbox" id="callPrintFullNotes"/> Incluir notas completas en la impresión</label>
+                    <p class="muted small">El PDF incluye un extracto breve al final. El texto completo se conserva acá.</p>
+                  </details>
               </div>
             </div>
 
