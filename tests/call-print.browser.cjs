@@ -9,7 +9,7 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
   if(req.url==='/roda/'){res.setHeader('Content-Type','text/html');return res.end(html);}
   const relative=decodeURIComponent(req.url.split('?')[0]);
   const file=path.join(studio?root:appRoot,studio?relative:relative.replace(/^\/roda\//,'/'));
-  res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'})[path.extname(file)]||'text/plain');
+  res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png'})[path.extname(file)]||'text/plain');
   fs.readFile(file,(e,data)=>e?res.writeHead(404).end():res.end(data));
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
@@ -43,7 +43,10 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
    sessionStorage.setItem('gb_edit_unlocked__default','1');
    window.savedState=structuredClone(data);window.savedWrites=0;
    window.StorageLayer=new Proxy({loadCfg:()=>({backend:'local',projects:[]}),loadLocal:()=>data,getProjects:()=>[],saveLocal:s=>{window.savedState=structuredClone(s);window.savedWrites++;}}, {get:(target,key)=>target[key]||(()=>null)});
-   window.print=()=>{window.printSnapshot=document.documentElement.outerHTML;};
+   window.print=()=>{
+     window.printScreen={root:getComputedStyle(document.querySelector('#gbPrintRoot')).display,shell:getComputedStyle(document.querySelector('.shell')).display,visibility:getComputedStyle(document.querySelector('.shell')).visibility,header:getComputedStyle(document.querySelector('.studio-global-header')).visibility,bodyBackground:getComputedStyle(document.body).backgroundColor};
+     window.printSnapshot=document.documentElement.outerHTML;
+   };
   },seed);
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
@@ -52,6 +55,10 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
   const before=await page.evaluate(()=>JSON.stringify(savedState.shootDays)),writes=await page.evaluate(()=>savedWrites);
   async function inspectPrint(name){
    await page.waitForFunction(()=>!!window.printSnapshot);
+   const screen=await page.evaluate(()=>window.printScreen);
+   assert.equal(screen.root,'none','Print document stays hidden behind the print dialog');
+   assert.notEqual(screen.shell,'none','The app remains on screen');assert.equal(screen.visibility,'visible');assert.equal(screen.header,'visible');
+   assert.equal(screen.bodyBackground,await page.locator('body').evaluate(e=>getComputedStyle(e).backgroundColor),'Preparing print does not recolor the app');
    const captured=await page.evaluate(()=>window.printSnapshot);assert.match(captured,/@page\{ size:A4 portrait; margin:12mm;/);
    const pdf=await browser.newPage({viewport:{width:794,height:1123}});await pdf.route('https://**/*',r=>r.abort());
    await pdf.emulateMedia({media:'print'});
@@ -72,7 +79,7 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
    }
    assert.equal(await doc.locator('.csPrintTable--agenda tbody tr').first().evaluate(e=>getComputedStyle(e).breakInside),'avoid');
    assert.equal(await doc.locator('.csPrintTable thead').first().evaluate(e=>getComputedStyle(e).display),'table-header-group');
-   assert.equal(await doc.locator('.csPrintPeople').evaluate(e=>getComputedStyle(e).breakBefore),'page');
+   assert.equal(await doc.locator('.csPrintPeople').evaluate(e=>getComputedStyle(e).breakBefore),'auto');
    assert.deepEqual(await doc.locator('.csPrintTable th,.csPrintTable td').evaluateAll(cells=>cells.filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent)),[],'No clipped or overlapping cells');
    if(!process.env.RODA_CALL_PRINT_FIXTURE){
     assert.equal(await doc.locator('.csPrintTable--cast tbody tr').count(),process.env.RODA_CALL_PRINT_STRESS?38:2);
@@ -82,8 +89,15 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
     assert.equal(await doc.locator('.csPrintTable--cast thead tr').last().locator('th').count(),process.env.RODA_CALL_PRINT_EXTRAS?6:4,'Transport columns shown only when enabled');
     if(process.env.RODA_CALL_PRINT_EXTRAS){assert.match(await actor.textContent(),/07:10[\s\S]*08:20[\s\S]*08:35/);assert.match(await doc.locator('.csPrintTable--crew').textContent(),/07:00[\s\S]*07:40/);}
    }
+   if(await pdf.locator('#gbPrintRoot .productionPrintBrand').count()){
+    assert.match(await pdf.locator('#gbPrintRoot .productionPrintBrand').textContent(),/GRANBERTA FILMS/);
+    assert.ok(await pdf.locator('#gbPrintRoot .productionPrintBrand img').evaluate(e=>e.complete&&e.naturalWidth>0),'Studio logo is loaded');
+   }
    await pdf.pdf({path:path.join(output,name+'.pdf'),preferCSSPageSize:true,printBackground:true});
    await pdf.pdf({path:path.join(output,name+'-sin-fondos.pdf'),preferCSSPageSize:true,printBackground:false});
+   // Chrome's “Minimum” margin choice must still leave inner paper gutters.
+   await pdf.addStyleTag({content:'@page rodaCallSheet{margin:3.175mm;}'});
+   await pdf.pdf({path:path.join(output,name+'-minimum-margins.pdf'),preferCSSPageSize:true,printBackground:true});
    await pdf.screenshot({path:path.join(output,name+'.png'),fullPage:true});await pdf.close();
    assert.equal(await page.evaluate(()=>JSON.stringify(savedState.shootDays)),before,'Printing must not change timings');
    assert.equal(await page.evaluate(()=>savedWrites),writes,'Printing must not save the project');

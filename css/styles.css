@@ -1493,6 +1493,8 @@ body.readOnly .daySwapHint{ display:none; }
 .shotSceneBox.selected .shotSceneHead::before{
   background: rgba(var(--accent-rgb), .92);
 }
+@media print {
+
 
 /* Print: asegurar contraste (fondo blanco) */
 body.gbPrintingShotlist .shotSceneBox{
@@ -1500,104 +1502,296 @@ body.gbPrintingShotlist .shotSceneBox{
   border:1px solid #ddd !important;
   box-shadow:none !important;
 }
+}
+
+@media print {
+
 body.gbPrintingShotlist .shotSceneHead{
   background:#f6f6f6 !important;
   border-bottom:1px solid #ddd !important;
 }
+}
+
+@media print {
+
 body.gbPrintingShotlist .shotSceneHead::before{ display:none !important; }
+}
+
+@media print {
+
 body.gbPrintingShotlist .shotTableWrap{ background:#fff !important; }
+}
+
+@media print {
+
 body.gbPrintingShotlist .tableWrap{ border-color:#ddd !important; background:#fff !important; }
+}
+
+@media print {
+
 body.gbPrintingShotlist .table th{ background:#f6f6f6 !important; color:#111 !important; border-bottom:1px solid #ddd !important; }
+}
+
+@media print {
+
 body.gbPrintingShotlist .table td{ color:#000 !important; border-bottom:1px solid #ddd !important; }
+}
+
 
 /* ===== Shotlist print (unificado) ===== */
 #gbPrintRoot{ display:none; }
+@media print {
+
 
 /* ===== Print (fallback tambiÃ©n en screen para mÃ³viles) ===== */
 body.gbPrintingShotlist *{ visibility:hidden !important; }
+}
+
+@media print {
+
 body.gbPrintingShotlist #gbPrintRoot,
 body.gbPrintingShotlist #gbPrintRoot *{ visibility:visible !important; }
+}
+
+@media print {
+
 body.gbPrintingShotlist #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
+}
+
+@media print {
+
 
 body.gbPrintingCallsheet *{ visibility:hidden !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet #gbPrintRoot,
 body.gbPrintingCallsheet #gbPrintRoot *{ visibility:visible !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
+}
+
+@media print {
+
 
 body.gbPrintingElements *{ visibility:hidden !important; }
+}
+
+@media print {
+
 body.gbPrintingElements #gbPrintRoot,
 body.gbPrintingElements #gbPrintRoot *{ visibility:visible !important; }
+}
+
+@media print {
+
 body.gbPrintingElements #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
+}
+
+@media print {
+
 
 body.gbPrintingShotlist .muted,
 body.gbPrintingCallsheet .muted,
 body.gbPrintingElements .muted{ color:#333 !important; }
+}
+
+@media print {
+
 
 /* Call Sheet: asegurar contraste aunque el browser ignore @media print */
 body.gbPrintingCallsheet #gbPrintRoot,
 body.gbPrintingCallsheet #gbPrintRoot *{ color:#000 !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet .catBlock{ background:#fff !important; border:1px solid #ddd !important; overflow:visible !important; border-radius:0 !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet .catBlock .hdr{ background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; color:#111 !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet .kpi{ background:#f6f6f6 !important; border:1px solid #ddd !important; color:#111 !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet .kpi b{ color:#000 !important; }
+}
+
+@media print {
+
 
 body.gbPrintingCallsheet #gbPrintRoot .callSheetPrintPage{ width:100% !important; max-width:190mm !important; box-sizing:border-box; margin:0 auto !important; }
+}
+
+@media print {
+
 
 body.gbPrintingCallsheet .callTimeTable{ background:#fff !important; border-color:#ddd !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet .callTimeTable thead{ display: table-header-group !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet .callTimeTable th{ color:#111 !important; background:#f6f6f6 !important; border-bottom:1px solid #ddd !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet .callTimeTable td{ color:#000 !important; border-bottom:1px solid #ddd !important; }
+}
+
+@media print {
+
 
 /* Mobile print: todo entra en A4 */
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot{ font-size:10.5pt !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .catBlock .items{ font-size:10.5pt !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable th,
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable td{ padding:5px 6px !important; font-size:10pt !important; line-height:1.15; }
+}
+
+@media print {
+
 
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(2),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(2){ width:130px !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(4),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(4),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(5),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(5){ width:64px !important; }
+}
+
+@media print {
+
 
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(2),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(2){ width:130px !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(4),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(4){ width:64px !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(5),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(5){ width:64px !important; }
+}
+
+@media print {
+
 
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewArea{ border:1px solid #ddd !important; border-radius:12px !important; padding:8px !important; }
+}
+
+@media print {
+
 
 /* ===== Print (fallback también en screen para móviles) ===== */
 body.gbPrintingShotlist *{ visibility:hidden !important; }
+}
+
+@media print {
+
 body.gbPrintingShotlist #gbPrintRoot,
 body.gbPrintingShotlist #gbPrintRoot *{ visibility:visible !important; }
+}
+
+@media print {
+
 body.gbPrintingShotlist #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
+}
+
+@media print {
+
 
 body.gbPrintingCallsheet *{ visibility:hidden !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet #gbPrintRoot,
 body.gbPrintingCallsheet #gbPrintRoot *{ visibility:visible !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
+}
+
+@media print {
+
 
 body.gbPrintingElements *{ visibility:hidden !important; }
+}
+
+@media print {
+
 body.gbPrintingElements #gbPrintRoot,
 body.gbPrintingElements #gbPrintRoot *{ visibility:visible !important; }
+}
+
+@media print {
+
 body.gbPrintingElements #gbPrintRoot{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0 !important; margin:0 !important; background:#fff; color:#000; }
+}
+
+@media print {
+
 
 body.gbPrintingShotlist .muted,
 body.gbPrintingCallsheet .muted,
 body.gbPrintingElements .muted{ color:#333 !important; }
+}
+
+@media print {
+
 
 /* Call Sheet print: asegurar contraste aunque el navegador ignore @media print */
 body.gbPrintingCallsheet #gbPrintRoot,
 body.gbPrintingCallsheet #gbPrintRoot *{ color:#000 !important; }
+}
+
+@media print {
+
 body.gbPrintingCallsheet #gbPrintRoot .muted{ color:#333 !important; }
+}
+
+@media print {
+
 
 body.gbPrintingCallsheet #gbPrintRoot .callSheetPrintPage{
   width:100% !important;
@@ -1605,26 +1799,58 @@ body.gbPrintingCallsheet #gbPrintRoot .callSheetPrintPage{
   margin:0 auto !important;
   box-sizing:border-box;
 }
+}
+
+@media print {
+
 
 /* Mobile print: ajustar para A4 sin tener que pedirle A3 al teléfono */
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot{ font-size:10.5pt !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .catBlock .items{ font-size:10.5pt !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable th,
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable td{ padding:5px 6px !important; font-size:10pt !important; line-height:1.2; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(2),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(2){ width:130px !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(4),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(4),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast th:nth-child(5),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--cast td:nth-child(5){ width:64px !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(3),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(4),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(4){ width:64px !important; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew th:nth-child(5),
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callTimeTable--crew td:nth-child(5){ width:64px !important; }
+}
+
+@media print {
+
 
 /* Mobile print: contenedores por Área de Crew */
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewArea{
@@ -1635,7 +1861,13 @@ body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewArea{
   break-inside: avoid;
   page-break-inside: avoid;
 }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingCallsheet #gbPrintRoot .callCrewAreaTitle{ margin-bottom:6px !important; font-weight:900 !important; }
+}
+
 
 
 
@@ -2435,9 +2667,19 @@ gap:6px 10px;
 .dayplanPrintTable tr.dpPrintNote td{
   font-weight:750;
 }
+@media print {
+
 
 body.gbPrintingDayplan{ margin:0 !important; padding:0 !important; background:#fff !important; }
+}
+
+@media print {
+
 body.gbPrintingDayplan > *{ display:none !important; }
+}
+
+@media print {
+
 body.gbPrintingDayplan #gbPrintRoot{
   display:block !important;
   position:absolute;
@@ -2452,24 +2694,42 @@ body.gbPrintingDayplan #gbPrintRoot{
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
+}
+
+@media print {
+
 body.gbPrintingDayplan #gbPrintRoot *{
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
+}
+
+@media print {
+
 body.gbPrintingDayplan #gbPrintRoot .catBlock{
   background:#fff !important;
   border:1px solid #ddd !important;
   border-radius:0 !important;
   overflow:visible !important;
 }
+}
+
+@media print {
+
 body.gbPrintingDayplan #gbPrintRoot .catBlock .hdr{
   background:#f6f6f6 !important;
   border-bottom:1px solid #ddd !important;
   color:#111 !important;
 }
+}
+
+@media print {
+
 body.gbPrintingDayplan #gbPrintRoot .catBlock .items{
   overflow:visible !important;
 }
+}
+
 
 .dayplanTable .dpHandle{
   cursor:grab;
@@ -3654,11 +3914,15 @@ body.gbPrintingDayplan #gbPrintRoot .catBlock .items{
   letter-spacing:.04em;
   font-size:11px;
 }
+@media print {
+
 body.gbPrintingCallsheet .crewAreaRow td{
   background:#f0f0f0 !important;
   color:#111 !important;
   border-bottom:1px solid #ddd !important;
 }
+}
+
 
 /* Call Sheet: Tel (no es hora, puede wrappear) */
 .callTimeTable td.tel{
@@ -3698,6 +3962,8 @@ body.gbPrintingCallsheet .crewAreaRow td{
 .callTimeTable--crew th:nth-child(5), .callTimeTable--crew td:nth-child(5){
   width:78px;
 }
+@media print {
+
 
 /* Call Sheet (print): Nombre más angosto para que Rol quede más a la izquierda + Tel 50% más ancho */
 body.gbPrintingCallsheet .callTimeTable--cast th:nth-child(1),
@@ -3706,10 +3972,16 @@ body.gbPrintingCallsheet .callTimeTable--crew th:nth-child(1),
 body.gbPrintingCallsheet .callTimeTable--crew td:nth-child(1){
   width:190px !important;
 }
+}
+
+@media print {
+
 body.gbPrintingCallsheet .callTimeTable--crew th:nth-child(5),
 body.gbPrintingCallsheet .callTimeTable--crew td:nth-child(5){
   width:117px !important; /* 78px * 1.5 */
 }
+}
+
 
 
 @media screen and screen and (max-width: 420px){
@@ -3838,14 +4110,36 @@ body.readOnly #callDayNotes{
 .pgTime{ white-space:nowrap; font-variant-numeric: tabular-nums; }
 .pgDur{ text-align:right; white-space:nowrap; font-variant-numeric: tabular-nums; }
 .pgRowNote td{ font-style:italic; }
+@media print {
+
 
 body.gbPrintMobile.gbPrintingSchedule .pgGrid{ grid-template-columns: repeat(1, 1fr); }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingSchedule .pgTitle{ font-size:16pt; }
+}
+
+@media print {
+
 body.gbPrintMobile.gbPrintingSchedule .pgTable th,
 body.gbPrintMobile.gbPrintingSchedule .pgTable td{ padding:5px 8px; font-size:9pt; }
+}
+
+@media print {
+
 
 body.gbPrintingSchedule{ margin:0 !important; padding:0 !important; background:#fff !important; }
+}
+
+@media print {
+
 body.gbPrintingSchedule > *{ display:none !important; }
+}
+
+@media print {
+
 body.gbPrintingSchedule #gbPrintRoot{
   display:block !important;
   position:absolute;
@@ -3867,8 +4161,18 @@ body.gbPrintingSchedule #gbPrintRoot{
   --pg-chip: #eff7ff;
   --pg-rowAlt: #fafcff;
 }
+}
+
+@media print {
+
 body.gbPrintingSchedule #gbPrintRoot *{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+@media print {
+
 body.gbPrintingSchedule .muted{ color:#4b5563 !important; }
+}
+
 /* Schedule Day Picker */
 .btn.iconBtn{
   width:40px;

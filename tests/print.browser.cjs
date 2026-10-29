@@ -9,7 +9,7 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
   if(req.url==='/roda/'){res.setHeader('Content-Type','text/html');return res.end(html);}
   const relative=decodeURIComponent(req.url.split('?')[0]);
   const file=path.join(studio?root:appRoot,studio?relative:relative.replace(/^\/roda\//,'/'));
-  res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'})[path.extname(file)]||'text/plain');
+  res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png'})[path.extname(file)]||'text/plain');
   fs.readFile(file,(e,data)=>e?res.writeHead(404).end():res.end(data));
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
@@ -27,7 +27,10 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
    window.RODA_STUDIO={canEdit:true,project:{rodaAccess:{admin:true,sections:Object.fromEntries(['script','breakdown','locations','cast','planning','shotlist','crew','reports'].map(k=>[k,'edit']))}}};
    window.savedState=structuredClone(data);window.savedWrites=0;
    window.StorageLayer=new Proxy({loadCfg:()=>({backend:'local',projects:[]}),loadLocal:()=>data,getProjects:()=>[],saveLocal:s=>{window.savedState=structuredClone(s);window.savedWrites++;}}, {get:(target,key)=>target[key]||(()=>null)});
-   window.print=()=>{window.printSnapshot=document.documentElement.outerHTML;};
+   window.print=()=>{
+     window.printScreen={root:getComputedStyle(document.querySelector('#gbPrintRoot')).display,shell:getComputedStyle(document.querySelector('.shell')).display,visibility:getComputedStyle(document.querySelector('.shell')).visibility,header:getComputedStyle(document.querySelector('.studio-global-header')).visibility,bodyBackground:getComputedStyle(document.body).backgroundColor};
+     window.printSnapshot=document.documentElement.outerHTML;
+   };
   },seed);
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
@@ -36,6 +39,10 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
   const before=await page.evaluate(()=>JSON.stringify(savedState.shootDays)),writes=await page.evaluate(()=>savedWrites);
   async function inspectPrint(name,daily){
    await page.waitForFunction(()=>!!window.printSnapshot);
+   const screen=await page.evaluate(()=>window.printScreen);
+   assert.equal(screen.root,'none','Print document stays hidden behind the print dialog');
+   assert.notEqual(screen.shell,'none','The app remains on screen');assert.equal(screen.visibility,'visible');assert.equal(screen.header,'visible');
+   assert.equal(screen.bodyBackground,await page.locator('body').evaluate(e=>getComputedStyle(e).backgroundColor),'Preparing print does not recolor the app');
    const captured=await page.evaluate(()=>window.printSnapshot);assert.match(captured,/@page\{ size:A4 landscape; margin:12mm;/);
    const pdf=await browser.newPage({viewport:{width:1123,height:794}});await pdf.route('https://**/*',r=>r.abort());
    await pdf.emulateMedia({media:'print'});
@@ -50,7 +57,14 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
     assert.equal(await pdf.locator('#gbPrintRoot thead').evaluate(e=>getComputedStyle(e).display),'table-header-group');
     assert.equal(await pdf.locator('#gbPrintRoot').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);
    }
+   if(await pdf.locator('#gbPrintRoot .productionPrintBrand').count()){
+    assert.match(await pdf.locator('#gbPrintRoot .productionPrintBrand').textContent(),/GRANBERTA FILMS/);
+    assert.ok(await pdf.locator('#gbPrintRoot .productionPrintBrand img').evaluate(e=>e.complete&&e.naturalWidth>0),'Studio logo is loaded');
+   }
    await pdf.pdf({path:path.join(output,name+'.pdf'),preferCSSPageSize:true,printBackground:true});
+   // Chrome's “Minimum” margin choice must still leave inner paper gutters.
+   await pdf.addStyleTag({content:'@page rodaDayPlan{margin:3.175mm;}'});
+   await pdf.pdf({path:path.join(output,name+'-minimum-margins.pdf'),preferCSSPageSize:true,printBackground:true});
    await pdf.screenshot({path:path.join(output,name+'.png'),fullPage:true});await pdf.close();
    assert.equal(await page.evaluate(()=>JSON.stringify(savedState.shootDays)),before,'Printing must not change timings');
    assert.equal(await page.evaluate(()=>savedWrites),writes,'Printing must not save the project');
