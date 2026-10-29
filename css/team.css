@@ -71,3 +71,12 @@ body:not(.roda-studio) .scene-link{margin:3px;padding:4px 8px;cursor:pointer;}
 #castDirectory .cast-details{padding:0 13px 16px;border-top:1px solid #ffffff0c;}
 #castDirectory .cast-details label{margin:14px 0 0;display:grid;gap:6px;}
 #castDirectory .cast-card--assigned [data-cast-entry]{border-color:#436a51;color:#c6efd6;font-size:13px;font-weight:600;}
+
+/* Area headers are disclosure buttons; member forms and day details fold together. */
+#crewTable .groupRow > td{padding:0;}
+#crewTable .crewGroupToggle{display:flex;align-items:center;gap:9px;width:100%;padding:11px 10px;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;font-weight:650;text-align:left;cursor:pointer;}
+#crewTable .crewGroupToggle:hover{background:#ffffff08;}
+#crewTable .crewGroupToggle:focus-visible{outline:2px solid #aaa;outline-offset:-3px;}
+#crewTable .crewGroupCaret{width:13px;flex:none;color:#bbb;}
+#crewTable .crewGroupCount{font-size:11px;font-weight:400;color:#aaa;margin-left:5px;}
+#crewTable tr[data-crew-area][hidden]{display:none!important;}
