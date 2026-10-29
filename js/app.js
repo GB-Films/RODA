@@ -2255,7 +2255,7 @@ function setupScheduleWheelScroll(){
     try{ if(isMobileUI() && window.MobileChrome?.syncDayBar) window.MobileChrome.syncDayBar(); }catch(_e){}
     try{ if(isMobileUI() && window.MobileChrome?.syncDayBarActive) window.MobileChrome.syncDayBarActive(name); }catch(_e){}
 
-    if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderShotsEditor(); }
+    if(name==="breakdown"){ initCollapsibles(); renderScriptUI(); renderSceneEditor(); }
     if(name==="shooting"){ renderSceneBank(); renderDaysBoard(); renderDayDetail(); applyBankCollapsedUI(); }
     if(name==="dayplan"){ renderSceneBank(); renderDayPlan(); applyBankCollapsedUI(); }
     if(name==="schedule"){ renderScheduleBoard(); }
@@ -2508,17 +2508,13 @@ function setupScheduleWheelScroll(){
       return true;
     });
 
+    if(el('sceneListCount'))el('sceneListCount').textContent=list.length+' de '+state.scenes.length;
+    if(!list.length)tbody.innerHTML='<tr><td colspan="2" class="muted">No hay escenas para esta búsqueda.</td></tr>';
     for(const s of list){
       const tr = document.createElement("tr");
       tr.className = (s.id===selectedSceneId) ? "selected" : "";
-      tr.innerHTML = `
-        <td>${esc(s.number||"")}</td>
-        <td>${esc(s.slugline||"")}</td>
-        <td>${esc(s.intExt||"")}</td>
-        <td>${esc(s.location||"")}</td>
-        <td>${esc(s.timeOfDay||"")}</td>
-        <td>${(Number(s.pages)||0) > 0 ? esc(fmtPages(s.pages)) : ""}</td>
-      `;
+      tr.dataset.sceneId=s.id;
+      tr.innerHTML = `<td>${esc(s.number||'')}</td><td><button class="bdSceneSelect" type="button" data-ro-allow="1" aria-pressed="${s.id===selectedSceneId}"><strong>${esc(s.slugline||'Escena sin título')}</strong><span>${esc([s.location,s.timeOfDay,Number(s.pages)>0?fmtPages(s.pages)+' pág':''].filter(Boolean).join(' · '))}</span></button></td>`;
       tr.addEventListener("click", ()=>{
         selectedSceneId = s.id;
         renderScenesTable();
@@ -2558,21 +2554,46 @@ function setupScheduleWheelScroll(){
     // después del render, llevamos la lista a la fila seleccionada
     requestAnimationFrame(()=>{
       scrollSelectedSceneIntoView();
-      el("scene_slugline")?.focus();
+      el("sceneIdentity")?.scrollIntoView({block:"nearest"});
     });
   }
 
 
+  function sceneIdentityHTML(scene){
+    return scene ? `<div class="inspectorEyebrow">Escena ${scene.chapter?'C'+esc(scene.chapter)+' · ':''}${esc(scene.number||'')}</div><h3>${esc(scene.slugline||'Sin título')}</h3>` : '<h3>Seleccioná una escena</h3>';
+  }
+  function sceneOverviewHTML(scene, shots=scene?.shots||[]){
+    if(!scene)return '<p class="muted">Elegí una escena de la lista para ver su desglose.</p>';
+    const location=(Array.isArray(state.shootingLocations)?state.shootingLocations:[]).find(l=>l.id===scene.shootingLocationId),characters=scene.elements?.cast||[];
+    return `<div class="sceneOverview"><div class="sceneFacts"><div><span>Lugar de rodaje</span><strong>${esc(location?.name||'Sin asignar')}</strong></div><div><span>Espacio del guion</span><strong>${esc(scene.location||'Sin indicar')}</strong></div></div><div class="sceneMetaChips">${[scene.intExt,scene.timeOfDay,Number(scene.pages)>0?fmtPages(scene.pages)+' pág':'',characters.length+' personajes',shots.length+' planos'].filter(Boolean).map(v=>`<span>${esc(v)}</span>`).join('')}</div></div>`;
+  }
+  function sceneReadingHTML(scene){
+    if(!scene)return '';
+    const groups=cats.filter(cat=>(scene.elements?.[cat]||[]).length),shots=shootingScene(scene.id)?.shots||[];
+    return `${sceneOverviewHTML(scene,shots)}<div class="sceneSummaryField"><div class="inspectorSectionTitle">Resumen / acción</div><div class="sceneReadingText">${esc(scene.summary||'Sin resumen cargado.')}</div></div>
+      ${scene.notes?`<details class="sceneFold"><summary data-ro-allow="1">Notas de producción</summary><p class="sceneReadingText">${esc(scene.notes)}</p></details>`:''}
+      <details class="sceneFold"><summary data-ro-allow="1">Elementos de la escena <span>${groups.reduce((n,cat)=>n+scene.elements[cat].length,0)}</span></summary>${groups.map(cat=>`<div class="sceneReadGroup"><strong>${esc(catNames[cat])}</strong><p>${scene.elements[cat].map(esc).join(' · ')}</p></div>`).join('')||'<p class="muted">Sin elementos cargados.</p>'}</details>
+      <details class="sceneFold"><summary data-ro-allow="1">Planos de esta tanda <span>${shots.length}</span></summary>${shots.map((shot,i)=>`<div class="sceneReadGroup"><strong>${i+1} · ${esc(shot.type||'Plano')} · ${esc(formatDuration(shot.durMin||DEFAULT_SHOT_MIN))}</strong><p>${esc(shot.desc||'Sin descripción')}</p>${shotOwner(shot.id)?.id!==scene.id?`<p>Escena original #${esc(shotOwner(shot.id)?.number||'')}</p>`:''}</div>`).join('')||'<p class="muted">Sin planos cargados.</p>'}</details>`;
+  }
+  function refreshSceneOverview(scene){
+    el('sceneIdentity').innerHTML=sceneIdentityHTML(scene);
+    el('sceneOverview').innerHTML=sceneOverviewHTML(scene);
+    el('sceneNotesCount').textContent=scene?.notes?.trim()?'Con notas':'';
+  }
+
   function renderSceneEditor(){
     const s = selectedSceneId ? state.scenes.find(x=>x.id===selectedSceneId) : null;
     const hint = el("selectedSceneHint");
-    if(hint) hint.textContent = s ? ("Editando escena " + (s.chapter ? ("C"+s.chapter+"-") : "") + "#" + s.number) : "Seleccioná una escena";
+    if(hint) hint.textContent = s ? 'Breakdown' : '';
+    const scroll=el('sceneEditorCard')?.querySelector('.bdEditorScroll');
+    if(scroll && scroll.dataset.sceneId!==(s?.id||'')){scroll.scrollTop=0;scroll.dataset.sceneId=s?.id||'';}
+    refreshSceneOverview(s);
 
     const fields = ["number","chapter","intExt","slugline","location","timeOfDay","pages","summary","notes"];
     for(const f of fields){
       const node = el(`scene_${f}`);
       if(!node) continue;
-      node.disabled = !s;
+      node.disabled = !s || isReadOnly("breakdown");
       node.value = s ? (s[f] ?? "") : "";
     }
     refreshElementSuggestions();
@@ -2585,6 +2606,8 @@ function setupScheduleWheelScroll(){
     if(!wrap) return;
     wrap.innerHTML = "";
     const s = selectedSceneId ? state.scenes.find(x=>x.id===selectedSceneId) : null;
+    el('sceneElementsCount').textContent=s?cats.reduce((n,c)=>n+(s.elements?.[c]||[]).length,0):'0';
+    for(const id of ['elCategory','elItem','btnAddSceneElement'])el(id).disabled=!s||isReadOnly('breakdown');
     if(!s) return;
 
     const nonEmpty = cats.filter(c=> (s.elements?.[c]||[]).length>0);
@@ -2615,6 +2638,7 @@ function setupScheduleWheelScroll(){
         chip.querySelector("button").addEventListener("click", ()=>{
           s.elements[cat] = (s.elements[cat]||[]).filter(x=>x!==it);
           touch();
+          refreshSceneOverview(s);
           renderSceneElementsGrid();
     renderShotsEditor();
           renderSceneBank();
@@ -2632,28 +2656,36 @@ function setupScheduleWheelScroll(){
   }
 
 
-  function renderShotsEditor(){
+  function renderShotsEditor(openShotId){
     const table = el("shotsTable");
     const btnAdd = el("btnAddShot");
     if(btnAdd){
-      btnAdd.disabled = !selectedSceneId || isReadOnly();
+      btnAdd.disabled = !selectedSceneId || isReadOnly('shotlist');
       btnAdd.onclick = ()=>{
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         const s = selectedSceneId ? getScene(selectedSceneId) : null;
         if(!s) return;
         ensureSceneExtras(s);
-        s.shots.push({ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN, thumbUrl: "" });
+        const shot={ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN, thumbUrl: "" };
+        s.shots.push(shot);
         touch();
-        renderShotsEditor();
+        el('sceneShotsFold').open=true;
+        renderShotsEditor(shot.id);
+        requestAnimationFrame(()=>{const input=el('shotsTable')?.querySelector('.bdShotCard:last-child .shotDescInput');input?.focus({preventScroll:true});input?.scrollIntoView({block:'nearest'});});
       };
     }
     if(!table) return;
-    const tbody = table.querySelector("tbody");
+    const tbody = table;
+    const opened=new Set(Array.from(table.querySelectorAll("details.bdShotCard[open]")).map(n=>n.dataset.shotId));
+    const references=new Set(Array.from(table.querySelectorAll('.bdShotReference[open]')).map(n=>n.closest('.bdShotCard').dataset.shotId));
     if(!tbody) return;
 
     const s = selectedSceneId ? getScene(selectedSceneId) : null;
     tbody.innerHTML = "";
-    if(!s) return;
+    el('sceneShotsCount').textContent=(s?.shots||[]).length;
+    refreshSceneOverview(s);
+    if(!s)return;
+    if(!s.shots?.length)tbody.innerHTML='<p class="muted small bdEmptyShots">Todavía no hay planos. Agregá el primero para preparar esta escena.</p>';
     ensureSceneExtras_toggleThumb(s);
 
     (s.shots||[]).forEach((sh, i)=>{
@@ -2665,27 +2697,20 @@ function setupScheduleWheelScroll(){
       const uploading = !!_shotThumbUploading[sh.id];
       const thumbInner = uploading
         ? `<div class="muted small">Subiendo…</div>`
-        : (hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : `<div class="muted small">Drop</div>`);
+        : (hasThumb ? `<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>` : `<div class="muted small">Cargar imagen</div>`);
 
-      const tr = document.createElement("tr");
+      const tr = document.createElement("details");
+      tr.className='bdShotCard';tr.dataset.shotId=sh.id;tr.open=opened.has(sh.id)||openShotId===sh.id;
       tr.innerHTML = `
-        <td>${i+1}</td>
-        <td>
-          <select class="input compact shotTypeSel" ${isReadOnly()?"disabled":""}>
-            ${shotTypes.map(t=>`<option value="${esc(t)}"${(normalizeShotType(sh.type)===t)?" selected":""}>${esc(t)}</option>`).join("")}
-          </select>
-        </td>
-        <td><input class="input shotDescInput" ${isReadOnly()?"disabled":""} placeholder="Descripción del plano…" value="${esc(sh.desc||"")}" />${shotBatchFields(sh,s)}</td>
-        <td class="shotThumbTd">
-          <div class="shotThumbDrop ${hasThumb?"has":""} ${uploading?"uploading":""}" title="Arrastrá una imagen o click para cargar">${thumbInner}</div>
-          <div class="row gap" style="justify-content:center; margin-top:6px;">
-            <button class="btn icon shotThumbPick" title="Cargar" ${isReadOnly()?"disabled":""}>📷</button>
-            <button class="btn icon danger shotThumbClear" title="Quitar" ${(isReadOnly()||!hasThumb)?"disabled":""}>×</button>
-          </div>
-          <input type="file" accept="image/*" class="shotThumbFile" style="display:none" />
-        </td>
-        <td><button class="btn icon danger shotDelBtn" title="Borrar" ${isReadOnly()?"disabled":""}>×</button></td>
-      `;
+        <summary data-ro-allow="1"><span class="bdShotNumber">${i+1}</span><span class="bdShotPreview"><strong class="bdShotTypeLabel">${esc(sh.type)}</strong><span class="bdShotDescription">${esc(sh.desc||'Sin descripción')}</span></span><span class="bdShotDuration">${esc(formatDuration(sh.durMin||DEFAULT_SHOT_MIN))}</span></summary>
+        <div class="bdShotBody">
+          <div class="bdShotFields"><label>Tipo de plano<select class="input shotTypeSel" ${isReadOnly('shotlist')?'disabled':''}>${shotTypes.map(t=>`<option value="${esc(t)}" ${normalizeShotType(sh.type)===t?'selected':''}>${esc(t)}</option>`).join('')}</select></label>
+          <label>Duración (min)<input type="number" min="1" step="1" class="input bdShotDurationInput" value="${esc(sh.durMin||DEFAULT_SHOT_MIN)}" ${isReadOnly('shotlist')?'disabled':''}/></label></div>
+          <label>Descripción<textarea class="textarea shotDescInput" rows="4" ${isReadOnly('shotlist')?'disabled':''} placeholder="Descripción del plano…">${esc(sh.desc||'')}</textarea></label>
+          ${shotBatchFields(sh,s)}
+          <details class="bdShotReference" ${references.has(sh.id)?'open':''}><summary data-ro-allow="1">Imagen de referencia${hasThumb?' · cargada':''}</summary><div class="bdShotReferenceBody"><button type="button" class="shotThumbDrop ${hasThumb?'has':''} ${uploading?'uploading':''}" aria-label="Cargar imagen de referencia" ${isReadOnly('shotlist')?'disabled':''}>${thumbInner}</button><button class="btn small danger shotThumbClear" ${(isReadOnly('shotlist')||!hasThumb)?'disabled':''}>Quitar imagen</button><input type="file" accept="image/*" class="shotThumbFile" hidden/></div></details>
+          <button type="button" class="btn small danger shotDelBtn" ${isReadOnly('shotlist')?'disabled':''}>Eliminar plano</button>
+        </div>`;
 
       bindShotBatchSelect(tr,sh,s);
       const sel = tr.querySelector(".shotTypeSel");
@@ -2693,18 +2718,25 @@ function setupScheduleWheelScroll(){
       const del = tr.querySelector(".shotDelBtn");
 
       sel?.addEventListener("change", ()=>{
-        if(isReadOnly()) return;
+        if(isReadOnly('shotlist')) return;
         sh.type = sel.value;
+        tr.querySelector(".bdShotTypeLabel").textContent=sh.type;
         touch();
       });
       inp?.addEventListener("input", ()=>{
-        if(isReadOnly()) return;
+        if(isReadOnly('shotlist')) return;
         sh.desc = inp.value;
+        tr.querySelector(".bdShotDescription").textContent=sh.desc||"Sin descripción";
         touch();
+      });
+      tr.querySelector('.bdShotDurationInput').addEventListener('change',e=>{
+        if(isReadOnly('shotlist'))return;
+        sh.durMin=Math.max(1,Math.round(Number(e.target.value)||DEFAULT_SHOT_MIN));e.target.value=sh.durMin;
+        tr.querySelector('.bdShotDuration').textContent=formatDuration(sh.durMin);touch();
       });
       del?.addEventListener("click", (e)=>{
         e.preventDefault();
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         s.shots = (s.shots||[]).filter(x=>x.id!==sh.id);
         touch();
         renderShotsEditor();
@@ -2713,16 +2745,14 @@ function setupScheduleWheelScroll(){
 
       // Thumb controls
       const drop = tr.querySelector(".shotThumbDrop");
-      const pick = tr.querySelector(".shotThumbPick");
       const clear = tr.querySelector(".shotThumbClear");
       const fileIn = tr.querySelector(".shotThumbFile");
 
       const openPicker = ()=>{
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         fileIn && fileIn.click();
       };
       drop?.addEventListener("click", openPicker);
-      pick?.addEventListener("click", (e)=>{ e.preventDefault(); openPicker(); });
       fileIn?.addEventListener("change", ()=>{
         const f = fileIn.files && fileIn.files[0];
         if(f) setShotThumb(sh, f);
@@ -2730,7 +2760,7 @@ function setupScheduleWheelScroll(){
       });
       clear?.addEventListener("click", (e)=>{
         e.preventDefault();
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         sh.thumbUrl = "";
         delete sh.thumbUpdatedAt;
         touch();
@@ -2739,13 +2769,13 @@ function setupScheduleWheelScroll(){
       });
 
       const prevent = (e)=>{ e.preventDefault(); e.stopPropagation(); };
-      drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
-      drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly()) drop.classList.add("drag"); });
+      drop?.addEventListener("dragover", (e)=>{ prevent(e); if(!isReadOnly('shotlist')) drop.classList.add("drag"); });
+      drop?.addEventListener("dragenter", (e)=>{ prevent(e); if(!isReadOnly('shotlist')) drop.classList.add("drag"); });
       drop?.addEventListener("dragleave", (e)=>{ prevent(e); drop.classList.remove("drag"); });
       drop?.addEventListener("drop", (e)=>{
         prevent(e);
         drop.classList.remove("drag");
-        if(isReadOnly()){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
+        if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         const f = e.dataTransfer?.files?.[0];
         if(f) setShotThumb(sh, f);
       });
@@ -3020,6 +3050,7 @@ function setupScheduleWheelScroll(){
     if(el("elItem")) el("elItem").value="";
     touch();
     refreshElementSuggestions();
+    refreshSceneOverview(s);
     renderSceneElementsGrid();
     renderShotsEditor();
     renderSceneBank();
@@ -6529,44 +6560,14 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
       const durMax = Math.max(5, dpEndAbs - absStart);
       const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
       const absEnd = clamp(absStart + dur, 0, dpEndAbs);
-      const isNote = it.kind==="block";
-      const col = safeHexColor(it.color || (it.kind==="scene" ? RodaProductionBlocks.palette.sceneAccent : RodaProductionBlocks.palette.block));
-      const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
-      const tA = clockLabelAbs(absStart);
-      const tB = clockLabelAbs(absEnd);
-      const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
-      const num = isNote ? "—" : (it.number||"");
-      const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
-      const ie = isNote ? "" : (it.intExt||"");
-      const locTxt = isNote ? "" : (it.location||"");
-      const todTxt = isNote ? "" : (it.timeOfDay||"");
-      const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
-      return `
-  <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-    <td class="cHour">${clockHTML}</td>
-    <td class="cDur">${esc(formatDurHHMMCompact(dur))}</td>
-    <td class="cNro">${esc(num)}</td>
-    <td class="cTitle">${esc(title)}</td>
-    <td class="cIE">${esc(ie)}</td>
-    <td class="cLoc">${esc(locTxt)}</td>
-    <td class="cTod">${esc(todTxt)}</td>
-    <td class="cSum">${esc(sumTxt)}</td>
-  </tr>
-`;
+      return dayplanPrintedRow(it,absStart,dur,absEnd);
     }).join("");
 
     printWrap.innerHTML = `
       <div class="catBlock dpPrintBlock">
         ${buildDayplanPrintHeader(d)}
         <div class="items">
-          <table class="dayplanPrintTable">
-            <colgroup>
-              <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
-              <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colSum">
-            </colgroup>
-            <thead><tr><th>Horario</th><th>Dur.</th><th>Esc.</th><th>Escena / actividad</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Notas</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="8" class="muted">—</td></tr>`}</tbody>
-          </table>
+          ${dayplanPrintedTable(d,rows)}
         </div>
       </div>
     `;
@@ -7003,8 +7004,7 @@ dayplanPointer = {
 
     box.innerHTML = `
       <div class="planningInspectorHead">
-        <div><div class="inspectorEyebrow">${isBlock?'Bloque':'Escena '+esc(it.number||'')} · ${esc(formatDayTitle(d.date))}</div>
-        <h3>${esc(isBlock?it.title:it.slugline)}</h3></div>
+        <div>${isBlock?`<div class="inspectorEyebrow">Bloque</div><h3>${esc(it.title)}</h3>`:sceneIdentityHTML(getScene(it.id))}<div class="muted small">${esc(formatDayTitle(d.date))}</div></div>
         <button class="btn icon inspector-close" id="dpCloseInspector" type="button" data-ro-allow="1" aria-label="Cerrar detalle">×</button>
       </div>
       <details class="inspectorColor"><summary><span class="inspectorColorDot" style="background:${esc(col)}"></span>Color de la tarjeta</summary>
@@ -7044,20 +7044,7 @@ dayplanPointer = {
             <label>Detalle</label>
             <textarea class="textarea smallArea" id="dpi_detail">${esc(it.detail||"")}</textarea>
           </div>
-                ` : `
-          <div class="field" style="grid-column:1/-1">
-            <label>Datos de escena</label>
-            <div class="dpFacts">
-              <div class="dpFact"><div class="k">Int/Ext</div><div class="v">${esc(it.intExt||"—")}</div></div>
-              <div class="dpFact"><div class="k">Lugar</div><div class="v">${esc(it.location||"—")}</div></div>
-              <div class="dpFact"><div class="k">Momento</div><div class="v">${esc(it.timeOfDay||"—")}</div></div>
-              <div class="dpFact"><div class="k">Largo (Pág)</div><div class="v">${esc((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "—")}</div></div>
-            </div>
-          </div>
-          <div class="field" style="grid-column:1/-1">
-            <label>Notas</label>
-            <div class="muted dpSceneResText">${esc(it.notes || it.summary || "Sin notas")}</div>
-          </div>
+                ` : `<div class="scenePlanningDetail" style="grid-column:1/-1">${sceneReadingHTML(getScene(it.id))}</div>
         `}
 </div>
 
@@ -8117,31 +8104,7 @@ function renderReportDayplanDetail(d){
       const durMax = Math.max(5, dpEndAbs - absStart);
       const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
       const absEnd = clamp(absStart + dur, 0, dpEndAbs);
-      const isNote = it.kind==="block";
-      const num = isNote ? "—" : (it.number||"");
-      const title = isNote ? (it.title||"") : (it.slugline||it.title||"");
-      const ie = isNote ? "" : (it.intExt||"");
-      const locTxt = isNote ? "" : (it.location||"");
-      const todTxt = isNote ? "" : (it.timeOfDay||"");
-      const pagesTxt = isNote ? "" : ((Number(it.pages)||0) > 0 ? fmtPages(it.pages) : "");
-      const sumTxt = isNote ? (it.detail||"") : (notesOrShortSummary(it.notes, it.summary) || "");
-      const col = safeHexColor(it.color || (it.kind==="scene" ? RodaProductionBlocks.palette.sceneAccent : RodaProductionBlocks.palette.block));
-      const bg = hexToRgba(col, isNote ? 0.10 : 0.12);
-      const tA = clockLabelAbs(absStart);
-      const tB = clockLabelAbs(absEnd);
-      const clockHTML = `<div class="dpClock2"><div>${esc(tA)}</div><div>${esc(tB)}</div></div>`;
-      return `
-  <tr class="${isNote ? "dpPrintNote" : ""}" style="background:${eattr(bg)};border-left:8px solid ${eattr(col)};">
-    <td class="cHour">${clockHTML}</td>
-    <td class="cDur">${esc(formatDurHHMMCompact(dur))}</td>
-    <td class="cNro">${esc(num)}</td>
-    <td class="cTitle">${esc(title)}</td>
-    <td class="cIE">${esc(ie)}</td>
-    <td class="cLoc">${esc(locTxt)}</td>
-    <td class="cTod">${esc(todTxt)}</td>
-    <td class="cSum">${esc(sumTxt)}</td>
-  </tr>
-`;
+      return dayplanPrintedRow(it,absStart,dur,absEnd);
     }).join("");
 
     const printWrap = document.createElement("div");
@@ -8149,14 +8112,7 @@ function renderReportDayplanDetail(d){
     printWrap.innerHTML = `
       ${buildDayplanPrintHeader(d)}
       <div class="items">
-        <table class="dayplanPrintTable">
-          <colgroup>
-            <col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle">
-            <col class="colIE"><col class="colLoc"><col class="colTod"><col class="colSum">
-          </colgroup>
-          <thead><tr><th>Horario</th><th>Dur.</th><th>Esc.</th><th>Escena / actividad</th><th>I/E</th><th>Locación</th><th>Momento</th><th>Notas</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="8" class="muted">—</td></tr>`}</tbody>
-        </table>
+        ${dayplanPrintedTable(d,rows)}
       </div>
     `;
     box.appendChild(printWrap);
@@ -8266,11 +8222,44 @@ function renderReportDayplanDetail(d){
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
   }
 
+  function productionPrintBrand(){
+    const project=window.RODA_STUDIO?.project;
+    const spaceId=project?.spaceId||new URLSearchParams(location.search).get('studioSpace');
+    const isGranberta=!spaceId||spaceId==='gb-films';
+    return `<div class="productionPrintBrand">${isGranberta?'<img src="assets/gb-films-print.png" alt="GB Films" width="56" height="56">':''}<div><strong>${esc(isGranberta?'GRANBERTA FILMS':project?.spaceName||'GB STUDIO')}</strong><span>Producción audiovisual</span></div></div>`;
+  }
+
+  function productionPrintMasthead(kind,d){
+    const index=(state.shootDays||[]).findIndex(day=>day.id===d.id);
+    return `<div class="productionPrintMasthead">${productionPrintBrand()}<div class="productionPrintIssue"><strong>${esc(kind)}</strong><span>${index>=0?`Jornada ${index+1} de ${state.shootDays.length}`:'Jornada de rodaje'}</span></div></div>`;
+  }
+
+  function dayplanPrintedRow(it,start,dur,end){
+    const block=it.kind==='block';
+    const title=block?(it.title||'Bloque'):(it.slugline||it.title||'');
+    const detail=block?String(it.detail||''):String(it.notes||'').trim()||firstWords(it.summary,28);
+    const color=safeHexColor(it.color||(block?RodaProductionBlocks.palette.block:RodaProductionBlocks.palette.sceneAccent));
+    return `<tr class="${block?'dpPrintNote':''}" style="--row-accent:${esc(color)}">
+      <td class="cHour"><div class="dpClock2"><b>${esc(clockLabelAbs(start))}</b><span>${esc(clockLabelAbs(end))}</span></div></td>
+      <td class="cDur">${esc(formatDuration(Math.round(dur)))}</td>
+      <td class="cNro">${block?'—':esc(it.number||'—')}</td>
+      <td class="cTitle"><strong>${esc(title)}</strong>${!block&&Number(it.pages)>0?`<small>${esc(fmtPages(it.pages))} pág.</small>`:''}</td>
+      <td class="cSum">${esc(detail)}</td>
+    </tr>`;
+  }
+
+  function dayplanPrintedTable(d,rows){
+    return `<table class="dayplanPrintTable"><colgroup><col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle"><col class="colSum"></colgroup>
+      <thead><tr class="dpPrintContinuation"><th colspan="5">${esc(state.meta?.title||'Proyecto')} · ${esc([formatDayTitle(d.date),d.label].filter(Boolean).join(' · '))}</th></tr>
+      <tr><th>Inicio / fin</th><th>Duración</th><th>Esc.</th><th>Escena / actividad</th><th>Indicaciones</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="5">Sin escenas programadas.</td></tr>'}</tbody></table>`;
+  }
+
   function buildDayplanPrintHeader(d){
     const title = `${formatDayTitle(d.date)}${d.label ? " · " + d.label : ""}`.trim();
-    return `<header class="dpPrintHeader">
+    return `<header class="dpPrintHeader">${productionPrintMasthead("Plan de rodaje",d)}
       <div class="dpPrintHeading">
-        <div><div class="dpPrintEyebrow">Plan de rodaje</div><h1>${esc(state?.meta?.title || "Proyecto")}</h1></div>
+        <div><h1>${esc(state?.meta?.title || "Proyecto")}</h1></div>
         <div class="dpPrintDay">${esc(title || "Jornada de rodaje")}</div>
       </div>
       <div class="dpPrintMeta">
@@ -8281,7 +8270,7 @@ function renderReportDayplanDetail(d){
     </header>`;
   }
 
-  function printDayplanContents(html){
+  async function printDayplanContents(html){
     if(!String(html || "").trim()){
       toast("No hay Plan de Rodaje para imprimir");
       return;
@@ -8291,6 +8280,7 @@ function renderReportDayplanDetail(d){
     applyPrintDeviceFlag();
     document.body.classList.add("gbPrintingDayplan");
     setPrintOrientation("landscape", 12);
+    await waitForImages(root,2500);
     try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 
@@ -8469,7 +8459,7 @@ function renderReportDayplanDetail(d){
       const labelKey=value=>String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,' ').trim().toLowerCase();
       const sceneDetail=s?[s.intExt,s.location,s.timeOfDay].filter(value=>value&&!labelKey(heading).includes(labelKey(value))).join(' · '):'';
       const detail=s?[sceneDetail,Number(s.pages)>0?`${fmtPages(s.pages)} pág`:'' ].filter(Boolean).join(' · '):(b.detail||'');
-      return `<tr class="${b?'csPrintBlock':''}"><td class="csPrintTime"><b>${esc(clock(it.start))}</b><span class="csPrintEnd"> - ${esc(clock(it.start+it.dur))}</span></td><td class="csPrintTime">${esc(formatDuration(Math.round(it.dur)))}</td><td class="csPrintScene">${s?esc(s.number||'—'):'—'}</td><td><strong>${esc(s?s.slugline:(b.title||'Bloque'))}</strong>${detail?`<p>${esc(detail)}</p>`:''}</td></tr>`;
+      return `<tr class="${b?'csPrintBlock':''}"><td class="csPrintTime"><b>${esc(clock(it.start))}</b><span class="csPrintEnd"> – ${esc(clock(it.start+it.dur))}</span></td><td class="csPrintTime">${esc(formatDuration(Math.round(it.dur)))}</td><td class="csPrintScene">${s?esc(s.number||'—'):'—'}</td><td><strong>${esc(s?s.slugline:(b.title||'Bloque'))}</strong>${detail?`<p>${esc(detail)}</p>`:''}</td></tr>`;
     }).join('')||'<tr><td colspan="4">Sin escenas ni bloques programados.</td></tr>';
     const castColumns=[{label:'Actor / actriz · personaje',width:''},...(d.pickupCastEnabled?[{label:'Recogida<br>(PU)',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')}]:[]),{label:'Citación',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')},{label:'Primera<br>escena',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')},{label:'Fin<br>estimado',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')},...(d.rtsEnabled?[{label:'Listo en set<br>(RTS)',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')}]:[])];
     // Group only identical calls for the same person; retain any role-specific overrides.
@@ -8488,7 +8478,7 @@ function renderReportDayplanDetail(d){
     const crewRows=groupCrewByArea(crew).flatMap(([area,list])=>list.map(c=>`<tr><td><strong>${esc(c.name||'Sin nombre')}</strong><span class="csPrintSecondary">${esc([c.role,area].filter(Boolean).join(' · '))}</span></td>${crewPickup?timeCell(effectiveCrewPU(d,c)):''}${timeCell(effectiveCrewCall(d,c),true)}<td>${esc(c.phone||'—')}</td></tr>`)).join('');
     const close=timeline.length?clock(Math.max(...timeline.map(it=>it.start+it.dur))):'—';
     return `<article class="csPrint">
-      <header class="csPrintHeader"><div class="csPrintEyebrow">Call diario · Hoja de llamado</div><h1>${esc(title)}</h1><p class="csPrintDay">${esc(dayTitle)}</p>
+      <header class="csPrintHeader">${productionPrintMasthead("Call diario · Hoja de llamado",d)}<h1>${esc(title)}</h1><p class="csPrintDay">${esc(dayTitle)}</p>
         <div class="csPrintSummary"><div><span>Citación general</span><strong>${esc(baseDayCall(d))}</strong></div><div><span>Fin de jornada estimado</span><strong>${esc(close)}</strong></div><div><span>Locación</span><strong>${esc(d.location||'Sin asignar')}</strong></div></div>
       </header>
       ${table('agenda','01 / Itinerario',[{label:'Inicio / fin',width:'21%'},{label:'Duración',width:'11%'},{label:'Esc.',width:'6%'},{label:'Escena / actividad'}],agenda)}
@@ -8509,8 +8499,9 @@ function renderReportDayplanDetail(d){
     setPrintOrientation('portrait',12);
     return true;
   }
-  function printCallSheetByDayId(dayId){
+  async function printCallSheetByDayId(dayId){
     if(!prepareCallSheetPrint(dayId)){toast('Elegí un día con rodaje');return;}
+    await waitForImages(ensureGbPrintRoot(),2500);
     try{window.print();}finally{clearPrintOrientation();cleanupGbPrintRoot();}
   }
 
@@ -9421,6 +9412,8 @@ async function printPlanGeneral(){
 
 
 // Breakdown: Importar (Excel/CSV)
+el('btnOpenBDImport')?.addEventListener('click',()=>el('bdImportDialog').showModal());
+el('btnCloseBDImport')?.addEventListener('click',()=>el('bdImportDialog').close());
 el("btnBDTemplateWide")?.addEventListener("click", bdDownloadTemplateWide);
 el("btnBDTemplateLong")?.addEventListener("click", bdDownloadTemplateLong);
 el("btnBDImport")?.addEventListener("click", runBreakdownImportFromUI);
@@ -9614,6 +9607,7 @@ el("btnDayplanAddNote")?.addEventListener("click", ()=>addDayplanNote("note"));
         }
 
         touch();
+        refreshSceneOverview(s);
         renderScenesTable();
         renderSceneBank();
         renderDaysBoard();

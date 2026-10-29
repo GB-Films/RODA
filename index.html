@@ -6,15 +6,17 @@
   <meta http-equiv="Expires" content="0"/>
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
   <title>GB Production Board</title>
-  <link href="css/styles.css?v=1.21.3" rel="stylesheet"/>
+  <link href="css/styles.css?v=1.35.0" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
 <link rel="stylesheet" href="css/production-blocks.css?v=1.21.2">
 <link rel="stylesheet" href="css/planning.css?v=1.27.1">
 <link rel="stylesheet" href="css/team.css?v=1.34.0">
 <link rel="stylesheet" href="css/dialogs.css?v=1.21.1"/>
 <link rel="stylesheet" href="css/shotlist.css?v=1.32.1">
-<link rel="stylesheet" href="css/call-print.css?v=1.34.1">
+<link rel="stylesheet" href="css/call-print.css?v=1.35.0">
 <link rel="stylesheet" href="css/elements.css?v=1.33.1">
+<link rel="stylesheet" href="css/scene-detail.css?v=1.35.0">
+<link rel="preload" href="assets/gb-films-print.png" as="image">
 </head>
 <body>
   <div class="shell">
@@ -66,70 +68,41 @@
       </section>
       <!-- ================= BREAKDOWN ================= -->
       <section class="view" id="view-breakdown">
-        <!-- PRIMERO: Escenas + Editor -->
-        <div class="grid2">
+        <div class="grid2 breakdownLayout">
           <div class="card" id="sceneListCard">
-            <div class="cardHeader">
-              <h2 class="cardTitle">Escenas</h2>
-              <div class="row gap">
-                <button class="btn" id="btnAddScene">+ Escena</button>
-                <button class="btn" id="btnDuplicateScene">Duplicar</button>
-                <button class="btn danger" id="btnDeleteScene">Borrar</button>
-              </div>
-            </div>
-
+            <div class="cardHeader"><h2 class="cardTitle">Escenas</h2><span class="muted small" id="sceneListCount"></span></div>
             <div class="cardContent">
-              <div class="row gap">
-                <input class="input grow" id="sceneSearch" placeholder="Buscar escena…"/>
-                <select class="input compact" id="sceneFilterTOD">
-                  <option value="">TOD</option>
-                  <option value="Día">Día</option>
-                  <option value="Noche">Noche</option>
-                  <option value="Amanecer">Amanecer</option>
-                  <option value="Atardecer">Atardecer</option>
-                </select>
+              <div class="bdListControls">
+                <div class="row gap"><input class="input grow" id="sceneSearch" aria-label="Buscar escenas" placeholder="Buscar escena…" data-ro-allow="1"/>
+                  <select class="input compact" id="sceneFilterTOD" aria-label="Momento del día" data-ro-allow="1"><option value="">Momento: todos</option><option>Día</option><option>Noche</option><option>Amanecer</option><option>Atardecer</option></select></div>
+                <div class="bdListActions"><button class="btn small" id="btnAddScene">+ Escena</button><button class="btn small" id="btnDuplicateScene">Duplicar</button><button class="btn small danger" id="btnDeleteScene">Borrar</button><button class="btn small" id="btnOpenBDImport">Importar</button></div>
               </div>
-
-              <div class="tableWrap">
-                <table class="table" id="sceneTable">
-                  <thead>
-                    <tr>
-                      <th style="width:72px;">#</th>
-                      <th>Título</th>
-                      <th style="width:70px;">I/E</th>
-                      <th>Lugar</th>
-                      <th style="width:120px;">Momento</th>
-                      <th style="width:90px;">Largo</th>
-                    </tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
+              <div class="tableWrap bdSceneList" tabindex="0" data-ro-allow="1" aria-label="Lista de escenas">
+                <table class="table" id="sceneTable"><thead><tr><th>Nº</th><th>Escena</th></tr></thead><tbody></tbody></table>
               </div>
             </div>
           </div>
-
           <div class="card" id="sceneEditorCard">
-            <div class="cardHeader">
-              <h2 class="cardTitle">Editor</h2>
-              <div class="muted small" id="selectedSceneHint">Seleccioná una escena</div>
-            </div>
-
-            <div class="cardContent">
+            <div class="cardHeader"><div id="sceneIdentity"><h2 class="cardTitle">Detalle de escena</h2></div><span class="muted small" id="selectedSceneHint"></span></div>
+            <div class="cardContent bdEditorScroll" tabindex="0" aria-label="Detalle de la escena">
+              <div id="sceneOverview"></div>
+              <div class="field sceneSummaryField"><label for="scene_summary">Resumen / acción</label><textarea class="textarea sceneSummaryText" id="scene_summary" placeholder="Acción y texto de la escena…"></textarea></div>
+              <details class="sceneFold" id="sceneDataFold"><summary data-ro-allow="1">Editar datos de la escena</summary>
               <div class="gridEditor">
                 <div class="field">
-                  <label>Nro</label>
+                  <label for="scene_number">Número</label>
                   <input class="input" id="scene_number"/>
                 </div>
                 <div class="field">
-                  <label>Capítulo</label>
+                  <label for="scene_chapter">Capítulo</label>
                   <input class="input" id="scene_chapter" type="number" min="1" step="1"/>
                 </div>
                 <div class="field">
-                  <label>Título</label>
+                  <label for="scene_slugline">Título</label>
                   <input class="input" id="scene_slugline"/>
                 </div>
                 <div class="field">
-                  <label>Int / Ext</label>
+                  <label for="scene_intExt">Int / Ext</label>
                   <select class="input" id="scene_intExt">
                     <option value=""></option>
                     <option value="Int">Int</option>
@@ -137,11 +110,11 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label>Lugar</label>
+                  <label for="scene_location">Espacio del guion</label>
                   <input class="input" id="scene_location"/>
                 </div>
                 <div class="field">
-                  <label>Momento del día</label>
+                  <label for="scene_timeOfDay">Momento del día</label>
                   <select class="input" id="scene_timeOfDay">
                     <option value=""></option>
                     <option value="Día">Día</option>
@@ -151,66 +124,29 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label>Largo Páginas</label>
+                  <label for="scene_pages">Páginas</label>
                   <input class="input" id="scene_pages" min="0" step="0.5" type="number"/>
                 </div>
               </div>
 
-              <div class="field">
-                <label>Resumen</label>
-                <textarea class="textarea smallArea" id="scene_summary"></textarea>
-              </div>
-              <div class="field">
-                <label>Notas</label>
-                <textarea class="textarea smallArea" id="scene_notes"></textarea>
-              </div>
-
-              <div class="row gap alignEnd">
-                <div class="field">
-                  <label>Categoría</label>
-                  <select class="input" id="elCategory"></select>
-                </div>
-                <div class="field grow">
-                  <label>Elemento</label>
-                  <input class="input" id="elItem" list="elSuggestDatalist" placeholder="Ej: Pistola, Sombrero…"/>
-                  <datalist id="elSuggestDatalist"></datalist>
-                </div>
-                <button class="btn primary" id="btnAddSceneElement">Agregar</button>
-              </div>
-
-              <div class="spacer"></div>
-              <div id="sceneElementsGrid"></div>
-              <div class="spacer"></div>
-              <div class="row gap alignEnd">
-                <div class="colTitle" style="margin:0;">Planos</div>
-                <button class="btn" id="btnAddShot">+ Plano</button>
-              </div>
-              <div class="tableWrap shotsWrap">
-                <table class="table" id="shotsTable">
-                  <thead>
-                    <tr>
-                      <th style="width:56px;">#</th>
-                      <th style="width:180px;">Tipo</th>
-                      <th>Descripción</th>
-                      <th style="width:72px;"></th>
-                    </tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-
+              </details>
+              <details class="sceneFold" id="sceneNotesFold"><summary data-ro-allow="1">Notas de producción <span id="sceneNotesCount"></span></summary><div class="field"><label for="scene_notes">Anotaciones del equipo</label><textarea class="textarea" id="scene_notes" placeholder="Anotaciones del equipo para esta escena…"></textarea></div></details>
+              <details class="sceneFold" id="sceneElementsFold" open><summary data-ro-allow="1">Elementos de la escena <span id="sceneElementsCount"></span></summary>
+                <div class="bdElementEntry"><label>Categoría<select class="input" id="elCategory"></select></label><label>Elemento<input class="input" id="elItem" list="elSuggestDatalist" placeholder="Ej: Pistola, Sombrero…"/><datalist id="elSuggestDatalist"></datalist></label><button class="btn primary" id="btnAddSceneElement">Agregar</button></div>
+                <div id="sceneElementsGrid"></div>
+              </details>
+              <details class="sceneFold" id="sceneShotsFold" open><summary data-ro-allow="1">Planos <span id="sceneShotsCount"></span></summary>
+                <div class="bdShotToolbar"><span class="muted small">Abrí un plano para editarlo.</span><button class="btn" id="btnAddShot">+ Plano</button></div>
+                <div class="shotsWrap" id="shotsTable" data-roda-section="shotlist"></div>
+              </details>
             </div>
           </div>
         </div>
-
-        <!-- ABAJO: importación (secundaria) + colapsable -->
-        
-          <div class="grid2">
-
+        <dialog class="script-upload-dialog bdImportDialog" id="bdImportDialog" aria-label="Importar Breakdown">
             <div class="card span2" id="bdImportCard">
               <div class="cardHeader">
                 <div class="cardTitle">Importar Breakdown <span class="keepcase">(Excel/CSV)</span></div>
-                <div class="pill" id="bdImportStatus">—</div>
+                <div class="pill" id="bdImportStatus">—</div><button type="button" class="btn" id="btnCloseBDImport" data-ro-allow="1">Cerrar ×</button>
               </div>
               <div class="cardContent">
                 <div class="row gap" style="flex-wrap:wrap;">
@@ -326,8 +262,7 @@
                 <div class="muted small">Tip: en el guion, el buscador de escenas funciona si el slugline arranca con INT./EXT.</div>
               </div>
             </div>
-          </div>
-
+        </dialog>
       </section>
 
             <!-- ================= CALL DIARIO ================= -->
