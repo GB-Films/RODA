@@ -1,0 +1,191 @@
+/* Bounded workspaces: the active list scrolls, navigation stays reachable. */
+.responsivePaneTabs,.responsiveBankToggle,.planTouchGrip{display:none;}
+.responsiveTools{display:contents;}
+.responsiveTools>summary{display:none;}
+@media screen and (max-width:1279px){
+ body.roda-studio{height:100dvh;overflow:hidden;}
+ .roda-studio>.shell,.roda-studio>.shell:not(.navCollapsed),.roda-studio>.shell.navCollapsed{grid-template-columns:minmax(0,1fr);overflow:hidden;}
+ .roda-studio .main,.roda-studio .main.hasDayNavigation,.roda-studio:is([data-roda-view="script"],[data-roda-view="locations"],[data-roda-view="cast"]) .main{display:flex;flex-direction:column;gap:10px;padding:58px 12px max(10px,env(safe-area-inset-bottom));overflow:hidden;}
+ .roda-studio .main>.view:not(.hidden){flex:1;min-height:0;height:auto;padding-right:0;}
+ .roda-studio .mTopbar{display:flex;position:fixed;top:54px;left:0;right:0;height:48px;padding:2px max(12px,env(safe-area-inset-right)) 2px max(12px,env(safe-area-inset-left));gap:10px;align-items:center;z-index:150;background:#161616;border-bottom:1px solid #333;box-sizing:border-box;backdrop-filter:none;}
+ .roda-studio .mTopMid{min-width:0;flex:1;}
+ .roda-studio .mProjTitle{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+ .roda-studio #mProjectSwitch,.roda-studio .mDayBar,.roda-studio .mDock{display:none!important;}
+ .roda-studio .mIconBtn{width:44px;height:44px;border:1px solid #3a3a3a;border-radius:7px;color:#eee;background:#222;font-size:19px;flex:none;}
+ .roda-studio .sidebar{position:fixed;top:102px;bottom:0;left:0;width:min(340px,88vw);z-index:145;transform:translateX(-105%);visibility:hidden;transition:transform .18s ease,visibility .18s;overflow:hidden;}
+ .roda-studio .sidebar.mOpen{transform:translateX(0);visibility:visible;}
+ .roda-studio .mBackdrop:not(.hidden){display:block;position:fixed;inset:102px 0 0;z-index:140;background:#0009;}
+ .roda-studio .shell.navCollapsed .sidebar .navLbl,.roda-studio .shell.navCollapsed .nav-section,.roda-studio .shell.navCollapsed .project-identity-title{display:block;}
+ .roda-studio .shell.navCollapsed .navBtn{justify-content:flex-start;}
+ .roda-studio .shell.navCollapsed .navIco{width:24px;height:24px;}
+ .roda-studio .sidebar #btnNavCollapse,.roda-studio .sidebar .projPill{display:none;}
+ .roda-studio .sidebar .navBtn{min-height:44px;text-transform:none;letter-spacing:0;}
+ .roda-studio .project-identity-cover{height:80px;}
+ .roda-studio .dayNavigation{z-index:110;min-height:44px;gap:6px 10px;}
+ .roda-studio .dayPicker{min-width:0;flex:1;max-width:520px;}
+ .roda-studio .dayPickerMenu{width:min(420px,calc(100vw - 24px));max-width:calc(100vw - 24px);}
+ .roda-studio .dayPickerOptions{max-height:min(420px,55dvh);}
+ .roda-studio .dayNavigationMeta{flex-basis:auto;}
+ .roda-studio #dayplanLayout,.roda-studio #dayplanLayout.bankCollapsed{height:100%;min-height:0;grid-template-columns:minmax(0,1fr);position:relative;}
+ .roda-studio #dpBankCol{display:none;position:absolute;inset:58px auto 0 0;width:min(340px,95%);z-index:105;}
+ .roda-studio #dpBankCol.responsive-bank-open{display:flex;}
+ .roda-studio #dayplanLayout #dpBankCol.responsive-bank-open .bankCard{display:flex;}
+ .roda-studio #dpBankCol.responsive-bank-open #dpBankDock{display:none;}
+ .roda-studio #dpBankCol.responsive-bank-open .bankCard.collapsed .cardContent{display:flex;}
+ .roda-studio #dpBankCol .bankCard{height:100%;max-height:none;min-height:0;box-shadow:10px 0 24px #0008;}
+ .roda-studio .responsiveBankToggle{display:inline-flex;}
+ .roda-studio #dayplanCard>.cardHeader>.cardTitle{width:auto;}
+ .roda-studio #dayplanCard>.cardHeader{gap:8px;}
+ .roda-studio #dayplanCard,.roda-studio #dayplanLayout>.col{height:100%;min-height:0;}
+ .roda-studio .dayplanBody,.roda-studio #dayplanCard .dayplanBody.has-selection{display:flex;flex:1;min-height:0;position:relative;}
+ .roda-studio .dayplanBody .dpScroller{flex:1;min-height:0;max-height:none!important;}
+ .roda-studio #dayplanCard>.cardContent{min-height:0;flex:1;overflow:hidden;}
+ .roda-studio #scheduleCard .scheduleContent.has-selection{display:flex;position:relative;}
+ .roda-studio #scheduleCard .planningInspector,.roda-studio #dayplanCard .planningInspector{position:absolute;right:0;top:0;bottom:0;width:340px;max-width:100%;z-index:100;overflow:auto;background:#191919;box-shadow:-12px 0 28px #0009;margin:0;}
+ .roda-studio #view-breakdown>.breakdownLayout{grid-template-columns:minmax(230px,.8fr) minmax(0,1.2fr);grid-template-rows:minmax(0,1fr);}
+ .roda-studio #view-elements>.elementsLayout{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr);}
+ .roda-studio #elxDetail{display:flex;overflow:hidden;}
+ .roda-studio #elxDetail>.catBlock:first-child{position:static;}
+ .roda-studio #elxDetail .elxDetailScenes{overflow:auto;}
+ .roda-studio .location-layout{grid-template-columns:220px minmax(0,1fr);}
+ .roda-studio .workspace-heading{gap:12px;}
+ .roda-studio .workspace-heading h1{font-size:23px;}
+ .roda-studio .overview-stats{gap:12px 24px;}
+ .roda-studio dialog{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);box-sizing:border-box;overflow:auto;}
+ .roda-studio dialog .row{flex-wrap:wrap;}
+ .roda-studio .script-upload-dialog{width:calc(100vw - 24px);}
+ .roda-studio .script-modal-heading{align-items:start;gap:10px;}
+ .roda-studio .script-modal-heading h2{font-size:20px;}
+ .roda-studio .script-tools-toggle{display:block;flex:none;text-align:left;margin-bottom:8px;min-height:44px;}
+ .roda-studio #view-script{position:relative;}
+ .roda-studio .script-workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);}
+ .roda-studio .script-reader-tools{display:none;position:absolute;z-index:105;top:52px;bottom:0;left:0;width:min(340px,100%);box-shadow:12px 8px 30px #0009;border-color:#666;}
+ .roda-studio .script-reader-tools.is-open{display:flex;}
+ .roda-studio .script-reader-tools>.cardContent{overflow:auto;}
+ .roda-studio .script-document-scroll{padding:10px;}
+ .roda-studio .script-reading-page{padding-left:clamp(16px,8%,70px);padding-right:clamp(16px,8%,70px);}
+ .roda-studio .script-reading-page{box-shadow:none;}
+}
+@media screen and (pointer:coarse){
+ .roda-studio :is(.btn,.input,select,.dayPickerOption,.scene-link,.chip.toggle){min-height:44px;}
+ .roda-studio :is(input,textarea,select){font-size:16px!important;}
+ .roda-studio :is(input[type=checkbox],input[type=radio]){width:22px;height:22px;min-height:22px;flex:none;}
+ .roda-studio .btn.icon,.roda-studio .planningInspector .inspector-close{width:44px;height:44px;min-height:44px;}
+ .roda-studio .shotDragHandle{min-width:44px;min-height:44px;justify-content:center;}
+ .roda-studio #hoverTip{display:none!important;}
+ .roda-studio .dpBlock,.roda-studio .schedBlock{touch-action:pan-x pan-y;}
+ .roda-studio .planTouchGrip{display:flex;align-items:center;justify-content:center;position:absolute;right:0;top:0;width:44px;height:100%;min-height:24px;border:0;border-radius:4px;background:#ffffff0c;color:inherit;touch-action:none;font-size:22px;cursor:grab;}
+ .roda-studio .dpBlock:has(.planTouchGrip),.roda-studio .schedBlock:has(.planTouchGrip){padding-right:46px!important;}
+ .roda-studio .dpResize,.roda-studio .schedBlock .resize{display:none;}
+ .roda-studio .daySwapHint{display:none;}
+}
+@media screen and (max-width:700px), screen and (max-height:500px) and (max-width:1279px){
+ .roda-studio .main,.roda-studio .main.hasDayNavigation,.roda-studio:is([data-roda-view="script"],[data-roda-view="locations"],[data-roda-view="cast"]) .main{padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right));gap:8px;}
+ .roda-studio .dayNavigationLabel,.roda-studio .dayNavigationMeta{display:none;}
+ .roda-studio .dayPicker{width:100%;max-width:none;}
+ .roda-studio .dayPicker>summary{min-height:44px;}
+ .roda-studio .responsivePaneTabs{display:flex;gap:6px;flex:none;margin-bottom:8px;}
+ .responsivePaneTabs .btn{flex:1;}
+ .responsivePaneTabs [aria-pressed=true]{background:#e9e9e9;color:#111;}
+ .roda-studio #view-breakdown>.breakdownLayout,.roda-studio #view-elements>.elementsLayout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);}
+ #view-breakdown:not(.responsive-detail) #sceneEditorCard,#view-elements:not(.responsive-detail) #elementsDetailCard,#view-breakdown.responsive-detail #sceneListCard,#view-elements.responsive-detail #elementsExplorerCard{display:none;}
+ .roda-studio .bdListControls>.row{grid-template-columns:minmax(0,1fr);gap:6px;}
+ .roda-studio .bdListActions{flex-wrap:nowrap;overflow-x:auto;}
+ .roda-studio .bdListActions>.btn{flex:none;}
+ .roda-studio .responsiveTools{display:block;position:relative;margin-left:auto;}
+ .roda-studio .responsiveTools>summary{display:flex;align-items:center;list-style:none;}
+ .roda-studio .responsiveTools>summary::-webkit-details-marker{display:none;}
+ .roda-studio .responsiveTools[open]>.row{display:flex!important;position:fixed;top:162px;left:12px;right:12px;width:auto!important;max-height:calc(100dvh - 186px);overflow:auto;z-index:120;padding:16px;gap:12px!important;flex-wrap:wrap;justify-content:flex-start!important;background:#202225;border:1px solid #555;border-radius:10px;box-shadow:0 12px 36px #000b;}
+ .roda-studio .responsiveTools:not([open])>.row{display:none!important;}
+ .roda-studio .responsiveTools .input{max-width:100%;}
+ .roda-studio #crewSearch{flex-basis:100%;width:100%;}
+ .roda-studio #crewAreaFilter{flex:1;}
+ .roda-studio .cardHeader{flex-wrap:wrap;}
+ .roda-studio #dayplanCard>.cardHeader{padding:8px;}
+ .roda-studio #dayplanCard>.cardHeader>.cardTitle{font-size:12px;}
+ .roda-studio #dayplanCard>.cardHeader .responsiveTools{order:3;}
+ .roda-studio #dayplanCard>.cardHeader .responsiveBankToggle{margin-left:auto;}
+ .roda-studio #dayplanCard>.cardContent{padding:8px;}
+ .roda-studio .dayplanHeader{margin-bottom:0;gap:6px;}
+ .roda-studio .dayplanHeader .t{font-size:13px;}
+ .roda-studio .dpRight{width:auto;margin-left:auto;}
+ .roda-studio .dpDayMeta{display:none;}
+ .roda-studio .dayplanBody #dayplanInspector{width:100%;}
+ .roda-studio #dpDayMetaEditor{position:fixed;top:160px;left:12px;right:12px;bottom:12px;overflow:auto;z-index:115;background:#202225;box-shadow:0 12px 36px #000a;}
+ .roda-studio .dayDetail3col[data-mobile-panel="0"]>.col:not(:nth-child(1)),.roda-studio .dayDetail3col[data-mobile-panel="1"]>.col:not(:nth-child(2)),.roda-studio .dayDetail3col[data-mobile-panel="2"]>.col:not(:nth-child(3)){display:none;}
+ .roda-studio .responsiveCallTabs{position:sticky;top:-8px;z-index:5;background:#191919;padding:8px 0;}
+ .roda-studio #scheduleCard .planningInspector{width:100%;}
+ .roda-studio #dpTimeCol{width:48px;}
+ .roda-studio .dpScroller:not(.planning-compact *){grid-template-columns:48px minmax(0,1fr);}
+ .roda-studio .planning-compact #dpLane .dpBlockTitle{grid-template-columns:28px minmax(0,1fr);gap:4px;}
+ .roda-studio .planning-compact #dpLane .dpTime{grid-column:1 / -1;grid-row:1;font-size:12px;}
+ .roda-studio .planning-compact #dpLane .planDuration{grid-column:1 / -1;grid-row:2;text-align:left;color:inherit;opacity:.85;}
+ .roda-studio .planning-compact #dpLane .dpNum{grid-column:1;grid-row:3;}
+ .roda-studio .planning-compact #dpLane .dpSlug{grid-column:2;grid-row:3;}
+ .roda-studio .planning-compact #dpLane [data-kind=block] .dpSlug{grid-column:1 / -1;}
+ .roda-studio .planning-compact #dpLane .dpBlock{min-height:76px;}
+ .roda-studio #schedBoard .schedDay{width:min(320px,calc(100vw - 48px));min-width:min(320px,calc(100vw - 48px));}
+ .roda-studio .location-layout{grid-template-columns:minmax(0,1fr);}
+ .roda-studio .workspace-heading{margin-bottom:12px;}
+ .roda-studio .workspace-heading p{font-size:12px;}
+ .roda-studio .cast-review-actions{flex-wrap:wrap;}
+ .roda-studio .cast-review-actions>*{max-width:100%;}
+ .roda-studio .overview-stats{gap:8px 20px;padding-bottom:12px;}
+ .roda-studio .overview-stats strong{font-size:21px;}
+ .roda-studio .script-sources{grid-template-columns:minmax(0,1fr);}
+ .roda-studio .script-modal-heading{flex-wrap:wrap;}
+ .roda-studio .script-reading-page{--page-top:32px!important;--page-bottom:40px!important;}
+ .roda-studio #crewTable{display:block;min-width:0;width:100%;}
+ .roda-studio #crewTable thead{display:none;}
+ .roda-studio #crewTable tbody{display:grid;gap:10px;}
+ .roda-studio #crewTable tr[data-crew-id]{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:12px;background:#222528;border:1px solid #3b3e42;border-radius:8px;}
+ .roda-studio #crewTable td{display:block;min-width:0!important;padding:0;border:0;}
+ .roda-studio #crewTable td .input{width:100%;min-width:0!important;}
+ .roda-studio #crewTable tr[data-crew-id]>td:nth-child(1),.roda-studio #crewTable tr[data-crew-id]>td:nth-child(6),.roda-studio #crewTable tr[data-crew-id]>td:nth-child(7),.roda-studio #crewTable .crew-person-actions{grid-column:1 / -1;}
+ .roda-studio #crewTable tr[data-crew-id]>td::before{display:block;font-size:11px;color:#b7bdc4;margin-bottom:5px;}
+ .roda-studio #crewTable tr[data-crew-id]>td:nth-child(1)::before{content:'Área';}
+ .roda-studio #crewTable tr[data-crew-id]>td:nth-child(2)::before{content:'Rol';}
+ .roda-studio #crewTable tr[data-crew-id]>td:nth-child(3)::before{content:'Nombre';}
+ .roda-studio #crewTable tr[data-crew-id]>td:nth-child(4)::before{content:'Apellido';}
+ .roda-studio #crewTable tr[data-crew-id]>td:nth-child(5)::before{content:'Teléfono';}
+ .roda-studio #crewTable tr[data-crew-id]>td:nth-child(6)::before{content:'Email';}
+ .roda-studio #crewTable tr[data-crew-id]>td:nth-child(7)::before{content:'Notas';}
+ .roda-studio #crewTable .crew-person-actions{justify-self:end;}
+ .roda-studio #crewTable .groupRow{display:block;position:sticky;top:0;z-index:2;background:#303236;}
+ .roda-studio #crewTable .crewGroupToggle{min-height:44px;}
+ .roda-studio .shotTableWrap{padding:0 8px 8px;}
+ .roda-studio #shotlistCard .shotTable tr{grid-template-columns:32px 44px minmax(0,1fr) 44px;gap:4px;}
+ .roda-studio #shotlistCard .shotTable .shotChk{grid-area:1 / 1;}
+ .roda-studio #shotlistCard .shotTable .shotNum{grid-area:1 / 2;}
+ .roda-studio #shotlistCard .shotTable .shotTime{grid-area:1 / 3;}
+ .roda-studio #shotlistCard .shotTable .shotAct{grid-area:1 / 4;}
+ .roda-studio #shotlistCard .shotTable .shotType{grid-area:2 / 1 / 3 / -1;}
+ .roda-studio #shotlistCard .shotTable td:has(.shotDescInput){grid-area:3 / 1 / 4 / -1;}
+ .roda-studio #shotlistCard .shotTable .shotDur{grid-area:4 / 1 / 5 / 3;}
+ .roda-studio #shotlistCard .shotTable .shotThumbTd{grid-area:4 / 3 / 5 / -1;}
+ .roda-studio .shotSceneContext{flex-wrap:wrap;gap:10px;}
+ .roda-studio .shotSceneToggle{padding:12px 8px;}
+ .roda-studio .shotSceneHeadRight .btn{padding:8px;}
+ .roda-studio .csPrintPreview{padding:10px;}
+ .roda-studio .reportsBoard{max-width:100%;}
+}
+@media screen and (prefers-reduced-motion:reduce){.roda-studio .sidebar{transition:none;}}
+@media screen and (max-height:500px) and (max-width:1279px){
+ .roda-studio #elxDetail{display:block;overflow:auto;}
+ .roda-studio #elxDetail .elxDetailScenes{overflow:visible;}
+ .roda-studio .main.hasDayNavigation>.dayNavigation{position:fixed;top:56px;left:64px;right:12px;height:44px;z-index:151;}
+ .roda-studio.hasSharedDayNavigation .mTopMid{visibility:hidden;}
+ .roda-studio .dayplanHeader{display:flex;flex-wrap:nowrap;padding:0;}
+ .roda-studio .dayplanHeader .dpRight{margin-left:auto;flex:none;}
+ .roda-studio .dayplanHeader .dpRight>.muted{display:none;}
+ .roda-studio .cardHeader{padding:4px 8px;}
+ .roda-studio .dayplanHeader .dpBadges,.roda-studio .dayplanHeader .dpMeta>.muted{display:none;}
+ .roda-studio .planning-compact #dpLane .dpBlock{min-height:54px;}
+ .roda-studio .planning-compact #dpLane .dpBlockTitle{grid-template-columns:100px 28px minmax(0,1fr);}
+ .roda-studio .planning-compact #dpLane .dpTime{grid-column:1;grid-row:1;}
+ .roda-studio .planning-compact #dpLane .planDuration{grid-column:1;grid-row:2;}
+ .roda-studio .planning-compact #dpLane .dpNum{grid-column:2;grid-row:1 / 3;}
+ .roda-studio .planning-compact #dpLane .dpSlug{grid-column:3;grid-row:1 / 3;}
+ .roda-studio .planning-compact #dpLane [data-kind=block] .dpSlug{grid-column:2 / -1;}
+}
+@media print{.responsivePaneTabs,.responsiveBankToggle,.planTouchGrip,.responsiveTools>summary{display:none!important;}}

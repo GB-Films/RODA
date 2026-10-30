@@ -205,7 +205,7 @@
     $('scriptFormatHint').textContent='Preparando lectura…';reading();
   }
 
-  function jump(index,flash=true){if(!anchors[index])return;$('scriptSceneSelect').value=index;if(matchMedia('(max-width:700px)').matches){$('scriptReaderTools').classList.remove('is-open');$('scriptToolsToggle').setAttribute('aria-expanded','false');}const node=$('script-scene-'+index);reveal(node);if(flash)node?.closest('p')?.animate([{backgroundColor:'#e7d998'},{backgroundColor:'transparent'}],{duration:900});}
+  function jump(index,flash=true){if(!anchors[index])return;$('scriptSceneSelect').value=index;if(matchMedia('(max-width:1279px)').matches){$('scriptReaderTools').classList.remove('is-open');$('scriptToolsToggle').setAttribute('aria-expanded','false');}const node=$('script-scene-'+index);reveal(node);if(flash)node?.closest('p')?.animate([{backgroundColor:'#e7d998'},{backgroundColor:'transparent'}],{duration:900});}
   function bind(){
     document.addEventListener('roda-view',()=>{if(document.body.dataset.rodaView!=='script')pendingTarget=null;});
     $('scriptSearch').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(search,180);});

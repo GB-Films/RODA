@@ -54,7 +54,7 @@
   }
 
   // Compact rows have no pixel-to-minute scale: hit-test another scene instead.
-  function bindCompactSceneSwap(container,{enabled,readItem,getScroller,onSwap,allowCrossDay=false}){
+  function bindCompactSceneSwap(container,{enabled,readItem,getScroller,onSwap,allowCrossDay=false,touchHandleOnly=false}){
     let drag=null,frameId=null,ignoreClick=false;
     const doc=container.ownerDocument,view=doc.defaultView;
     function targetAt(p){
@@ -100,6 +100,7 @@
     container.addEventListener('pointerdown',e=>{
       ignoreClick=false;
       if(drag||e.button!==0||!enabled())return;
+      if(touchHandleOnly&&(e.pointerType==='touch'||e.pointerType==='pen')&&!e.target.closest('.planTouchGrip'))return;
       const node=e.target.closest('.dpBlock,.schedBlock');if(!node)return;
       const item=readItem(node);if(item?.kind!=='scene')return;
       const scroller=getScroller();if(!scroller)return;
