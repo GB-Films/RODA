@@ -18,6 +18,8 @@ window.RodaResponsive=(()=>{
    const header=document.querySelector('#'+id+'>.cardHeader'),toolbar=header?.querySelector('.row');if(!toolbar)continue;
    const menu=document.createElement('details');menu.className='responsiveTools';
    const summary=document.createElement('summary');summary.dataset.roAllow='1';summary.className='btn';summary.textContent='Herramientas';summary.setAttribute('aria-label','Herramientas de '+header.querySelector('h2').textContent);menu.append(summary);header.append(menu);menu.append(toolbar);
+   const place=()=>{if(small()&&menu.open)menu.style.setProperty('--roda-tools-top',Math.min(summary.getBoundingClientRect().bottom+8,Math.max(12,innerHeight-100))+'px');};
+   menu.addEventListener('toggle',place);window.addEventListener('resize',place);
    document.addEventListener('click',e=>{if(small()&&!menu.contains(e.target))menu.open=false;});
    menu.addEventListener('keydown',e=>{if(e.key==='Escape'&&small()){menu.open=false;summary.focus();}});
    // The content is always displayed on desktop, independently of disclosure state.
