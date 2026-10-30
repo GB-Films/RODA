@@ -95,7 +95,7 @@
  .roda-studio .responsiveTools{display:block;position:relative;margin-left:auto;}
  .roda-studio .responsiveTools>summary{display:flex;align-items:center;list-style:none;}
  .roda-studio .responsiveTools>summary::-webkit-details-marker{display:none;}
- .roda-studio .responsiveTools[open]>.row{display:flex!important;position:fixed;top:162px;left:12px;right:12px;width:auto!important;max-height:calc(100dvh - 186px);overflow:auto;z-index:120;padding:16px;gap:12px!important;flex-wrap:wrap;justify-content:flex-start!important;background:#202225;border:1px solid #555;border-radius:10px;box-shadow:0 12px 36px #000b;}
+ .roda-studio .responsiveTools[open]>.row{display:flex!important;position:fixed;top:var(--roda-tools-top,222px);left:12px;right:12px;width:auto!important;max-height:max(80px,calc(100dvh - var(--roda-tools-top,222px) - 12px));overflow:auto;z-index:120;padding:16px;gap:12px!important;flex-wrap:wrap;justify-content:flex-start!important;background:#202225;border:1px solid #555;border-radius:10px;box-shadow:0 12px 36px #000b;}
  .roda-studio .responsiveTools:not([open])>.row{display:none!important;}
  .roda-studio .responsiveTools .input{max-width:100%;}
  .roda-studio #crewSearch{flex-basis:100%;width:100%;}
