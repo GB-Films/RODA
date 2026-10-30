@@ -61,3 +61,14 @@ test('numbered supporting characters and renamed hostages remain visible as char
  for(const name of ['SECUAZ 1','SECUAZ 2','LUCÍA'])assert.equal(cast.typeFor(state,name),'character');
  assert.equal(cast.typeFor(state,'MIMO'),'extra');assert.equal(cast.typeFor(state,'VOZ'),'voice');assert.deepEqual(state,before);
 });
+
+test('cast script links use the production scene identity, aliases and chapter without changing data',()=>{
+ const state={scenes:[{id:'s1',number:'99',chapter:'A'},{id:'s2',number:'02',chapter:'B'},{id:'manual',number:88}],crew:[{id:'actor',name:'Ana'}],shootDays:[{times:{s1:30}}],script:{activeVersionId:'latest',castAliases:[{name:'SECRETARIA',aliases:['ASISTENTE']}],versions:[{id:'old',scenes:[]},{id:'latest',scenes:[{id:'p1',productionSceneId:'s1',number:'17',chapter:'A'},{number:2,chapter:'A'},{number:2,chapter:'B'}]}]}};
+ const before=structuredClone(state);
+ assert.deepEqual(cast.scriptTarget(state,'s1','SECRETARIA'),{versionId:'latest',index:0,number:'17',chapter:'A',variants:['SECRETARIA','ASISTENTE']});
+ assert.equal(cast.scriptTarget(state,'s1','ASISTENTE').variants[0],'SECRETARIA');
+ assert.equal(cast.scriptTarget(state,'s2','700').index,2);
+ assert.equal(cast.scriptTarget(state,'manual','700'),null);
+ assert.equal(cast.scriptTarget(state,'missing','700'),null);
+ assert.deepEqual(state,before);
+});

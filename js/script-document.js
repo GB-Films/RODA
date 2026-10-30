@@ -124,9 +124,43 @@
     for(let i=scenes.length-1;i>=0;i--){const offset=offsets[scenes[i].sourceLine],entry=nodes.find(n=>n.start<=offset&&n.end>offset);if(!entry)continue;const anchor=document.createElement('span');anchor.id='script-scene-'+i;anchor.className='script-scene-anchor';entry.node.splitText(offset-entry.start).before(anchor);if(!rich)anchor.closest('p')?.classList.add('script-slugline');}
     return scenes;
   }
-  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver;
+  // Find a whole character name, including aliases, without confusing 22 with 122
+  // or losing the original offsets when accents or styled runs differ.
+  function firstMention(text,variants){
+    let hay='',offsets=[],position=0;
+    const normalize=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleUpperCase().replace(/[^\p{L}\p{N}]/gu,' ');
+    for(const char of text){const part=normalize(char);for(let i=0;i<part.length;i++){offsets.push(position);hay+=part[i];}position+=char.length;}offsets.push(text.length);
+    let first=null;
+    for(const value of variants||[]){const words=normalize(value).trim().split(/\s+/).filter(Boolean);if(!words.length)continue;
+      const match=new RegExp('(?:^| )('+words.join('\\s+')+')(?= |$)','u').exec(hay);if(!match)continue;
+      const start=match.index+match[0].length-match[1].length,end=start+match[1].length;
+      if(!first||start<first.start||start===first.start&&end>first.end)first={start,end};
+    }
+    return first?{start:offsets[first.start],end:offsets[first.end]}:null;
+  }
+  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver,ready=false,pendingTarget=null,flashTimer;
   const $=id=>document.getElementById(id);
   function reveal(node){if(!node)return;const scroller=$('scriptDocumentScroll'),box=node.getBoundingClientRect();scroller.scrollTop+=box.top-scroller.getBoundingClientRect().top-36;}
+  function clearFlash(){clearTimeout(flashTimer);for(const mark of $('scriptFullText').querySelectorAll('.script-cast-mention'))mark.replaceWith(document.createTextNode(mark.textContent));}
+  function followTarget(){
+    if(!ready||!pendingTarget||$('scriptFullText').dataset.version!==pendingTarget.versionId)return;
+    const target=pendingTarget;pendingTarget=null;
+    const sceneKey=s=>String(s.chapter||'').trim()+'|'+String(s.number||'').trim().replace(/^0+(?=\d)/,'').toUpperCase();
+    const index=anchors.findIndex(s=>sceneKey(s)===sceneKey(target));if(index<0)return;
+    clearTimeout(searchTimer);searchTimer=null;clearFlash();clearMatches();$('scriptSearch').value='';$('scriptSearchCount').textContent='';$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;
+    const container=$('scriptFullText'),anchor=$('script-scene-'+index),next=$('script-scene-'+(index+1));if(!anchor)return;
+    const offset=node=>{const range=document.createRange();range.setStart(container,0);range.setEndBefore(node);return range.toString().length;};
+    const start=offset(anchor),end=next?offset(next):container.textContent.length,match=firstMention(container.textContent.slice(start,end),target.variants);
+    jump(index,!match);
+    if(!match)return;
+    const from=start+match.start,to=start+match.end,nodes=textNodes(container),marks=[];
+    for(let i=nodes.length-1;i>=0;i--){const entry=nodes[i],a=Math.max(from,entry.start),b=Math.min(to,entry.end);if(b<=a)continue;
+      const selected=entry.node.splitText(a-entry.start);selected.splitText(b-a);const mark=document.createElement('mark');mark.className='script-cast-mention';selected.replaceWith(mark);mark.append(selected);marks.unshift(mark);
+    }
+    reveal(marks[0]);for(const mark of marks)mark.animate([{backgroundColor:'#ffbd59'},{backgroundColor:'#f6dc76'},{backgroundColor:'transparent'}],{duration:1200});
+    flashTimer=setTimeout(clearFlash,1200);
+  }
+  function navigate(target){pendingTarget=target;followTarget();}
   function clearMatches(){for(const node of $('scriptFullText').querySelectorAll('mark'))node.replaceWith(document.createTextNode(node.textContent));$('scriptFullText').normalize();matches=[];current=-1;}
   function navigateMatch(direction=1){if(!matches.length)return;current=(current+direction+matches.length)%matches.length;for(const mark of $('scriptFullText').querySelectorAll('mark'))mark.classList.toggle('current',Number(mark.dataset.match)===current);$('scriptSearchCount').textContent=`${current+1} de ${matches.length}`;reveal(matches[current]);}
   function search(){
@@ -145,7 +179,7 @@
     const {pdf,...readingFormat}=v?.documentFormat||{};
     const key=JSON.stringify([v?.id,v?.updatedAt,raw,readingFormat,v?.keywords]);
     if(key===readerKey)return;readerKey=key;
-    const serial=++updateSerial,container=$('scriptFullText');root.RodaScriptPages?.cancel();$('scriptDocumentScroll').scrollTop=0;
+    const serial=++updateSerial,container=$('scriptFullText');ready=false;clearFlash();root.RodaScriptPages?.cancel();$('scriptDocumentScroll').scrollTop=0;
     layoutObserver?.disconnect();layoutObserver=null;
     container.classList.remove('script-pdf-pages','script-reading-pages');
     $('scriptVersionUI').classList.add('script-paged-document');
@@ -155,9 +189,10 @@
       $('scriptSceneTotal').textContent=anchors.length+' escenas';
       for(const id of ['scriptSceneSelect','scriptSearch'])$(id).disabled=!anchors.length;
       $('scriptFormatHint').textContent=hint;
+      ready=container.clientWidth>0;followTarget();
     }
     function reading(){root.RodaScriptPages?.cancel();container.classList.remove('script-pdf-pages');let measuredWidth=0,layoutRun=0;
-      async function paginate(){if(serial!==updateSerial)return;const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);
+      async function paginate(){if(serial!==updateSerial)return;ready=false;clearFlash();const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);
         if(raw&&container.clientWidth===0){finish(result.scenes,'Preparando las páginas de lectura…');return;}
         measuredWidth=container.clientWidth;
         const count=raw&&root.RodaScriptPages?await root.RodaScriptPages.readingPages(container,readingFormat,()=>serial===updateSerial&&run===layoutRun):0;
@@ -170,13 +205,14 @@
     $('scriptFormatHint').textContent='Preparando lectura…';reading();
   }
 
-  function jump(index){if(!anchors[index])return;$('scriptSceneSelect').value=index;if(matchMedia('(max-width:700px)').matches){$('scriptReaderTools').classList.remove('is-open');$('scriptToolsToggle').setAttribute('aria-expanded','false');}const node=$('script-scene-'+index);reveal(node);node?.closest('p')?.animate([{backgroundColor:'#e7d998'},{backgroundColor:'transparent'}],{duration:900});}
+  function jump(index,flash=true){if(!anchors[index])return;$('scriptSceneSelect').value=index;if(matchMedia('(max-width:700px)').matches){$('scriptReaderTools').classList.remove('is-open');$('scriptToolsToggle').setAttribute('aria-expanded','false');}const node=$('script-scene-'+index);reveal(node);if(flash)node?.closest('p')?.animate([{backgroundColor:'#e7d998'},{backgroundColor:'transparent'}],{duration:900});}
   function bind(){
+    document.addEventListener('roda-view',()=>{if(document.body.dataset.rodaView!=='script')pendingTarget=null;});
     $('scriptSearch').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(search,180);});
     $('scriptSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(searchTimer){search();}else navigateMatch(e.shiftKey?-1:1);}if(e.key==='Escape'){e.target.value='';search();}});
     $('scriptSearchPrev').onclick=()=>navigateMatch(-1);$('scriptSearchNext').onclick=()=>navigateMatch(1);
     $('scriptSceneSelect').onchange=e=>{if(e.target.value!=='')jump(Number(e.target.value));};
     $('scriptToolsToggle').onclick=()=>{const aside=$('scriptReaderTools'),open=aside.classList.toggle('is-open');$('scriptToolsToggle').setAttribute('aria-expanded',String(open));};
   }
-  root.RodaScriptDocument={readWord,docsFormat,render,update,bind};
+  root.RodaScriptDocument={firstMention,navigate,readWord,docsFormat,render,update,bind};
 })(window);

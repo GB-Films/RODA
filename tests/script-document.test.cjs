@@ -27,3 +27,17 @@ test('Google page geometry and explicit breaks remain available to the reading-p
  const result=context.window.RodaScriptDocument.docsFormat({documentStyle:{documentSize:{width:{magnitude:595},height:{magnitude:842}},marginTop:{magnitude:50},marginLeft:{magnitude:60}},body:{content:[{paragraph:{paragraphStyle:{pageBreakBefore:true},elements:[{textRun:{content:'1. INT. CASA - DÍA\n'}}]}}]}});
  assert.equal(result.format.page.width,595);assert.equal(result.format.page.height,842);assert.equal(result.format.page.margins.top,50);assert.equal(result.format.page.margins.left,60);assert.equal(result.format.blocks[0].style.breakBefore,true);
 });
+
+test('character mentions match full names and aliases with original Unicode offsets',()=>{
+ const context={window:{}};vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../js/script-document.js'), 'utf8'),context);
+ const find=context.window.RodaScriptDocument.firstMention;
+ for(const [text,variants,want] of [
+  ['122 mira a 22.',['22'],'22'],
+  ['Secretariado. La secretária llega. SECRETARIA',['SECRETARIA'],'secretária'],
+  ['La ASISTENTE llega. SECRETARIA después.',['SECRETARIA','ASISTENTE'],'ASISTENTE'],
+  ['SECUAZ-1 entra.',['SECUAZ 1'],'SECUAZ-1'],
+  ['IVÁN RAPOSKY se detiene.',['IVAN','IVAN RAPOSKY'],'IVÁN RAPOSKY']
+ ]){const range=find(text,variants);assert.ok(range);assert.equal(text.slice(range.start,range.end),want);}
+ assert.equal(find('1700 y 122', ['700','22']),null);
+ assert.equal(find('Una acción sin personajes.', []),null);
+});
