@@ -39,7 +39,12 @@
   return people(state).find(p=>!p.castPerson&&key(p.role||p.name)===key(name))||null;
  }
  function typeFor(state,name){
-  return profileFor(state,name)?.castType||(state.crew||[]).find(p=>p.area==='Cast'&&!p.castPerson&&key(p.role||p.name)===key(name))?.castType||'character';
+  const stored=profileFor(state,name)?.castType||(state.crew||[]).find(p=>p.area==='Cast'&&!p.castPerson&&key(p.role||p.name)===key(name))?.castType||'character';
+  // Older breakdowns marked individually identified supporting roles as extras.
+  // Resolve their aliases too, so renaming a hostage keeps the same classification.
+  const row=state.script?.castAliases?.find(r=>key(r.name)===key(name));
+  const identified=[name,...(row?.aliases||[])].some(n=>/^(?:SECUAZ|REHEN|POLICIA|GUARDAESPALDAS|SEGURIDAD|AGENTE(?: SWAT)?) \d+(?: |$)/.test(key(n)));
+  return stored==='extra'&&identified?'character':stored;
  }
  function ensureProfile(state,name){
   const existing=profileFor(state,name);if(existing)return existing;
