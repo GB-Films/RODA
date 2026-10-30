@@ -18,6 +18,16 @@
   const row=aliases.find(row=>key(row.name)===key(name)),variants=[name,...(row?.aliases||[])],hay=' '+key(text)+' ';
   return variants.some(value=>hay.includes(' '+key(value)+' '));
  }
+ function scriptTarget(state,sceneId,name){
+  const scene=(state.scenes||[]).find(s=>s.id===sceneId),version=state.script?.versions?.find(v=>v.id===state.script.activeVersionId&&!v.draft);
+  if(!scene||!version)return null;
+  const sceneKey=s=>key(s.chapter)+'|'+String(s.number||'').trim().replace(/^0+(?=\d)/,'').toUpperCase();
+  let index=(version.scenes||[]).findIndex(s=>s.productionSceneId===sceneId||s.id===sceneId);
+  if(index<0){const candidates=(version.scenes||[]).map((s,i)=>({s,i})).filter(({s})=>sceneKey(s)===sceneKey(scene));if(candidates.length===1)index=candidates[0].i;}
+  if(index<0)return null;
+  const source=version.scenes[index],row=(state.script.castAliases||[]).find(r=>key(r.name)===key(name)||r.aliases?.some(a=>key(a)===key(name)));
+  return {versionId:version.id,index,number:source.number,chapter:source.chapter||'',variants:[...new Set([row?.name||name,...(row?.aliases||[])].filter(Boolean))]};
+ }
  function resolveScene(scene,detected,previous,aliases=[]){
   const manual=previous?.castManual||[],unchanged=previous?.summary===scene.body;
   return names([...detected,...manual.filter(name=>unchanged||mentioned(name,scene.body,aliases))],aliases);
@@ -147,5 +157,5 @@
   const clock=n=>String(Math.floor(n/60)%24).padStart(2,'0')+':'+String(n%60).padStart(2,'0');
   return {first:clock(first),end:clock(last),call:clock(call)};
  }
- const api={dayRoster,workWindow,duplicates,reconcileMergedPeople,mergePeople,restorePerson,personNameParts,syncPersonName,setPersonName,key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
+ const api={scriptTarget,dayRoster,workWindow,duplicates,reconcileMergedPeople,mergePeople,restorePerson,personNameParts,syncPersonName,setPersonName,key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);
