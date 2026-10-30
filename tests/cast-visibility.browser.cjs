@@ -19,6 +19,8 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));await page.route('https://**/*',r=>r.abort());
   await page.goto('http://127.0.0.1:'+server.address().port+'/roda/');
   const seed={meta:{version:14,title:'PRUEBA REPARTO',updatedAt:new Date().toISOString()},scenes:[{id:'s1',number:1,slugline:'INT. SALA - DÍA',elements:{cast:['700','LOCUTOR']}},{id:'s2',number:2,slugline:'EXT. ACCESO - DÍA',elements:{cast:['AGENTE']}},{id:'s3',number:3,slugline:'INT. OFICINA - DÍA',elements:{cast:['700']}}],crew:[{id:'p0',area:'Cast',castPerson:true,role:'Actor / actriz',name:'Roberto Ejemplo',firstName:'Roberto',lastName:'Ejemplo',phone:'123',email:'actor@example.com'},{id:'p1',area:'Cast',castPerson:true,role:'Actor / actriz',name:'Celeste Prueba',firstName:'Celeste',lastName:'Prueba',phone:'456'},{id:'role700',area:'Cast',castProfile:true,role:'700',actorId:'p0',castType:'character'},{id:'roleAgent',area:'Cast',castProfile:true,role:'AGENTE',actorId:'',castType:'character'},{id:'roleVoice',area:'Cast',castProfile:true,role:'LOCUTOR',actorId:'',castType:'voice'}],project:{},shootDays:[{id:'d1',date:'2026-11-05',callTime:'08:00',sceneIds:['s1','s2'],times:{s1:0,s2:60},durations:{s1:60,s2:30},blocks:[]},{id:'d2',date:'2026-11-06',callTime:'10:00',sceneIds:['s3'],times:{s3:0},durations:{s3:30},blocks:[]}]};
+  seed.scenes[0].elements.cast.push('SECUAZ 1','SECUAZ 2','MIMO');
+  seed.crew.push(...['SECUAZ 1','SECUAZ 2','MIMO'].map(role=>({id:role,area:'Cast',castProfile:true,role,actorId:'',castType:'extra'})));
   async function boot(data){
   await page.evaluate(data=>{
    sessionStorage.setItem('gb_edit_unlocked__default','1');
@@ -40,7 +42,10 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   const card=name=>page.locator('details.cast-card').filter({has:page.locator('h2').filter({hasText:new RegExp('^'+name+'$')})});
   const writes=()=>page.evaluate(()=>savedWrites),saved=()=>page.evaluate(()=>structuredClone(savedState));
   if(errors.length)console.log(errors);
-  assert.equal(await page.locator('#castDirectory details.cast-card').count(),3);assert.equal(await page.locator('#castDirectory details[open]').count(),0);
+  assert.equal(await page.locator('#castKindFilter').inputValue(),'all','The full catalog opens by default');
+  await page.locator('#castKindFilter').selectOption('character');assert.equal(await card('SECUAZ 1').count(),1);assert.equal(await card('SECUAZ 2').count(),1);assert.equal(await card('MIMO').count(),0);
+  await page.locator('#castKindFilter').selectOption('all');
+  assert.equal(await page.locator('#castDirectory details.cast-card').count(),6);assert.equal(await page.locator('#castDirectory details[open]').count(),0);
   assert.equal(await card('700').locator('.cast-actor-name').textContent(),'✓ Roberto Ejemplo');assert.match(await card('700').getAttribute('class'),/cast-card--assigned/);
   assert.match(await card('700').locator('.cast-summary-counts').textContent(),/2 escenas.*2 jornadas/);assert.match(await card('AGENTE').locator('.cast-summary-counts').textContent(),/1 escena.*1 jornada/);assert.match(await card('AGENTE').locator('.cast-actor-name').textContent(),/Sin intérprete/);
   assert.equal(await page.locator('[data-cast-type]').count(),0);assert.equal(await page.getByText('Participación',{exact:true}).count(),0);
