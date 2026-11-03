@@ -109,3 +109,7 @@ La sección de producción reúne los elementos de Arte y Props del desglose, ag
 El inventario persiste en `artItems`, independiente de las versiones del guion y del calendario. Las fichas preparadas que dejan de figurar en el desglose se conservan para revisión; leer el inventario nunca modifica las escenas. `js/art.js` contiene el modelo y su validación; `js/art-view.js` y `css/art.css` contienen la interfaz. La integración, el permiso independiente de Arte, el servidor y las pruebas de navegador viven en `GB-Films/GB-Studio/roda`. El editor independiente anterior conserva su carga y almacenamiento.
 
 Validación del modelo: `node --test tests/art.test.cjs`. En GB Studio, `node tests/roda-art.browser.cjs` prueba guardado, archivo/restauración, edición por permisos y scroll en teléfono, iPad y escritorio con Chromium y WebKit.
+
+### Inventario compacto · GB Studio 1.49.1
+
+Búsqueda y resumen en una barra superior; filtros desplegables con contador y limpieza, sin reducir la altura del inventario. Fichas compactas y scroll independiente del detalle. La integración y las pruebas de navegador se mantienen en GB-Films/GB-Studio.
