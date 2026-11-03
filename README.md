@@ -125,3 +125,5 @@ Validado con pruebas de inventario, permisos, lectura del guion y navegación Re
 La integración y el servidor se mantienen en GB-Films/GB-Studio; el editor independiente conserva su carga y almacenamiento.
 
 GB Studio 1.50.1 conserva el destino del elemento al reacomodar páginas en la primera apertura del lector. La lectura manual, otra búsqueda o salir del guion liberan el destino. Prueba de regresión con guiones largos en GB-Studio.
+
+GB Studio 1.51.0 permite volver del guion a Arte y utilería conservando elemento, jornada, filtros y scroll. Se sincronizan el estado local del inventario y la reanudación del lector; la integración de navegación y sus pruebas están en GB-Studio. El editor independiente conserva su carga y almacenamiento.

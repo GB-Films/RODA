@@ -3,15 +3,18 @@
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=(n,c)=>c+' '+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
  function create(host,{getState,getScope,canEdit,save,showAll,openScene,canOpenScene,getPeople,notify}){
-  let selected=null,query='',category='all',status='all',owner='',archived=false,drafts=[];
+  let selected=null,query='',category='all',status='all',owner='',archived=false,drafts=[],listPosition={top:0,left:0};
   const flush=()=>{let valid=true;for(const draft of drafts)if(!draft.flush())valid=false;return valid;};
   host.innerHTML=`<header class="artHeading"><h1>Arte y utilería</h1><button class="btn primary" id="artAdd">+ Elemento</button></header>
    <div class="artToolbar" data-ro-allow="1"><div class="artStats" id="artStats"></div><div class="artControls"><input aria-label="Buscar elemento" type="search" class="input artSearch" id="artSearch" placeholder="Buscar elemento…"><details class="artFilterMenu" id="artFilterMenu"><summary>Filtros <span id="artFilterCount" hidden></span><span aria-hidden="true">⌄</span></summary><div class="artFilters"><div class="artFilterRow"><label>Categoría<select class="input" id="artCategory"><option value="all">Arte y utilería</option><option value="art">Arte / ambientación</option><option value="props">Utilería / props</option></select></label><label>Estado<select class="input" id="artStatus"><option value="all">Todos</option>${Object.entries(RodaArt.statuses).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}<option value="obsolete">Fuera del desglose</option></select></label></div><label>Responsable<input type="search" class="input" id="artOwnerFilter" placeholder="Todos los responsables"></label><label class="artArchived"><input type="checkbox" id="artArchived"> Ver archivados</label><footer><button type="button" class="btn" id="artClearFilters">Limpiar filtros</button><button type="button" class="btn" id="artCloseFilters">Listo</button></footer></div></details></div></div><div class="artWorkspace">
    <section class="card artExplorer" aria-label="Inventario de arte"><div id="artList" class="artList"></div></section>
-   <section class="card artDetail" id="artDetail" aria-label="Detalle del elemento"></section></div><p class="artSaveStatus muted small" role="status" id="artSaveStatus">Los cambios se guardan automáticamente.</p>
+   <section class="card artDetail" id="artDetail" tabindex="-1" aria-label="Detalle del elemento"></section></div><p class="artSaveStatus muted small" role="status" id="artSaveStatus">Los cambios se guardan automáticamente.</p>
    <dialog class="artDialog" id="artCreateDialog"><form><header><h2>Nuevo elemento</h2><button class="btn" type="button" data-close data-ro-allow="1" aria-label="Cerrar nuevo elemento">×</button></header><label>Nombre<input class="input" name="name" maxlength="500" required placeholder="Ej.: cartel de la fábrica"></label><label>Categoría<select class="input" name="category"><option value="art">Arte / ambientación</option><option value="props">Utilería / props</option></select></label><p class="muted small">Después podés vincularlo a escenas y cargar su responsable, costo y estado.</p><p role="status" class="artError"></p><footer><button type="button" class="btn" data-close data-ro-allow="1">Cancelar</button><button class="btn primary" type="submit">Agregar elemento</button></footer></form></dialog>
    <dialog class="artDialog artPeopleDialog" id="artResponsibleDialog" aria-labelledby="artPeopleTitle"><header><h2 id="artPeopleTitle">Elegir responsable</h2><button class="btn" type="button" data-close aria-label="Cerrar responsables">×</button></header><input type="search" class="input" id="artPeopleSearch" aria-label="Buscar responsable" placeholder="Nombre, área o rol…"><p class="muted small" id="artPeopleStatus" role="status"></p><div id="artPeopleList" class="artPeopleList"></div><footer><button type="button" class="btn" id="artClearResponsible">Sin responsable</button><button type="button" class="btn" data-close>Cancelar</button></footer></dialog>`;
   const $=id=>host.querySelector('#'+id),list=$('artList'),detail=$('artDetail'),dialog=$('artCreateDialog'),filterMenu=$('artFilterMenu');
+  function rememberList(){if(list.clientHeight)listPosition={top:list.scrollTop,left:list.scrollLeft};}
+  list.addEventListener('scroll',rememberList,{passive:true});
+  function restoreList(){list.scrollTop=listPosition.top;list.scrollLeft=listPosition.left;}
   function closeFilters(){filterMenu.open=false;}
   $('artCloseFilters').onclick=()=>{closeFilters();filterMenu.querySelector('summary').focus();};
   filterMenu.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeFilters();filterMenu.querySelector('summary').focus();}});
@@ -20,11 +23,13 @@
   const all=()=>RodaArt.rows(getState(),getScope());
   function visible(){return all().filter(r=>r.archived===archived&&(category==='all'||r.category===category)&&(status==='all'||status==='obsolete'&&r.obsolete||r.status===status)&&(!query||RodaArt.key(r.name+' '+r.notes).includes(RodaArt.key(query)))&&(!owner||RodaArt.key(r.responsible).includes(RodaArt.key(owner))));}
   function renderList(){
+   rememberList();
    const rows=visible(),totals=RodaArt.totals(all());
    const activeFilters=Number(category!=='all')+Number(status!=='all')+Number(!!owner)+Number(archived);$('artFilterCount').hidden=!activeFilters;$('artFilterCount').textContent=activeFilters;filterMenu.classList.toggle('has-filters',!!activeFilters);
    $('artStats').innerHTML=`<span><strong>${totals.count}</strong> elementos</span><span class="artReady"><strong>${totals.ready}</strong> conseguidos</span><span><strong>${totals.pending}</strong> pendientes</span><span class="artBudget">Costo cargado <strong>${Object.entries(totals.money).map(([c,n])=>money(n,c)).join(' · ')||'—'}</strong><small>${totals.unpriced} sin precio · según jornada</small></span>`;
    list.innerHTML=rows.map(r=>`<button type="button" class="artItem ${r.id===selected?'selected':''}" data-art-id="${esc(r.id)}" data-ro-allow="1" aria-pressed="${r.id===selected}"><span class="artItemTop"><strong>${esc(r.name)}</strong><span class="artState" data-state="${esc(r.status)}">${esc(RodaArt.statuses[r.status])}</span></span><span class="artItemBottom"><span class="artItemMeta">${r.category==='art'?'Arte':'Props'} · ${r.scenes.length} escena${r.scenes.length===1?'':'s'}${r.obsolete?' · Fuera del desglose':''}<span class="artItemOwner"> · ${esc(r.responsible||'Sin responsable')}</span></span><span class="artItemPrice">${r.total===null?'Sin precio':esc(money(r.total,r.currency))}</span></span></button>`).join('')||'<div class="empty-state">No hay elementos para estos filtros.</div>';
-   list.querySelectorAll('[data-art-id]').forEach(b=>b.onclick=()=>{if(!flush())return;selected=b.dataset.artId;renderList();renderDetail();host.classList.add('art-show-detail');detail.scrollTop=0;});
+   restoreList();
+   list.querySelectorAll('[data-art-id]').forEach(b=>b.onclick=()=>{if(!flush())return;rememberList();selected=b.dataset.artId;renderList();renderDetail();host.classList.add('art-show-detail');detail.scrollTop=0;});
   }
   function renderDetail(){
    if(!flush())return;drafts.forEach(d=>d.dispose());drafts=[];
@@ -37,7 +42,7 @@
     <section class="artSceneSection"><h3>Escenas donde se necesita <span class="muted">${row.scenes.length}</span></h3><div class="artSceneLinks">${row.scenes.map(s=>canOpenScene()?`<button type="button" class="btn" data-art-scene="${esc(s.id)}" data-ro-allow="1" title="Ver mención en el guion">#${esc(s.number)} · ${esc(s.slugline)}</button>`:`<span>#${esc(s.number)} · ${esc(s.slugline)}</span>`).join('')||'<p class="muted small">Sin escenas asignadas; aparece en Todas las jornadas y Sin jornada asignada.</p>'}</div>
     <details class="artScenePicker"><summary data-ro-allow="1">Vincular a otras escenas</summary><div>${state.scenes.map(s=>`<label><input type="checkbox" data-scene-id="${esc(s.id)}" ${row.scenes.some(x=>x.id===s.id)?'checked':''} ${row.sourceScenes.includes(s.id)?'disabled':disabled}><span>#${esc(s.number)} · ${esc(s.slugline)}${row.sourceScenes.includes(s.id)?' · Guion':''}</span></label>`).join('')||'<p class="muted small">Todavía no hay escenas.</p>'}</div><p class="muted small">Las asociaciones del guion se actualizan desde el desglose.</p></details></section>
     <footer class="artDetailFooter"><button class="btn" data-art-archive ${disabled}>${row.archived?'Restaurar elemento':'Archivar elemento'}</button><span class="muted small">${row.archived?'Volverá al inventario activo.':'Podés recuperarlo con “Ver archivados”.'}</span></footer>`;
-   detail.querySelector('.artBack').onclick=()=>host.classList.remove('art-show-detail');
+   detail.querySelector('.artBack').onclick=()=>{host.classList.remove('art-show-detail');restoreList();};
    detail.querySelectorAll('[data-art-scene]').forEach(b=>b.onclick=()=>{if(flush())openScene(b.dataset.artScene,row.name);});
    detail.querySelector('[data-art-people]').onclick=openPeople;
    detail.querySelector('[data-art-archive]').onclick=()=>{if(!canEdit())return;RodaArt.update(getState(),selected,'archived',!row.archived);save();selected=null;host.classList.remove('art-show-detail');render();};
@@ -100,7 +105,19 @@
    e.preventDefault();if(!canEdit())return;
    try{selected=RodaArt.add(getState(),{name:e.target.elements.name.value,category:e.target.elements.category.value});query='';category='all';status='all';owner='';archived=false;['artSearch','artOwnerFilter'].forEach(id=>$(id).value='');$('artCategory').value='all';$('artStatus').value='all';$('artArchived').checked=false;save();dialog.close();showAll();render();host.classList.add('art-show-detail');}catch(error){dialog.querySelector('.artError').textContent=error.message;}
   };
-  return {render,select(id){selected=id;query='';category='all';status='all';owner='';archived=!!RodaArt.rows(getState()).find(r=>r.id===id)?.archived;['artSearch','artOwnerFilter'].forEach(id=>$(id).value='');$('artCategory').value='all';$('artStatus').value='all';$('artArchived').checked=archived;render();host.classList.add('art-show-detail');}};
+  function capture(){
+   rememberList();
+   return {selected,query,category,status,owner,archived,listPosition:{...listPosition},detailTop:detail.scrollTop,detailLeft:detail.scrollLeft,showDetail:host.classList.contains('art-show-detail'),scenePickerOpen:!!detail.querySelector('.artScenePicker')?.open};
+  }
+  function restore(context){
+   ({selected,query,category,status,owner,archived}=context);
+   $('artSearch').value=query;$('artCategory').value=category;$('artStatus').value=status;$('artOwnerFilter').value=owner;$('artArchived').checked=archived;
+   host.classList.toggle('art-show-detail',context.showDetail);render();
+   listPosition={...context.listPosition};restoreList();
+   const picker=detail.querySelector('.artScenePicker');if(picker)picker.open=context.scenePickerOpen;
+   detail.scrollTop=context.detailTop;detail.scrollLeft=context.detailLeft;
+  }
+  return {render,capture,restore,select(id){selected=id;query='';category='all';status='all';owner='';archived=!!RodaArt.rows(getState()).find(r=>r.id===id)?.archived;['artSearch','artOwnerFilter'].forEach(id=>$(id).value='');$('artCategory').value='all';$('artStatus').value='all';$('artArchived').checked=archived;render();host.classList.add('art-show-detail');}};
  }
  root.RodaArtView={create};
 })(window);
