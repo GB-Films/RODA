@@ -145,7 +145,9 @@
   function clearFlash(){clearTimeout(flashTimer);for(const mark of $('scriptFullText').querySelectorAll('.script-cast-mention'))mark.replaceWith(document.createTextNode(mark.textContent));}
   function followTarget(){
     if(!ready||!pendingTarget||$('scriptFullText').dataset.version!==pendingTarget.versionId)return;
-    const target=pendingTarget;pendingTarget=null;
+    // Keep an explicit destination through late font/layout pagination. A user
+    // gesture clears it, so subsequent reading never gets pulled back here.
+    const target=pendingTarget;
     const sceneKey=s=>String(s.chapter||'').trim()+'|'+String(s.number||'').trim().replace(/^0+(?=\d)/,'').toUpperCase();
     const index=anchors.findIndex(s=>sceneKey(s)===sceneKey(target));if(index<0)return;
     clearTimeout(searchTimer);searchTimer=null;clearFlash();clearMatches();$('scriptSearch').value='';$('scriptSearchCount').textContent='';$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;
@@ -153,7 +155,7 @@
     const offset=node=>{const range=document.createRange();range.setStart(container,0);range.setEndBefore(node);return range.toString().length;};
     const start=offset(anchor),end=next?offset(next):container.textContent.length,match=firstMention(container.textContent.slice(start,end),target.variants,target.orderedVariants);
     jump(index,!match);
-    if(!match){target.onMissingMention?.();return;}
+    if(!match){if(!target.missingNotified)target.onMissingMention?.();target.missingNotified=true;return;}
     const from=start+match.start,to=start+match.end,nodes=textNodes(container),marks=[];
     for(let i=nodes.length-1;i>=0;i--){const entry=nodes[i],a=Math.max(from,entry.start),b=Math.min(to,entry.end);if(b<=a)continue;
       const selected=entry.node.splitText(a-entry.start);selected.splitText(b-a);const mark=document.createElement('mark');mark.className='script-cast-mention';selected.replaceWith(mark);mark.append(selected);marks.unshift(mark);
@@ -177,6 +179,7 @@
   }
   let updateSerial=0;
   function update(v,raw){
+    if(pendingTarget&&pendingTarget.versionId!==v?.id)pendingTarget=null;
     const {pdf,...readingFormat}=v?.documentFormat||{};
     const key=JSON.stringify([v?.id,v?.updatedAt,raw,readingFormat,v?.keywords]);
     if(key===readerKey)return;readerKey=key;
@@ -200,7 +203,7 @@
         if(count===null||serial!==updateSerial||run!==layoutRun)return;
         finish(result.scenes,!raw?'':count+' páginas de lectura');}
       paginate();
-      layoutObserver=new ResizeObserver(entries=>{if(serial!==updateSerial)return;const width=entries[0]?.contentRect.width||0;if(width>0&&Math.abs(width-measuredWidth)>1){measuredWidth=width;requestAnimationFrame(paginate);}});layoutObserver.observe(container);
+      layoutObserver=new ResizeObserver(entries=>{if(serial!==updateSerial)return;const width=entries[0]?.contentRect.width||0;if(width>0&&Math.abs(width-measuredWidth)>1){ready=false;measuredWidth=width;requestAnimationFrame(paginate);}});layoutObserver.observe(container);
     }
     clearTimeout(searchTimer);anchors=[];matches=[];current=-1;$('scriptSearch').value='';$('scriptSearchCount').textContent='';$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;$('scriptSearch').disabled=true;$('scriptSceneSelect').disabled=true;
     $('scriptFormatHint').textContent='Preparando lectura…';reading();
@@ -208,6 +211,12 @@
 
   function jump(index,flash=true){if(!anchors[index])return;$('scriptSceneSelect').value=index;if(matchMedia('(max-width:1279px)').matches){$('scriptReaderTools').classList.remove('is-open');$('scriptToolsToggle').setAttribute('aria-expanded','false');}const node=$('script-scene-'+index);reveal(node);if(flash)node?.closest('p')?.animate([{backgroundColor:'#e7d998'},{backgroundColor:'transparent'}],{duration:900});}
   function bind(){
+    const releaseTarget=()=>{pendingTarget=null;};
+    for(const event of ['wheel','touchstart','pointerdown'])$('scriptDocumentScroll').addEventListener(event,releaseTarget,{passive:true});
+    $('scriptDocumentScroll').addEventListener('keydown',event=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(event.key))releaseTarget();});
+    $('scriptSearch').addEventListener('input',releaseTarget);
+    $('scriptSceneSelect').addEventListener('change',releaseTarget);
+    $('scriptSearchPrev').addEventListener('click',releaseTarget);$('scriptSearchNext').addEventListener('click',releaseTarget);
     document.addEventListener('roda-view',()=>{if(document.body.dataset.rodaView!=='script')pendingTarget=null;});
     $('scriptSearch').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(search,180);});
     $('scriptSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(searchTimer){search();}else navigateMatch(e.shiftKey?-1:1);}if(e.key==='Escape'){e.target.value='';search();}});

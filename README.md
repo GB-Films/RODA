@@ -123,3 +123,5 @@ Desde Arte y desde los props/arte de Elementos, cada escena abre la versión de 
 Validado con pruebas de inventario, permisos, lectura del guion y navegación Reparto/Arte/Elementos; selector y guardado en Chromium/WebKit (teléfono, iPad y escritorio). Publicar servidor y Hosting juntos.
 
 La integración y el servidor se mantienen en GB-Films/GB-Studio; el editor independiente conserva su carga y almacenamiento.
+
+GB Studio 1.50.1 conserva el destino del elemento al reacomodar páginas en la primera apertura del lector. La lectura manual, otra búsqueda o salir del guion liberan el destino. Prueba de regresión con guiones largos en GB-Studio.
