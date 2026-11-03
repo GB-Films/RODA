@@ -126,7 +126,7 @@
   }
   // Find a whole character name, including aliases, without confusing 22 with 122
   // or losing the original offsets when accents or styled runs differ.
-  function firstMention(text,variants){
+  function firstMention(text,variants,ordered=false){
     let hay='',offsets=[],position=0;
     const normalize=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleUpperCase().replace(/[^\p{L}\p{N}]/gu,' ');
     for(const char of text){const part=normalize(char);for(let i=0;i<part.length;i++){offsets.push(position);hay+=part[i];}position+=char.length;}offsets.push(text.length);
@@ -135,6 +135,7 @@
       const match=new RegExp('(?:^| )('+words.join('\\s+')+')(?= |$)','u').exec(hay);if(!match)continue;
       const start=match.index+match[0].length-match[1].length,end=start+match[1].length;
       if(!first||start<first.start||start===first.start&&end>first.end)first={start,end};
+      if(ordered)break;
     }
     return first?{start:offsets[first.start],end:offsets[first.end]}:null;
   }
@@ -150,9 +151,9 @@
     clearTimeout(searchTimer);searchTimer=null;clearFlash();clearMatches();$('scriptSearch').value='';$('scriptSearchCount').textContent='';$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;
     const container=$('scriptFullText'),anchor=$('script-scene-'+index),next=$('script-scene-'+(index+1));if(!anchor)return;
     const offset=node=>{const range=document.createRange();range.setStart(container,0);range.setEndBefore(node);return range.toString().length;};
-    const start=offset(anchor),end=next?offset(next):container.textContent.length,match=firstMention(container.textContent.slice(start,end),target.variants);
+    const start=offset(anchor),end=next?offset(next):container.textContent.length,match=firstMention(container.textContent.slice(start,end),target.variants,target.orderedVariants);
     jump(index,!match);
-    if(!match)return;
+    if(!match){target.onMissingMention?.();return;}
     const from=start+match.start,to=start+match.end,nodes=textNodes(container),marks=[];
     for(let i=nodes.length-1;i>=0;i--){const entry=nodes[i],a=Math.max(from,entry.start),b=Math.min(to,entry.end);if(b<=a)continue;
       const selected=entry.node.splitText(a-entry.start);selected.splitText(b-a);const mark=document.createElement('mark');mark.className='script-cast-mention';selected.replaceWith(mark);mark.append(selected);marks.unshift(mark);

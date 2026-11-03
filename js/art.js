@@ -65,6 +65,34 @@
   for(const row of active)if(row.total!==null)money[row.currency]=Math.round(((money[row.currency]||0)+row.total)*100)/100;
   return {count:active.length,ready:active.filter(r=>['obtained','ready'].includes(r.status)).length,pending:active.filter(r=>['pending','working'].includes(r.status)).length,unpriced:active.filter(r=>r.unitPrice===null).length,money};
  }
- const api={categories,statuses,key,idFor,rows,update,add,totals,validate};
+ // A minimal directory: never copy contact data or access rules into inventory.
+ function people(state,collaborators=[]){
+  const found=new Map();
+  function add(name,detail){
+   name=String(name||'').trim().replace(/\s+/g,' ');if(!name)return;
+   const id=key(name),entry=found.get(id)||{name,labels:new Set()};
+   if(detail)entry.labels.add(detail);found.set(id,entry);
+  }
+  for(const person of [...(state.crew||[]),...(state.artPeople||[])]){
+   if(person.castProfile||person.mergedInto)continue;
+   add([person.firstName,person.lastName].map(n=>String(n||'').trim()).filter(Boolean).join(' ')||person.name,
+    ['Equipo',person.area,person.role].filter(Boolean).join(' · '));
+  }
+  for(const person of collaborators)add(person.name,person.detail||'Colaborador del proyecto');
+  return [...found.values()].map(p=>({name:p.name,detail:[...p.labels].join(' / ')})).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+ }
+ // Prefer the catalog phrase; only then try its object names (not scene numbers).
+ function mentionVariants(name){
+  const full=String(name||'').trim(),plain=full.replace(/\([^)]*\)/g,'').trim(),variants=[full,plain];
+  const head=plain.split(/\s+(?:de|del|para|con)\s+/i)[0].trim();if(head)variants.push(head);
+  const stop=new Set('de del la las el los un una unos unas y o en al a para por con sin que se su sus como es esta este estos estas utileria prop props gag detalle plano planos pasa escena escenas pagina devolucion'.split(' '));
+  const words=(key(head)+' '+key(plain)).match(/[\p{L}]+/gu)||[];
+  for(const word of words)if(word.length>2&&!stop.has(word)){
+   variants.push(word);
+   if(word.endsWith('s')&&word.length>4)variants.push(word.slice(0,-1));
+  }
+  return [...new Set(variants.filter(v=>v&&/[\p{L}]/u.test(v)))];
+ }
+ const api={categories,statuses,key,idFor,rows,update,add,totals,validate,people,mentionVariants};
  root.RodaArt=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

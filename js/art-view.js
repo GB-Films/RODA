@@ -2,14 +2,15 @@
  'use strict';
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=(n,c)=>c+' '+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
- function create(host,{getState,getScope,canEdit,save,showAll,openScene,canOpenScene,notify}){
+ function create(host,{getState,getScope,canEdit,save,showAll,openScene,canOpenScene,getPeople,notify}){
   let selected=null,query='',category='all',status='all',owner='',archived=false,drafts=[];
   const flush=()=>{let valid=true;for(const draft of drafts)if(!draft.flush())valid=false;return valid;};
   host.innerHTML=`<header class="artHeading"><h1>Arte y utilería</h1><button class="btn primary" id="artAdd">+ Elemento</button></header>
    <div class="artToolbar" data-ro-allow="1"><div class="artStats" id="artStats"></div><div class="artControls"><input aria-label="Buscar elemento" type="search" class="input artSearch" id="artSearch" placeholder="Buscar elemento…"><details class="artFilterMenu" id="artFilterMenu"><summary>Filtros <span id="artFilterCount" hidden></span><span aria-hidden="true">⌄</span></summary><div class="artFilters"><div class="artFilterRow"><label>Categoría<select class="input" id="artCategory"><option value="all">Arte y utilería</option><option value="art">Arte / ambientación</option><option value="props">Utilería / props</option></select></label><label>Estado<select class="input" id="artStatus"><option value="all">Todos</option>${Object.entries(RodaArt.statuses).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}<option value="obsolete">Fuera del desglose</option></select></label></div><label>Responsable<input type="search" class="input" id="artOwnerFilter" placeholder="Todos los responsables"></label><label class="artArchived"><input type="checkbox" id="artArchived"> Ver archivados</label><footer><button type="button" class="btn" id="artClearFilters">Limpiar filtros</button><button type="button" class="btn" id="artCloseFilters">Listo</button></footer></div></details></div></div><div class="artWorkspace">
    <section class="card artExplorer" aria-label="Inventario de arte"><div id="artList" class="artList"></div></section>
    <section class="card artDetail" id="artDetail" aria-label="Detalle del elemento"></section></div><p class="artSaveStatus muted small" role="status" id="artSaveStatus">Los cambios se guardan automáticamente.</p>
-   <dialog class="artDialog" id="artCreateDialog"><form><header><h2>Nuevo elemento</h2><button class="btn" type="button" data-close data-ro-allow="1" aria-label="Cerrar nuevo elemento">×</button></header><label>Nombre<input class="input" name="name" maxlength="500" required placeholder="Ej.: cartel de la fábrica"></label><label>Categoría<select class="input" name="category"><option value="art">Arte / ambientación</option><option value="props">Utilería / props</option></select></label><p class="muted small">Después podés vincularlo a escenas y cargar su responsable, costo y estado.</p><p role="status" class="artError"></p><footer><button type="button" class="btn" data-close data-ro-allow="1">Cancelar</button><button class="btn primary" type="submit">Agregar elemento</button></footer></form></dialog>`;
+   <dialog class="artDialog" id="artCreateDialog"><form><header><h2>Nuevo elemento</h2><button class="btn" type="button" data-close data-ro-allow="1" aria-label="Cerrar nuevo elemento">×</button></header><label>Nombre<input class="input" name="name" maxlength="500" required placeholder="Ej.: cartel de la fábrica"></label><label>Categoría<select class="input" name="category"><option value="art">Arte / ambientación</option><option value="props">Utilería / props</option></select></label><p class="muted small">Después podés vincularlo a escenas y cargar su responsable, costo y estado.</p><p role="status" class="artError"></p><footer><button type="button" class="btn" data-close data-ro-allow="1">Cancelar</button><button class="btn primary" type="submit">Agregar elemento</button></footer></form></dialog>
+   <dialog class="artDialog artPeopleDialog" id="artResponsibleDialog" aria-labelledby="artPeopleTitle"><header><h2 id="artPeopleTitle">Elegir responsable</h2><button class="btn" type="button" data-close aria-label="Cerrar responsables">×</button></header><input type="search" class="input" id="artPeopleSearch" aria-label="Buscar responsable" placeholder="Nombre, área o rol…"><p class="muted small" id="artPeopleStatus" role="status"></p><div id="artPeopleList" class="artPeopleList"></div><footer><button type="button" class="btn" id="artClearResponsible">Sin responsable</button><button type="button" class="btn" data-close>Cancelar</button></footer></dialog>`;
   const $=id=>host.querySelector('#'+id),list=$('artList'),detail=$('artDetail'),dialog=$('artCreateDialog'),filterMenu=$('artFilterMenu');
   function closeFilters(){filterMenu.open=false;}
   $('artCloseFilters').onclick=()=>{closeFilters();filterMenu.querySelector('summary').focus();};
@@ -29,15 +30,16 @@
    if(!flush())return;drafts.forEach(d=>d.dispose());drafts=[];
    const row=RodaArt.rows(getState()).find(r=>r.id===selected),disabled=canEdit()?'':'disabled';
    if(!row){detail.innerHTML='<div class="empty-state">Seleccioná un elemento para ver su preparación y costo.</div>';return;}
-   const state=getState(),people=[...new Set([...(state.crew||[]),...(state.artPeople||[])].filter(p=>!p.castProfile&&!p.mergedInto).map(p=>[p.firstName,p.lastName].filter(Boolean).join(' ')||p.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+   const state=getState();
    detail.innerHTML=`<header class="artDetailHeader"><button type="button" class="btn artBack" data-ro-allow="1">← Elementos</button><p class="muted small">${esc(RodaArt.categories[row.category])} · ${row.detected?'Del desglose del guion':row.obsolete?'Ya no figura en el desglose actual':'Agregado en Arte'}</p><h2>${esc(row.name)}</h2>${row.obsolete?'<p class="muted small">Se conserva la preparación cargada. Podés asociarlo a escenas o archivarlo.</p>':''}</header>
-    <div class="artForm" data-art-edit="${esc(row.id)}"><label>Estado<select class="input" data-field="status" ${disabled}>${Object.entries(RodaArt.statuses).map(([k,v])=>`<option value="${k}" ${k===row.status?'selected':''}>${v}</option>`).join('')}</select></label><label>Responsable<input class="input" data-field="responsible" list="artPeople" maxlength="200" value="${esc(row.responsible)}" placeholder="Elegí del equipo o escribí un nombre" ${disabled}></label><datalist id="artPeople">${people.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>
+    <div class="artForm" data-art-edit="${esc(row.id)}"><label>Estado<select class="input" data-field="status" ${disabled}>${Object.entries(RodaArt.statuses).map(([k,v])=>`<option value="${k}" ${k===row.status?'selected':''}>${v}</option>`).join('')}</select></label><label>Responsable<span class="artResponsibleField"><input class="input" data-field="responsible" maxlength="200" value="${esc(row.responsible)}" placeholder="Elegí una persona o escribí un nombre" ${disabled}><button type="button" class="btn" data-art-people ${disabled} aria-label="Elegir responsable del equipo y colaboradores">Elegir</button></span></label>
     <div class="artCosts"><label>Cantidad<input class="input" type="number" inputmode="numeric" data-field="quantity" min="1" max="100000" step="1" value="${row.quantity}" ${disabled}></label><label>Precio unitario<input class="input" type="number" inputmode="decimal" data-field="unitPrice" min="0" max="1000000000000" step="0.01" value="${row.unitPrice??''}" placeholder="Sin precio" ${disabled}></label><label>Moneda<select class="input" data-field="currency" ${disabled}><option ${row.currency==='ARS'?'selected':''}>ARS</option><option ${row.currency==='USD'?'selected':''}>USD</option></select></label></div><div class="artTotal">Costo total <strong id="artItemTotal">${row.total===null?'Sin precio':esc(money(row.total,row.currency))}</strong></div><label>Notas / proveedor / indicaciones<textarea class="textarea" data-field="notes" maxlength="3000" rows="3" placeholder="Dónde conseguirlo, fabricación, devolución…" ${disabled}>${esc(row.notes)}</textarea></label></div>
-    <section class="artSceneSection"><h3>Escenas donde se necesita <span class="muted">${row.scenes.length}</span></h3><div class="artSceneLinks">${row.scenes.map(s=>canOpenScene()?`<button type="button" class="btn" data-art-scene="${esc(s.id)}" data-ro-allow="1">#${esc(s.number)} · ${esc(s.slugline)}</button>`:`<span>#${esc(s.number)} · ${esc(s.slugline)}</span>`).join('')||'<p class="muted small">Sin escenas asignadas; aparece en Todas las jornadas y Sin jornada asignada.</p>'}</div>
+    <section class="artSceneSection"><h3>Escenas donde se necesita <span class="muted">${row.scenes.length}</span></h3><div class="artSceneLinks">${row.scenes.map(s=>canOpenScene()?`<button type="button" class="btn" data-art-scene="${esc(s.id)}" data-ro-allow="1" title="Ver mención en el guion">#${esc(s.number)} · ${esc(s.slugline)}</button>`:`<span>#${esc(s.number)} · ${esc(s.slugline)}</span>`).join('')||'<p class="muted small">Sin escenas asignadas; aparece en Todas las jornadas y Sin jornada asignada.</p>'}</div>
     <details class="artScenePicker"><summary data-ro-allow="1">Vincular a otras escenas</summary><div>${state.scenes.map(s=>`<label><input type="checkbox" data-scene-id="${esc(s.id)}" ${row.scenes.some(x=>x.id===s.id)?'checked':''} ${row.sourceScenes.includes(s.id)?'disabled':disabled}><span>#${esc(s.number)} · ${esc(s.slugline)}${row.sourceScenes.includes(s.id)?' · Guion':''}</span></label>`).join('')||'<p class="muted small">Todavía no hay escenas.</p>'}</div><p class="muted small">Las asociaciones del guion se actualizan desde el desglose.</p></details></section>
     <footer class="artDetailFooter"><button class="btn" data-art-archive ${disabled}>${row.archived?'Restaurar elemento':'Archivar elemento'}</button><span class="muted small">${row.archived?'Volverá al inventario activo.':'Podés recuperarlo con “Ver archivados”.'}</span></footer>`;
    detail.querySelector('.artBack').onclick=()=>host.classList.remove('art-show-detail');
-   detail.querySelectorAll('[data-art-scene]').forEach(b=>b.onclick=()=>openScene(b.dataset.artScene));
+   detail.querySelectorAll('[data-art-scene]').forEach(b=>b.onclick=()=>{if(flush())openScene(b.dataset.artScene,row.name);});
+   detail.querySelector('[data-art-people]').onclick=openPeople;
    detail.querySelector('[data-art-archive]').onclick=()=>{if(!canEdit())return;RodaArt.update(getState(),selected,'archived',!row.archived);save();selected=null;host.classList.remove('art-show-detail');render();};
    detail.querySelectorAll('[data-scene-id]').forEach(input=>input.onchange=()=>{
     if(!canEdit())return;
@@ -55,6 +57,36 @@
     drafts.push(RodaFormAutosave.bind(input,{read:()=>input.value,write,onState:(state,error)=>{$('artSaveStatus').textContent=error||(state==='pending'?'Guardando…':'Los cambios se guardan automáticamente.');input.setCustomValidity(error||'');}}));
    });
   }
+  const peopleDialog=$('artResponsibleDialog');let directory=[],peopleRequest=0,peopleItem=null;
+  function renderPeople(){
+   const query=RodaArt.key($('artPeopleSearch').value);
+   const rows=directory.filter(p=>RodaArt.key(p.name+' '+p.detail).includes(query));
+   $('artPeopleList').innerHTML=rows.map((p,i)=>`<button type="button" class="artPerson" data-person="${i}"><strong>${esc(p.name)}</strong><span>${esc(p.detail)}</span></button>`).join('')||'<p class="muted small">No hay coincidencias. También podés escribir un nombre en la ficha.</p>';
+   $('artPeopleList').querySelectorAll('[data-person]').forEach(b=>b.onclick=()=>choosePerson(rows[Number(b.dataset.person)].name));
+  }
+  function choosePerson(name){
+   if(!canEdit()||!peopleDialog.open||peopleItem!==selected)return;
+   try{if(RodaArt.update(getState(),peopleItem,'responsible',name))save();peopleDialog.close();renderList();renderDetail();}catch(error){notify(error.message);}
+  }
+  async function openPeople(){
+   if(!canEdit()||!flush())return;
+   peopleItem=selected;const request=++peopleRequest;
+   directory=RodaArt.people(getState());$('artPeopleSearch').value='';
+   $('artPeopleStatus').textContent=getPeople?'Actualizando personas del proyecto…':'Equipo del proyecto';
+   renderPeople();peopleDialog.showModal();$('artPeopleSearch').focus();
+   if(!getPeople)return;
+   try{
+    const remote=await getPeople();if(request!==peopleRequest||!peopleDialog.open)return;
+    directory=Array.isArray(remote)?remote:directory;
+    $('artPeopleStatus').textContent='Equipo técnico, elenco y colaboradores del proyecto';renderPeople();
+   }catch{
+    if(request!==peopleRequest||!peopleDialog.open)return;
+    $('artPeopleStatus').textContent='No pudimos actualizar los colaboradores. Mostramos el equipo disponible; volvé a abrir para reintentar.';
+   }
+  }
+  peopleDialog.addEventListener('close',()=>{peopleRequest++;});
+  peopleDialog.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>peopleDialog.close());
+  $('artPeopleSearch').oninput=renderPeople;$('artClearResponsible').onclick=()=>choosePerson('');
   function render(){
    if(!flush())return;
    $('artAdd').disabled=!canEdit();
