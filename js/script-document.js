@@ -139,7 +139,7 @@
     }
     return first?{start:offsets[first.start],end:offsets[first.end]}:null;
   }
-  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver,ready=false,pendingTarget=null,flashTimer;
+  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver,ready=false,paginated=false,resumeLayout=null,pendingTarget=null,flashTimer;
   const $=id=>document.getElementById(id);
   function reveal(node){if(!node)return;const scroller=$('scriptDocumentScroll'),box=node.getBoundingClientRect();scroller.scrollTop+=box.top-scroller.getBoundingClientRect().top-36;}
   function clearFlash(){clearTimeout(flashTimer);for(const mark of $('scriptFullText').querySelectorAll('.script-cast-mention'))mark.replaceWith(document.createTextNode(mark.textContent));}
@@ -163,7 +163,8 @@
     reveal(marks[0]);for(const mark of marks)mark.animate([{backgroundColor:'#ffbd59'},{backgroundColor:'#f6dc76'},{backgroundColor:'transparent'}],{duration:1200});
     flashTimer=setTimeout(clearFlash,1200);
   }
-  function navigate(target){pendingTarget=target;followTarget();}
+  // A completed layout may have finished while the reader was hidden.
+  function navigate(target){pendingTarget=target;if(!ready&&paginated&&$('scriptFullText').clientWidth>0)resumeLayout?.();followTarget();}
   function clearMatches(){for(const node of $('scriptFullText').querySelectorAll('mark'))node.replaceWith(document.createTextNode(node.textContent));$('scriptFullText').normalize();matches=[];current=-1;}
   function navigateMatch(direction=1){if(!matches.length)return;current=(current+direction+matches.length)%matches.length;for(const mark of $('scriptFullText').querySelectorAll('mark'))mark.classList.toggle('current',Number(mark.dataset.match)===current);$('scriptSearchCount').textContent=`${current+1} de ${matches.length}`;reveal(matches[current]);}
   function search(){
@@ -196,14 +197,14 @@
       ready=container.clientWidth>0;followTarget();
     }
     function reading(){root.RodaScriptPages?.cancel();container.classList.remove('script-pdf-pages');let measuredWidth=0,layoutRun=0;
-      async function paginate(){if(serial!==updateSerial)return;ready=false;clearFlash();const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);
+      async function paginate(){if(serial!==updateSerial)return;ready=false;paginated=false;clearFlash();const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);
         if(raw&&container.clientWidth===0){finish(result.scenes,'Preparando las páginas de lectura…');return;}
         measuredWidth=container.clientWidth;
         const count=raw&&root.RodaScriptPages?await root.RodaScriptPages.readingPages(container,readingFormat,()=>serial===updateSerial&&run===layoutRun):0;
         if(count===null||serial!==updateSerial||run!==layoutRun)return;
-        finish(result.scenes,!raw?'':count+' páginas de lectura');}
-      paginate();
-      layoutObserver=new ResizeObserver(entries=>{if(serial!==updateSerial)return;const width=entries[0]?.contentRect.width||0;if(width>0&&Math.abs(width-measuredWidth)>1){ready=false;measuredWidth=width;requestAnimationFrame(paginate);}});layoutObserver.observe(container);
+        paginated=true;finish(result.scenes,!raw?'':count+' páginas de lectura');}
+      resumeLayout=paginate;paginate();
+      layoutObserver=new ResizeObserver(entries=>{if(serial!==updateSerial)return;const width=entries[0]?.contentRect.width||0;if(width>0&&Math.abs(width-measuredWidth)>1){ready=false;paginated=false;measuredWidth=width;requestAnimationFrame(paginate);}});layoutObserver.observe(container);
     }
     clearTimeout(searchTimer);anchors=[];matches=[];current=-1;$('scriptSearch').value='';$('scriptSearchCount').textContent='';$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;$('scriptSearch').disabled=true;$('scriptSceneSelect').disabled=true;
     $('scriptFormatHint').textContent='Preparando lectura…';reading();
