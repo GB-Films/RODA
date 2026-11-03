@@ -28,3 +28,19 @@ test('invalid values, duplicate additions and stale scene links do not mutate da
  for(const [field,value] of [['quantity',0],['quantity',1.5],['unitPrice',-1],['unitPrice',NaN],['currency','X'],['sceneIds',['missing']],['status','anything'],['script',{}]])assert.throws(()=>Art.update(s,id,field,value));
  assert.throws(()=>Art.add(s,{name:'llave',category:'props'}));assert.deepEqual(s,before);assert.equal(Art.validate([{id:'evil',category:'art',name:'x',origin:'manual',script:{}}]),false);
 });
+
+test('responsibles include crew, actors and collaborators, deduplicate accents and omit profiles and private fields',()=>{
+ const s={crew:[{firstName:' Carolina ',lastName:'Mora',area:'Arte',role:'Directora de arte',phone:'private'},
+ {name:'Roberto Peña',area:'Cast',role:'Actor'}, {name:'Character',castProfile:true},{name:'Old person',mergedInto:'new'},{name:'',role:'Director'}]};
+ const original=structuredClone(s),result=Art.people(s,[{name:'CAROLINA MORA',detail:'Colaboradora'},{name:'Luz',detail:'Colaboradora'}]);
+ assert.deepEqual(result.map(p=>p.name),['Carolina Mora','Luz','Roberto Peña']);assert.match(result[0].detail,/Directora de arte.*Colaboradora/);
+ assert.ok(!JSON.stringify(result).includes('private'));assert.deepEqual(s,original);
+});
+test('prop mentions prefer the full name over generic earlier words and support descriptive inventory labels',()=>{
+ const context={window:{}};require('node:vm').runInNewContext(require('node:fs').readFileSync('js/script-document.js','utf8'),context);const find=context.window.RodaScriptDocument.firstMention;
+ const text='Hay un arma. 22 guarda el arma de Chueco en la mochila.';
+ const hit=find(text,Art.mentionVariants('Arma de Chueco'),true);assert.equal(text.slice(hit.start,hit.end),'arma de Chueco');
+ const long='700 sostiene las botellas.';const match=find(long,Art.mentionVariants('Bebida de utilería para el gag de devolución a las botellas'),true);
+ assert.equal(long.slice(match.start,match.end),'botellas');
+ assert.equal(find('En la escena 6 no vemos objetos.',Art.mentionVariants('Guion impreso para el gag de página 6'),true),null);
+});

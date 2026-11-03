@@ -113,3 +113,13 @@ Validación del modelo: `node --test tests/art.test.cjs`. En GB Studio, `node te
 ### Inventario compacto · GB Studio 1.49.1
 
 Búsqueda y resumen en una barra superior; filtros desplegables con contador y limpieza, sin reducir la altura del inventario. Fichas compactas y scroll independiente del detalle. La integración y las pruebas de navegador se mantienen en GB-Films/GB-Studio.
+
+### GB Studio 1.50.0 · Responsables y elementos en el guion
+
+Arte y utilería permite elegir responsables con búsqueda por nombre, área y rol entre Equipo (técnicos y elenco) y colaboradores de este proyecto. La lista se actualiza al abrirla; los nombres libres siguen disponibles. El directorio `/people` exige acceso a Arte y devuelve sólo nombres y roles, sin contactos ni reglas de acceso.
+
+Desde Arte y desde los props/arte de Elementos, cada escena abre la versión de producción del guion y resalta brevemente su mención dentro de esa escena. Prioriza el nombre completo y luego términos del elemento, tolera acentos y fragmentos con distinto formato. Si no hay mención, abre la escena con un aviso. Respeta el acceso al guion y no cambia textos, actores ni horarios.
+
+Validado con pruebas de inventario, permisos, lectura del guion y navegación Reparto/Arte/Elementos; selector y guardado en Chromium/WebKit (teléfono, iPad y escritorio). Publicar servidor y Hosting juntos.
+
+La integración y el servidor se mantienen en GB-Films/GB-Studio; el editor independiente conserva su carga y almacenamiento.
