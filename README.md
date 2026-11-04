@@ -127,3 +127,8 @@ La integración y el servidor se mantienen en GB-Films/GB-Studio; el editor inde
 GB Studio 1.50.1 conserva el destino del elemento al reacomodar páginas en la primera apertura del lector. La lectura manual, otra búsqueda o salir del guion liberan el destino. Prueba de regresión con guiones largos en GB-Studio.
 
 GB Studio 1.51.0 permite volver del guion a Arte y utilería conservando elemento, jornada, filtros y scroll. Se sincronizan el estado local del inventario y la reanudación del lector; la integración de navegación y sus pruebas están en GB-Studio. El editor independiente conserva su carga y almacenamiento.
+
+
+### Eliminar elementos de Arte y utilería
+
+Roda 1.52.0 incluye **Eliminar elemento** arriba en la ficha, para elementos manuales y detectados. La confirmación afecta el inventario de todas las jornadas y conserva guion, desglose, planos y horarios. La eliminación queda guardada en `artItems.deleted`, por lo que una nueva importación no vuelve a mostrar la detección. Agregar el mismo nombre y categoría recupera su preparación. Requiere edición de Arte; los lectores no pueden eliminar.
