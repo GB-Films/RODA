@@ -141,6 +141,11 @@
   }
   let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver,ready=false,paginated=false,resumeLayout=null,pendingTarget=null,flashTimer;
   const $=id=>document.getElementById(id);
+  function elementNotice(text=''){
+    let notice=$('scriptElementNotice');
+    if(!notice&&text){notice=document.createElement('p');notice.id='scriptElementNotice';notice.className='script-message';notice.setAttribute('role','status');document.querySelector('#view-script .script-workspace')?.before(notice);}
+    if(notice){notice.textContent=text;notice.hidden=!text;}
+  }
   function reveal(node){if(!node)return;const scroller=$('scriptDocumentScroll'),box=node.getBoundingClientRect();scroller.scrollTop+=box.top-scroller.getBoundingClientRect().top-36;}
   function clearFlash(){clearTimeout(flashTimer);for(const mark of $('scriptFullText').querySelectorAll('.script-cast-mention'))mark.replaceWith(document.createTextNode(mark.textContent));}
   function followTarget(){
@@ -154,8 +159,9 @@
     const container=$('scriptFullText'),anchor=$('script-scene-'+index),next=$('script-scene-'+(index+1));if(!anchor)return;
     const offset=node=>{const range=document.createRange();range.setStart(container,0);range.setEndBefore(node);return range.toString().length;};
     const start=offset(anchor),end=next?offset(next):container.textContent.length,match=firstMention(container.textContent.slice(start,end),target.variants,target.orderedVariants);
+    elementNotice(!match&&target.orderedVariants?`No encontramos una mención de «${target.variants[0]}» en la escena ${target.number} del guion actual. Podés revisar esta asociación en Arte y utilería → Gestionar escenas.`:'');
     jump(index,!match);
-    if(!match){if(!target.missingNotified)target.onMissingMention?.();target.missingNotified=true;return;}
+    if(!match){if(!target.orderedVariants&&!target.missingNotified)target.onMissingMention?.();target.missingNotified=true;return;}
     const from=start+match.start,to=start+match.end,nodes=textNodes(container),marks=[];
     for(let i=nodes.length-1;i>=0;i--){const entry=nodes[i],a=Math.max(from,entry.start),b=Math.min(to,entry.end);if(b<=a)continue;
       const selected=entry.node.splitText(a-entry.start);selected.splitText(b-a);const mark=document.createElement('mark');mark.className='script-cast-mention';selected.replaceWith(mark);mark.append(selected);marks.unshift(mark);
@@ -164,7 +170,7 @@
     flashTimer=setTimeout(clearFlash,1200);
   }
   // A completed layout may have finished while the reader was hidden.
-  function navigate(target){pendingTarget=target;if(!ready&&paginated&&$('scriptFullText').clientWidth>0)resumeLayout?.();followTarget();}
+  function navigate(target){elementNotice();pendingTarget=target;if(!ready&&paginated&&$('scriptFullText').clientWidth>0)resumeLayout?.();followTarget();}
   function clearMatches(){for(const node of $('scriptFullText').querySelectorAll('mark'))node.replaceWith(document.createTextNode(node.textContent));$('scriptFullText').normalize();matches=[];current=-1;}
   function navigateMatch(direction=1){if(!matches.length)return;current=(current+direction+matches.length)%matches.length;for(const mark of $('scriptFullText').querySelectorAll('mark'))mark.classList.toggle('current',Number(mark.dataset.match)===current);$('scriptSearchCount').textContent=`${current+1} de ${matches.length}`;reveal(matches[current]);}
   function search(){
@@ -180,7 +186,7 @@
   }
   let updateSerial=0;
   function update(v,raw){
-    if(pendingTarget&&pendingTarget.versionId!==v?.id)pendingTarget=null;
+    if(pendingTarget&&pendingTarget.versionId!==v?.id){pendingTarget=null;elementNotice();}
     const {pdf,...readingFormat}=v?.documentFormat||{};
     const key=JSON.stringify([v?.id,v?.updatedAt,raw,readingFormat,v?.keywords]);
     if(key===readerKey)return;readerKey=key;
@@ -212,13 +218,13 @@
 
   function jump(index,flash=true){if(!anchors[index])return;$('scriptSceneSelect').value=index;if(matchMedia('(max-width:1279px)').matches){$('scriptReaderTools').classList.remove('is-open');$('scriptToolsToggle').setAttribute('aria-expanded','false');}const node=$('script-scene-'+index);reveal(node);if(flash)node?.closest('p')?.animate([{backgroundColor:'#e7d998'},{backgroundColor:'transparent'}],{duration:900});}
   function bind(){
-    const releaseTarget=()=>{pendingTarget=null;};
+    const releaseTarget=()=>{pendingTarget=null;elementNotice();};
     for(const event of ['wheel','touchstart','pointerdown'])$('scriptDocumentScroll').addEventListener(event,releaseTarget,{passive:true});
     $('scriptDocumentScroll').addEventListener('keydown',event=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(event.key))releaseTarget();});
     $('scriptSearch').addEventListener('input',releaseTarget);
     $('scriptSceneSelect').addEventListener('change',releaseTarget);
     $('scriptSearchPrev').addEventListener('click',releaseTarget);$('scriptSearchNext').addEventListener('click',releaseTarget);
-    document.addEventListener('roda-view',()=>{if(document.body.dataset.rodaView!=='script')pendingTarget=null;});
+    document.addEventListener('roda-view',()=>{if(document.body.dataset.rodaView!=='script'){pendingTarget=null;elementNotice();}});
     $('scriptSearch').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(search,180);});
     $('scriptSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(searchTimer){search();}else navigateMatch(e.shiftKey?-1:1);}if(e.key==='Escape'){e.target.value='';search();}});
     $('scriptSearchPrev').onclick=()=>navigateMatch(-1);$('scriptSearchNext').onclick=()=>navigateMatch(1);

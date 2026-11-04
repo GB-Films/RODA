@@ -3,7 +3,7 @@
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=(n,c)=>c+' '+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
  function create(host,{getState,getScope,canEdit,save,showAll,openScene,canOpenScene,getPeople,notify}){
-  let deleting=false;
+  let deleting=false,renaming=false;
   let selected=null,query='',category='all',status='all',owner='',archived=false,drafts=[],listPosition={top:0,left:0};
   const flush=()=>{let valid=true;for(const draft of drafts)if(!draft.flush())valid=false;return valid;};
   host.innerHTML=`<header class="artHeading"><h1>Arte y utilería</h1><button class="btn primary" id="artAdd">+ Elemento</button></header>
@@ -37,15 +37,24 @@
    const row=RodaArt.rows(getState()).find(r=>r.id===selected),disabled=canEdit()?'':'disabled';
    if(!row){detail.innerHTML='<div class="empty-state">Seleccioná un elemento para ver su preparación y costo.</div>';return;}
    const state=getState();
-   detail.innerHTML=`<header class="artDetailHeader"><button type="button" class="btn artBack" data-ro-allow="1">← Elementos</button><p class="muted small">${esc(RodaArt.categories[row.category])} · ${row.detected?'Del desglose del guion':row.obsolete?'Ya no figura en el desglose actual':'Agregado en Arte'}</p><div class="artDetailTitle"><h2>${esc(row.name)}</h2><button type="button" class="btn danger" data-art-delete ${disabled}>Eliminar elemento</button></div>${row.obsolete?'<p class="muted small">Se conserva la preparación cargada. Podés asociarlo a escenas o archivarlo.</p>':''}</header>
+   detail.innerHTML=`<header class="artDetailHeader"><button type="button" class="btn artBack" data-ro-allow="1">← Elementos</button><p class="muted small">${esc(RodaArt.categories[row.category])} · ${row.detected?'Del desglose del guion':row.obsolete?'Ya no figura en el desglose actual':'Agregado en Arte'}</p><div class="artDetailTitle"><h2>${esc(row.name)}</h2><div class="artNameActions"><button type="button" class="btn" data-art-rename ${disabled}>Editar nombre</button><button type="button" class="btn danger" data-art-delete ${disabled}>Eliminar elemento</button></div></div>${row.obsolete?'<p class="muted small">Se conserva la preparación cargada. Podés asociarlo a escenas o archivarlo.</p>':''}</header>
     <div class="artForm" data-art-edit="${esc(row.id)}"><label>Estado<select class="input" data-field="status" ${disabled}>${Object.entries(RodaArt.statuses).map(([k,v])=>`<option value="${k}" ${k===row.status?'selected':''}>${v}</option>`).join('')}</select></label><label>Responsable<span class="artResponsibleField"><input class="input" data-field="responsible" maxlength="200" value="${esc(row.responsible)}" placeholder="Elegí una persona o escribí un nombre" ${disabled}><button type="button" class="btn" data-art-people ${disabled} aria-label="Elegir responsable del equipo y colaboradores">Elegir</button></span></label>
     <div class="artCosts"><label>Cantidad<input class="input" type="number" inputmode="numeric" data-field="quantity" min="1" max="100000" step="1" value="${row.quantity}" ${disabled}></label><label>Precio unitario<input class="input" type="number" inputmode="decimal" data-field="unitPrice" min="0" max="1000000000000" step="0.01" value="${row.unitPrice??''}" placeholder="Sin precio" ${disabled}></label><label>Moneda<select class="input" data-field="currency" ${disabled}><option ${row.currency==='ARS'?'selected':''}>ARS</option><option ${row.currency==='USD'?'selected':''}>USD</option></select></label></div><div class="artTotal">Costo total <strong id="artItemTotal">${row.total===null?'Sin precio':esc(money(row.total,row.currency))}</strong></div><label>Notas / proveedor / indicaciones<textarea class="textarea" data-field="notes" maxlength="3000" rows="3" placeholder="Dónde conseguirlo, fabricación, devolución…" ${disabled}>${esc(row.notes)}</textarea></label></div>
-    <section class="artSceneSection"><h3>Escenas donde se necesita <span class="muted">${row.scenes.length}</span></h3><div class="artSceneLinks">${row.scenes.map(s=>`<div class="artSceneLink">${canOpenScene()?`<button type="button" class="btn" data-art-scene="${esc(s.id)}" data-ro-allow="1" title="Ver mención en el guion">#${esc(s.number)} · ${esc(s.slugline)}</button>`:`<span>#${esc(s.number)} · ${esc(s.slugline)}</span>`}<button type="button" class="btn" data-art-unlink="${esc(s.id)}" aria-label="Quitar de la escena ${esc(s.number)}" title="Quitar este elemento de esta escena" ${disabled}>Quitar</button></div>`).join('')||'<p class="muted small">Sin escenas asignadas; aparece en Todas las jornadas y Sin jornada asignada.</p>'}</div>
+    <section class="artSceneSection"><h3>Escenas donde se necesita <span class="muted">${row.scenes.length}</span></h3><div class="artSceneLinks">${row.scenes.map(s=>canOpenScene()?`<button type="button" class="btn" data-art-scene="${esc(s.id)}" data-ro-allow="1" title="Ver mención en el guion">#${esc(s.number)} · ${esc(s.slugline)}</button>`:`<span>#${esc(s.number)} · ${esc(s.slugline)}</span>`).join('')||'<p class="muted small">Sin escenas asignadas; aparece en Todas las jornadas y Sin jornada asignada.</p>'}</div>
     <details class="artScenePicker"><summary data-ro-allow="1">Gestionar escenas</summary><div>${state.scenes.map(s=>`<label><input type="checkbox" data-scene-id="${esc(s.id)}" ${row.scenes.some(x=>x.id===s.id)?'checked':''} ${disabled}><span>#${esc(s.number)} · ${esc(s.slugline)}${row.sourceScenes.includes(s.id)?' · Guion':''}</span></label>`).join('')||'<p class="muted small">Todavía no hay escenas.</p>'}</div><p class="muted small">Marcá o desmarcá escenas, incluso las detectadas en el guion. Las escenas que quites seguirán desvinculadas al actualizarlo. Si son objetos distintos, creá otro elemento con un nombre específico y vinculalo a su escena.</p></details></section>
     <footer class="artDetailFooter"><button class="btn" data-art-archive ${disabled}>${row.archived?'Restaurar elemento':'Archivar elemento'}</button><span class="muted small">${row.archived?'Volverá al inventario activo.':'Podés recuperarlo con “Ver archivados”.'}</span></footer>`;
    detail.querySelector('.artBack').onclick=()=>{host.classList.remove('art-show-detail');restoreList();};
-   detail.querySelectorAll('[data-art-scene]').forEach(b=>b.onclick=()=>{if(flush())openScene(b.dataset.artScene,row.name);});
+   detail.querySelectorAll('[data-art-scene]').forEach(b=>b.onclick=()=>{if(flush())openScene(b.dataset.artScene,row.sourceName);});
    detail.querySelector('[data-art-people]').onclick=openPeople;
+   detail.querySelector('[data-art-rename]').onclick=async()=>{
+    if(renaming||!canEdit()||!flush())return;
+    renaming=true;
+    try{
+     const name=await root.RodaDialogs.prompt({title:'Editar nombre del elemento',label:'Nombre',value:row.name,required:true,confirmLabel:'Guardar nombre',message:'Las escenas y toda la preparación del elemento se conservan.'});
+     if(name===null||!canEdit()||!flush())return;
+     if(RodaArt.rename(getState(),row.id,name)){save();query='';$('artSearch').value='';renderList();renderDetail();notify('Nombre del elemento actualizado.');}
+    }catch(error){notify(error.message);}finally{renaming=false;}
+   };
    detail.querySelector('[data-art-delete]').onclick=async()=>{
     if(deleting||!canEdit()||!flush())return;
     deleting=true;
@@ -62,7 +71,6 @@
     try{if(RodaArt.setScene(getState(),row.id,sceneId,linked))save();const wasOpen=detail.querySelector('.artScenePicker').open;renderList();renderDetail();detail.querySelector('.artScenePicker').open=wasOpen;}catch(e){notify(e.message);}
    }
    detail.querySelectorAll('[data-scene-id]').forEach(input=>input.onchange=()=>changeScene(input.dataset.sceneId,input.checked));
-   detail.querySelectorAll('[data-art-unlink]').forEach(button=>button.onclick=()=>changeScene(button.dataset.artUnlink,false));
    detail.querySelectorAll('[data-field]').forEach(input=>{
     const field=input.dataset.field;
     const write=()=>{

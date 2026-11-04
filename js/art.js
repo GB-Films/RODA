@@ -6,7 +6,7 @@
  const key=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLowerCase();
  const idFor=(category,name)=>category+':'+key(name);
  const records=state=>Array.isArray(state.artItems)?state.artItems:[];
- const defaults={quantity:1,unitPrice:null,currency:'ARS',status:'pending',responsible:'',notes:'',sceneIds:[],excludedSceneIds:[],archived:false,deleted:false};
+ const defaults={quantity:1,unitPrice:null,currency:'ARS',status:'pending',responsible:'',notes:'',displayName:'',sceneIds:[],excludedSceneIds:[],archived:false,deleted:false};
  function rows(state,scope='all',{includeDeleted=false}={}){
   const groups=new Map(),scenes=state.scenes||[],byId=new Map(scenes.map(s=>[s.id,s]));
   for(const scene of scenes)for(const category of Object.keys(categories))for(const raw of scene.elements?.[category]||[]){
@@ -21,6 +21,7 @@
   const scheduled=new Set((state.shootDays||[]).flatMap(d=>d.sceneIds||[])),day=(state.shootDays||[]).find(d=>d.id===scope);
   return [...groups.values()].map(row=>{
    row={...defaults,...row};
+   row.sourceName=row.name;row.name=row.displayName||row.sourceName;
    row.scenes=[...new Set([...row.sourceScenes,...row.sceneIds])].filter(id=>!row.excludedSceneIds.includes(id)).map(id=>byId.get(id)).filter(Boolean);
    row.total=row.unitPrice===null?null:Math.round(row.quantity*row.unitPrice*100)/100;
    row.obsolete=row.origin==='script'&&!row.detected;
@@ -32,6 +33,7 @@
   const object=v=>v&&typeof v==='object'&&!Array.isArray(v),text=(v,n)=>typeof v==='string'&&v.length<=n;
   if(!object(item)||Object.keys(item).some(k=>!['id','category','name','origin',...Object.keys(defaults)].includes(k)))return false;
   if(!Object.hasOwn(categories,item.category)||!text(item.name,500)||!item.name.trim()||item.id!==idFor(item.category,item.name)||!['script','manual'].includes(item.origin))return false;
+  if('displayName' in item&&(!text(item.displayName,500)||(item.displayName!==''&&!item.displayName.trim())))return false;
   if('quantity' in item&&(!Number.isInteger(item.quantity)||item.quantity<1||item.quantity>100000))return false;
   if('unitPrice' in item&&item.unitPrice!==null&&(!Number.isFinite(item.unitPrice)||item.unitPrice<0||item.unitPrice>1e12))return false;
   if('currency' in item&&!['ARS','USD'].includes(item.currency)||'status' in item&&!Object.hasOwn(statuses,item.status))return false;
@@ -44,7 +46,7 @@
   if(!Object.hasOwn(defaults,field))throw Error('Campo de arte inválido.');
   const row=rows(state,'all',{includeDeleted:field==='deleted'}).find(r=>r.id===id);if(!row)throw Error('Este elemento ya no está disponible.');
   const saved=records(state).find(r=>r.id===id);
-  const next={...(saved||{id,category:row.category,name:row.name,origin:row.origin}),[field]:value};
+  const next={...(saved||{id,category:row.category,name:row.sourceName,origin:row.origin}),[field]:value};
   if(!validItem(next))throw Error('Revisá el valor ingresado. La cantidad debe ser entera y el precio no puede ser negativo.');
   if(field==='sceneIds'&&value.some(sid=>!(state.scenes||[]).some(s=>s.id===sid)))throw Error('La escena ya no está disponible.');
   if(JSON.stringify(row[field])===JSON.stringify(value))return false;
@@ -56,15 +58,22 @@
   name=String(name||'').trim();const id=idFor(category,name);
   const item={id,category,name,origin:'manual',sceneIds};
   if(!validItem(item))throw Error('Ingresá un nombre válido para el elemento.');
-  if(rows(state).some(row=>row.id===id))throw Error('Este elemento ya existe. Buscalo en la lista, también entre los archivados.');
+  if(rows(state).some(row=>row.id===id||row.category===category&&key(row.name)===key(name)))throw Error('Este elemento ya existe. Buscalo en la lista, también entre los archivados.');
   if(sceneIds.some(sid=>!(state.scenes||[]).some(s=>s.id===sid)))throw Error('La escena ya no está disponible.');
-  const saved=records(state).find(row=>row.id===id&&row.deleted);
-  if(saved){Object.assign(saved,{deleted:false,archived:false,sceneIds:[...new Set([...(saved.sceneIds||[]),...sceneIds])],excludedSceneIds:(saved.excludedSceneIds||[]).filter(id=>!sceneIds.includes(id))});return id;}
+  const saved=records(state).find(row=>row.deleted&&(row.id===id||row.category===category&&key(row.displayName||row.name)===key(name)));
+  if(saved){Object.assign(saved,{deleted:false,archived:false,sceneIds:[...new Set([...(saved.sceneIds||[]),...sceneIds])],excludedSceneIds:(saved.excludedSceneIds||[]).filter(id=>!sceneIds.includes(id))});return saved.id;}
   state.artItems??=[];state.artItems.push(item);return id;
  }
  function remove(state,id){
   if(!rows(state).some(row=>row.id===id))return false;
   return update(state,id,'deleted',true);
+ }
+ function rename(state,id,name){
+  if(typeof name!=='string'||!name.trim()||name.trim().length>500)throw Error('Ingresá un nombre de hasta 500 caracteres.');
+  name=name.trim();const row=rows(state).find(r=>r.id===id);
+  if(!row)throw Error('Este elemento ya no está disponible.');
+  if(rows(state).some(r=>r.id!==id&&r.category===row.category&&key(r.name)===key(name)))throw Error('Ya hay otro elemento con ese nombre en esta categoría. Elegí un nombre más específico.');
+  return update(state,id,'displayName',name===row.sourceName?'':name);
  }
  function setScene(state,id,sceneId,linked){
   const row=rows(state).find(r=>r.id===id);
@@ -74,7 +83,7 @@
   const saved=records(state).find(r=>r.id===id),sceneIds=new Set(row.sceneIds),excluded=new Set(row.excludedSceneIds);
   if(linked){excluded.delete(sceneId);if(!row.sourceScenes.includes(sceneId))sceneIds.add(sceneId);}
   else{sceneIds.delete(sceneId);excluded.add(sceneId);}
-  const next={...(saved||{id,category:row.category,name:row.name,origin:row.origin}),sceneIds:[...sceneIds],excludedSceneIds:[...excluded]};
+  const next={...(saved||{id,category:row.category,name:row.sourceName,origin:row.origin}),sceneIds:[...sceneIds],excludedSceneIds:[...excluded]};
   if(!validItem(next))throw Error('No se pudo guardar la asociación.');
   if(JSON.stringify(row.sceneIds)===JSON.stringify(next.sceneIds)&&JSON.stringify(row.excludedSceneIds)===JSON.stringify(next.excludedSceneIds))return false;
   state.artItems??=[];if(saved)Object.assign(saved,next);else state.artItems.push(next);
@@ -113,6 +122,6 @@
   }
   return [...new Set(variants.filter(v=>v&&/[\p{L}]/u.test(v)))];
  }
- const api={categories,statuses,key,idFor,rows,update,add,remove,setScene,totals,validate,people,mentionVariants};
+ const api={categories,statuses,key,idFor,rows,update,add,remove,rename,setScene,totals,validate,people,mentionVariants};
  root.RodaArt=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

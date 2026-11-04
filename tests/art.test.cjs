@@ -105,3 +105,38 @@ test('concurrent preparation edits preserve scene exclusions',()=>{
  const row=Art.rows(global.Collaboration.mergeProject(base,a,b)).find(r=>r.id===id);
  assert.deepEqual(row.scenes.map(s=>s.id),['s2']);assert.equal(row.responsible,'Sol');
 });
+
+test('renaming a detected element preserves identity, preparation, exclusions and production after reload',()=>{
+ const s=fixture(),id='props:llave';Art.update(s,id,'notes','Devolver');Art.update(s,id,'unitPrice',123);Art.update(s,id,'responsible','Sol');Art.update(s,id,'status','ready');Art.setScene(s,id,'s1',false);
+ const before=structuredClone(s);assert.equal(Art.rename(s,id,'Llave de la habitación'),true);
+ const reloaded=JSON.parse(JSON.stringify(s)),row=Art.rows(reloaded).find(r=>r.id===id);
+ assert.equal(row.name,'Llave de la habitación');assert.equal(row.sourceName,'Llave');assert.deepEqual(row.scenes.map(s=>s.id),['s2']);
+ for(const field of ['notes','unitPrice','responsible','status','sceneIds','excludedSceneIds'])assert.deepEqual(reloaded.artItems[0][field],before.artItems[0][field]);
+ for(const field of ['scenes','shootDays','crew','script'])assert.deepEqual(reloaded[field],before[field]);
+ assert.equal(Art.validate(reloaded.artItems),true);assert.equal(Art.rows(reloaded).length,3);
+ Art.update(reloaded,id,'quantity',2);Art.setScene(reloaded,id,'s1',true);assert.equal(Art.rows(reloaded).find(r=>r.id===id).total,246);
+ Art.rename(reloaded,id,'Llave');assert.equal(Art.rows(reloaded).find(r=>r.id===id).name,'Llave');
+});
+
+test('renamed manual elements retain one record and can be restored by their displayed name',()=>{
+ const s=fixture(),id=Art.add(s,{name:'Cartel del hotel',sceneIds:['s2']});Art.rename(s,id,'Cartel recepción');Art.rename(s,id,'Cartel de entrada');
+ assert.equal(s.artItems.length,1);assert.equal(Art.rows(s).find(r=>r.id===id).name,'Cartel de entrada');
+ assert.throws(()=>Art.add(s,{name:'CARTEL DE ENTRADA'}));Art.remove(s,id);
+ assert.equal(Art.add(s,{name:'Cartel de entrada'}),id);assert.equal(s.artItems.length,1);assert.deepEqual(Art.rows(s).find(r=>r.id===id).scenes.map(s=>s.id),['s2']);
+});
+
+test('rename rejects invalid, duplicate and stale names without mutating data',()=>{
+ const s=fixture(),before=structuredClone(s);
+ for(const name of ['', '   ', null, 'x'.repeat(501), 'CÁMARA'])assert.throws(()=>Art.rename(s,'props:llave',name));
+ assert.throws(()=>Art.rename(s,'missing','Otro'));assert.deepEqual(s,before);
+ Art.rename(s,'props:llave','Cartel');assert.equal(Art.rows(s).filter(r=>r.name==='Cartel').length,2);
+ for(const displayName of [null,123,'   ','x'.repeat(501)])assert.equal(Art.validate([{...s.artItems[0],displayName}]),false);
+ Art.remove(s,'props:llave');assert.throws(()=>Art.rename(s,'props:llave','No disponible'));
+});
+
+test('a rename merges with simultaneous preparation edits without changing the item identity',()=>{
+ const base=fixture(),a=structuredClone(base),b=structuredClone(base),id='props:llave';
+ Art.rename(a,id,'Llave del hotel');Art.update(b,id,'responsible','Sol');Art.setScene(b,id,'s1',false);
+ const merged=global.Collaboration.mergeProject(base,a,b),row=Art.rows(merged).find(r=>r.id===id);
+ assert.equal(row.name,'Llave del hotel');assert.equal(row.responsible,'Sol');assert.deepEqual(row.scenes.map(s=>s.id),['s2']);assert.equal(merged.artItems.length,1);
+});

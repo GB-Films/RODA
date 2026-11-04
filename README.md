@@ -137,3 +137,10 @@ Roda 1.52.0 incluye **Eliminar elemento** arriba en la ficha, para elementos man
 ### Corregir escenas de Arte y utilería
 
 Roda 1.53.0 permite quitar asociaciones detectadas o manuales con **Quitar** y recuperarlas en **Gestionar escenas**. `artItems.excludedSceneIds` conserva las exclusiones al recargar o actualizar el guion; las jornadas usan las asociaciones corregidas. Para objetos distintos con un nombre genérico, se puede crear otro elemento con un nombre específico y asignarlo a la escena correspondiente. Se conservan el guion, el desglose, los planos y la preparación del elemento; requiere edición de Arte. Publicar servidor y Hosting juntos.
+
+
+### Editar nombres del inventario
+
+Roda 1.54.0 agrega **Editar nombre** en la ficha. El nombre visible se guarda en `artItems.displayName` sobre la misma identidad, conservando escenas, exclusiones, responsable, estado, costos y notas. El guion y el desglose conservan su texto; abrir una escena sigue buscando el nombre de origen. El nuevo nombre persiste al actualizar el guion y permite recuperar un elemento eliminado. Se evita duplicar un nombre visible dentro de la misma categoría. Las asociaciones se editan exclusivamente con las casillas de **Gestionar escenas**: se quitaron los botones Quitar de las escenas vinculadas. Publicar servidor y Hosting juntos.
+
+Si un elemento sigue asociado a una escena donde ya no aparece su nombre, el lector abre esa escena y mantiene un aviso visible para revisar la asociación. No salta a una escena distinta ni inventa una coincidencia. La navegación a menciones existentes sigue resaltando el nombre de origen, incluso tras renombrarlo en Arte.
