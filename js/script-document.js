@@ -172,16 +172,16 @@
     flashTimer=setTimeout(clearFlash,1200);
   }
   // A completed layout may have finished while the reader was hidden.
-  function navigate(target){elementNotice();pendingSearch=null;pendingTarget=target;if(!ready&&paginated&&$('scriptFullText').clientWidth>0)resumeLayout?.();followTarget();}
+  function navigate(target){elementNotice();pendingSearch=null;pendingTarget=target;if(!ready)resumeLayout?.();followTarget();}
   function clearMatches(){for(const node of $('scriptFullText').querySelectorAll('mark'))node.replaceWith(document.createTextNode(node.textContent));$('scriptFullText').normalize();matches=[];current=-1;}
   function navigateMatch(direction=1){if(!matches.length)return;current=(current+direction+matches.length)%matches.length;for(const mark of $('scriptFullText').querySelectorAll('mark'))mark.classList.toggle('current',Number(mark.dataset.match)===current);$('scriptSearchCount').textContent=`${current+1} de ${matches.length}`;reveal(matches[current]);}
   function search(){
     if(!ready||!completeReader()){
       pendingSearch=$('scriptSearch').value;clearTimeout(searchTimer);searchTimer=null;
       $('scriptSearchCount').textContent=pendingSearch?'Preparando búsqueda…':'';
-      if(ready||paginated){ready=false;resumeLayout?.();}return;
+      ready=false;resumeLayout?.();return;
     }
-    clearTimeout(searchTimer);searchTimer=null;clearMatches();const query=$('scriptSearch').value.trim();$('scriptSearchCount').textContent=query?'Sin resultados':'';
+    pendingSearch=null;clearTimeout(searchTimer);searchTimer=null;clearMatches();const query=$('scriptSearch').value.trim();$('scriptSearchCount').textContent=query?'Sin resultados':'';
     if(!query){$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;return;}
     const nodes=textNodes($('scriptFullText')),text=nodes.map(n=>n.node.data).join(''),normalize=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase(),needle=normalize(query),hay=normalize(text),ranges=[];
     // Screenplays use ordinary Unicode text; build an offset map for decomposed accents too.
@@ -196,7 +196,7 @@
     if(pendingTarget&&pendingTarget.versionId!==v?.id){pendingTarget=null;elementNotice();}
     const {pdf,...readingFormat}=v?.documentFormat||{};
     const key=JSON.stringify([v?.id,v?.updatedAt,raw,readingFormat,v?.keywords]);
-    if(key===readerKey){if(ready&&!completeReader()){ready=false;resumeLayout?.();}return;}readerKey=key;pendingSearch=null;
+    if(key===readerKey){resumeLayout?.();return;}readerKey=key;pendingSearch=null;
     const serial=++updateSerial,container=$('scriptFullText');ready=false;clearFlash();root.RodaScriptPages?.cancel();$('scriptDocumentScroll').scrollTop=0;
     layoutObserver?.disconnect();layoutObserver=null;
     container.classList.remove('script-pdf-pages','script-reading-pages');
@@ -207,18 +207,45 @@
       $('scriptSceneTotal').textContent=anchors.length+' escenas';
       for(const id of ['scriptSceneSelect','scriptSearch'])$(id).disabled=!anchors.length;
       $('scriptFormatHint').textContent=hint;
-      ready=container.clientWidth>0;
+      ready=paginated&&container.clientWidth>0;
       if(ready&&pendingSearch!==null){$('scriptSearch').value=pendingSearch;pendingSearch=null;search();}else followTarget();
     }
-    function reading(){root.RodaScriptPages?.cancel();container.classList.remove('script-pdf-pages');let measuredWidth=0,layoutRun=0;
-      async function paginate(){if(serial!==updateSerial)return;ready=false;paginated=false;clearFlash();const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);expectedText=container.textContent;
-        if(raw&&container.clientWidth===0){finish(result.scenes,'Preparando las páginas de lectura…');return;}
+    function reading(){root.RodaScriptPages?.cancel();container.classList.remove('script-pdf-pages');let measuredWidth=0,layoutRun=0,layoutBusy=false,layoutFrame=0;
+      async function paginate(){if(serial!==updateSerial||layoutBusy)return;
+        if(ready&&!pendingTarget&&$('scriptSearch').value)pendingSearch=$('scriptSearch').value;
+        ready=false;paginated=false;layoutBusy=true;clearFlash();const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);expectedText=container.textContent;
+        if(raw&&container.clientWidth===0){measuredWidth=0;layoutBusy=false;finish(result.scenes,'Preparando las páginas de lectura…');return;}
         measuredWidth=container.clientWidth;
-        const count=raw&&root.RodaScriptPages?await root.RodaScriptPages.readingPages(container,readingFormat,()=>serial===updateSerial&&run===layoutRun):0;
-        if(count===null||serial!==updateSerial||run!==layoutRun)return;
-        paginated=true;finish(result.scenes,!raw?'':count+' páginas de lectura');}
-      resumeLayout=paginate;paginate();
-      layoutObserver=new ResizeObserver(entries=>{if(serial!==updateSerial)return;const width=entries[0]?.contentRect.width||0;if(width>0&&Math.abs(width-measuredWidth)>1){ready=false;paginated=false;measuredWidth=width;requestAnimationFrame(paginate);}});layoutObserver.observe(container);
+        const isCurrent=()=>serial===updateSerial&&run===layoutRun;
+        try{
+          const count=raw&&root.RodaScriptPages?await root.RodaScriptPages.readingPages(container,readingFormat,isCurrent):0;
+          if(count===null||!isCurrent())return;
+          layoutBusy=false;paginated=true;finish(result.scenes,!raw?'':count+' páginas de lectura');
+        }catch(error){
+          if(!isCurrent())return;
+          // A layout error must not strand search on a partial document.
+          render(container,raw,readingFormat,v?.keywords);container.classList.remove('script-reading-pages','script-pagination-ready');
+          layoutBusy=false;paginated=true;finish(result.scenes,'Lectura continua · No se pudieron organizar las páginas.');
+          console.warn('No se pudieron organizar las páginas del guion.',error);
+        }
+      }
+      resumeLayout=()=>{if(serial===updateSerial&&!layoutBusy&&!layoutFrame&&container.clientWidth>0&&(!ready||!completeReader()))paginate();};
+      paginate();
+      layoutObserver=new ResizeObserver(()=>{
+        if(serial!==updateSerial)return;
+        const width=container.clientWidth;
+        if(!width){
+          // Hiding cancels both queued and in-flight layouts. Reset the measured
+          // width so returning at the SAME width still resumes the reader.
+          ++layoutRun;layoutBusy=false;ready=false;paginated=false;measuredWidth=0;
+          cancelAnimationFrame(layoutFrame);layoutFrame=0;return;
+        }
+        if(Math.abs(width-measuredWidth)>1){
+          if(!pendingTarget&&$('scriptSearch').value)pendingSearch=$('scriptSearch').value;
+          ++layoutRun;layoutBusy=false;ready=false;paginated=false;measuredWidth=width;
+          cancelAnimationFrame(layoutFrame);layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;paginate();});
+        }
+      });layoutObserver.observe(container);
     }
     clearTimeout(searchTimer);anchors=[];matches=[];current=-1;$('scriptSearch').value='';$('scriptSearchCount').textContent='';$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;$('scriptSearch').disabled=true;$('scriptSceneSelect').disabled=true;
     $('scriptFormatHint').textContent='Preparando lectura…';reading();
@@ -233,7 +260,7 @@
     $('scriptSceneSelect').addEventListener('change',releaseTarget);
     $('scriptSearchPrev').addEventListener('click',releaseTarget);$('scriptSearchNext').addEventListener('click',releaseTarget);
     document.addEventListener('roda-view',()=>{if(document.body.dataset.rodaView!=='script'){pendingTarget=null;elementNotice();}});
-    $('scriptSearch').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(search,180);});
+    $('scriptSearch').addEventListener('input',()=>{pendingSearch=$('scriptSearch').value;clearTimeout(searchTimer);searchTimer=setTimeout(search,180);});
     $('scriptSearch').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(searchTimer){search();}else navigateMatch(e.shiftKey?-1:1);}if(e.key==='Escape'){e.target.value='';search();}});
     $('scriptSearchPrev').onclick=()=>navigateMatch(-1);$('scriptSearchNext').onclick=()=>navigateMatch(1);
     $('scriptSceneSelect').onchange=e=>{if(e.target.value!=='')jump(Number(e.target.value));};
