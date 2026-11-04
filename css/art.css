@@ -35,3 +35,4 @@
 @media(max-height:600px){.artStats{display:none;}.artToolbar{grid-template-columns:minmax(0,1fr);}.artPeopleDialog{padding:14px;gap:8px!important;}.artPeopleDialog h2{font-size:18px;}}
 
 .artDetailTitle{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}.artDetailTitle h2{flex:1;min-width:180px;}.artDetailTitle [data-art-delete]{flex:none;min-height:40px;}
+.artSceneLink{display:flex;align-items:center;gap:6px;max-width:100%;min-width:0;}.artSceneLink>:first-child{min-width:0;overflow-wrap:anywhere;}.artSceneLink [data-art-unlink]{flex:none;min-height:40px;}.artScenePicker p{line-height:1.5;}

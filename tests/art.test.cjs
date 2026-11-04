@@ -66,3 +66,42 @@ test('concurrent inventory edits cannot bring back a deleted detection',()=>{
  Art.remove(a,id);Art.update(b,id,'responsible','Sol');const merged=global.Collaboration.mergeProject(base,a,b);
  assert.ok(!Art.rows(merged).some(r=>r.id===id));assert.equal(merged.artItems.find(r=>r.id===id).responsible,'Sol');
 });
+
+test('incorrect detected scene links can be removed, persist after imports and can be restored',()=>{
+ const s=fixture(),id='props:llave',before=structuredClone(s);Art.update(s,id,'notes','Preparado');
+ assert.equal(Art.setScene(s,id,'s1',false),true);assert.equal(Art.setScene(s,id,'s1',false),false);
+ assert.deepEqual(Art.rows(s).find(r=>r.id===id).scenes.map(s=>s.id),['s2']);
+ assert.ok(!Art.rows(s,'d1').some(r=>r.id===id));assert.ok(Art.rows(s,'d2').some(r=>r.id===id));
+ for(const field of ['scenes','shootDays','crew','script'])assert.deepEqual(s[field],before[field]);
+ const reloaded=JSON.parse(JSON.stringify(s));reloaded.scenes.push({id:'s3',elements:{props:['LLÁVE']}});
+ assert.deepEqual(Art.rows(reloaded).find(r=>r.id===id).scenes.map(s=>s.id),['s2','s3']);
+ Art.setScene(reloaded,id,'s2',false);Art.setScene(reloaded,id,'s3',false);
+ assert.ok(Art.rows(reloaded,'unassigned').some(r=>r.id===id));
+ Art.setScene(reloaded,id,'s1',true);assert.deepEqual(Art.rows(reloaded).find(r=>r.id===id).scenes.map(s=>s.id),['s1']);
+ assert.equal(Art.rows(reloaded).find(r=>r.id===id).notes,'Preparado');assert.equal(Art.validate(reloaded.artItems),true);
+});
+
+test('distinct objects can be assigned independently without editing the screenplay',()=>{
+ const s=fixture(),before=structuredClone(s),id='art:cartel';Art.setScene(s,id,'s1',false);
+ const other=Art.add(s,{name:'Cartel de la fábrica',sceneIds:['s1']});
+ assert.equal(Art.rows(s).find(r=>r.id===id).scenes.length,0);assert.deepEqual(Art.rows(s).find(r=>r.id===other).scenes.map(s=>s.id),['s1']);
+ Art.setScene(s,other,'s1',false);s.scenes[0].elements.art.push('Cartel de la fábrica');
+ assert.equal(Art.rows(s).find(r=>r.id===other).scenes.length,0);Art.setScene(s,other,'s1',true);
+ assert.equal(Art.rows(s).find(r=>r.id===other).scenes.length,1);assert.deepEqual(s.shootDays,before.shootDays);
+});
+
+test('scene exclusions validate strictly and stale operations do not mutate inventory',()=>{
+ const s=fixture(),id='props:llave',before=structuredClone(s);
+ for(const args of [[id,'missing',false],[id,'s1','false'],['missing','s1',false]])assert.throws(()=>Art.setScene(s,...args));
+ assert.deepEqual(s,before);Art.setScene(s,id,'s1',false);
+ for(const value of ['s1',['s1','s1'],[null],[''],Array.from({length:2001},(_,i)=>'s'+i)])assert.equal(Art.validate([{...s.artItems[0],excludedSceneIds:value}]),false);
+ Art.remove(s,id);assert.throws(()=>Art.setScene(s,id,'s1',true));
+ Art.add(s,{name:'Llave',category:'props',sceneIds:['s1']});assert.equal(Art.rows(s).find(r=>r.id===id).scenes.length,2);
+});
+
+test('concurrent preparation edits preserve scene exclusions',()=>{
+ const base=fixture(),a=structuredClone(base),b=structuredClone(base),id='props:llave';
+ Art.setScene(a,id,'s1',false);Art.update(b,id,'responsible','Sol');
+ const row=Art.rows(global.Collaboration.mergeProject(base,a,b)).find(r=>r.id===id);
+ assert.deepEqual(row.scenes.map(s=>s.id),['s2']);assert.equal(row.responsible,'Sol');
+});
