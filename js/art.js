@@ -6,7 +6,7 @@
  const key=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toLowerCase();
  const idFor=(category,name)=>category+':'+key(name);
  const records=state=>Array.isArray(state.artItems)?state.artItems:[];
- const defaults={quantity:1,unitPrice:null,currency:'ARS',status:'pending',responsible:'',notes:'',sceneIds:[],archived:false,deleted:false};
+ const defaults={quantity:1,unitPrice:null,currency:'ARS',status:'pending',responsible:'',notes:'',sceneIds:[],excludedSceneIds:[],archived:false,deleted:false};
  function rows(state,scope='all',{includeDeleted=false}={}){
   const groups=new Map(),scenes=state.scenes||[],byId=new Map(scenes.map(s=>[s.id,s]));
   for(const scene of scenes)for(const category of Object.keys(categories))for(const raw of scene.elements?.[category]||[]){
@@ -21,7 +21,7 @@
   const scheduled=new Set((state.shootDays||[]).flatMap(d=>d.sceneIds||[])),day=(state.shootDays||[]).find(d=>d.id===scope);
   return [...groups.values()].map(row=>{
    row={...defaults,...row};
-   row.scenes=[...new Set([...row.sourceScenes,...row.sceneIds])].map(id=>byId.get(id)).filter(Boolean);
+   row.scenes=[...new Set([...row.sourceScenes,...row.sceneIds])].filter(id=>!row.excludedSceneIds.includes(id)).map(id=>byId.get(id)).filter(Boolean);
    row.total=row.unitPrice===null?null:Math.round(row.quantity*row.unitPrice*100)/100;
    row.obsolete=row.origin==='script'&&!row.detected;
    return row;
@@ -36,7 +36,7 @@
   if('unitPrice' in item&&item.unitPrice!==null&&(!Number.isFinite(item.unitPrice)||item.unitPrice<0||item.unitPrice>1e12))return false;
   if('currency' in item&&!['ARS','USD'].includes(item.currency)||'status' in item&&!Object.hasOwn(statuses,item.status))return false;
   if('responsible' in item&&!text(item.responsible,200)||'notes' in item&&!text(item.notes,3000)||'archived' in item&&typeof item.archived!=='boolean'||'deleted' in item&&typeof item.deleted!=='boolean')return false;
-  if('sceneIds' in item&&(!Array.isArray(item.sceneIds)||item.sceneIds.length>2000||item.sceneIds.some(id=>!text(id,200)||!id)||new Set(item.sceneIds).size!==item.sceneIds.length))return false;
+  for(const field of ['sceneIds','excludedSceneIds'])if(field in item&&(!Array.isArray(item[field])||item[field].length>2000||item[field].some(id=>!text(id,200)||!id)||new Set(item[field]).size!==item[field].length))return false;
   return true;
  }
  function validate(items){return Array.isArray(items)&&items.length<=3000&&items.every(validItem)&&new Set(items.map(i=>i.id)).size===items.length;}
@@ -59,12 +59,26 @@
   if(rows(state).some(row=>row.id===id))throw Error('Este elemento ya existe. Buscalo en la lista, también entre los archivados.');
   if(sceneIds.some(sid=>!(state.scenes||[]).some(s=>s.id===sid)))throw Error('La escena ya no está disponible.');
   const saved=records(state).find(row=>row.id===id&&row.deleted);
-  if(saved){Object.assign(saved,{deleted:false,archived:false,sceneIds:[...new Set([...(saved.sceneIds||[]),...sceneIds])]});return id;}
+  if(saved){Object.assign(saved,{deleted:false,archived:false,sceneIds:[...new Set([...(saved.sceneIds||[]),...sceneIds])],excludedSceneIds:(saved.excludedSceneIds||[]).filter(id=>!sceneIds.includes(id))});return id;}
   state.artItems??=[];state.artItems.push(item);return id;
  }
  function remove(state,id){
   if(!rows(state).some(row=>row.id===id))return false;
   return update(state,id,'deleted',true);
+ }
+ function setScene(state,id,sceneId,linked){
+  const row=rows(state).find(r=>r.id===id);
+  if(!row)throw Error('Este elemento ya no está disponible.');
+  if(!(state.scenes||[]).some(s=>s.id===sceneId))throw Error('La escena ya no está disponible.');
+  if(typeof linked!=='boolean')throw Error('La asociación no es válida.');
+  const saved=records(state).find(r=>r.id===id),sceneIds=new Set(row.sceneIds),excluded=new Set(row.excludedSceneIds);
+  if(linked){excluded.delete(sceneId);if(!row.sourceScenes.includes(sceneId))sceneIds.add(sceneId);}
+  else{sceneIds.delete(sceneId);excluded.add(sceneId);}
+  const next={...(saved||{id,category:row.category,name:row.name,origin:row.origin}),sceneIds:[...sceneIds],excludedSceneIds:[...excluded]};
+  if(!validItem(next))throw Error('No se pudo guardar la asociación.');
+  if(JSON.stringify(row.sceneIds)===JSON.stringify(next.sceneIds)&&JSON.stringify(row.excludedSceneIds)===JSON.stringify(next.excludedSceneIds))return false;
+  state.artItems??=[];if(saved)Object.assign(saved,next);else state.artItems.push(next);
+  return true;
  }
  function totals(rows){
   const active=rows.filter(r=>!r.archived&&!r.deleted),money={};
@@ -99,6 +113,6 @@
   }
   return [...new Set(variants.filter(v=>v&&/[\p{L}]/u.test(v)))];
  }
- const api={categories,statuses,key,idFor,rows,update,add,remove,totals,validate,people,mentionVariants};
+ const api={categories,statuses,key,idFor,rows,update,add,remove,setScene,totals,validate,people,mentionVariants};
  root.RodaArt=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

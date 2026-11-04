@@ -132,3 +132,8 @@ GB Studio 1.51.0 permite volver del guion a Arte y utilería conservando element
 ### Eliminar elementos de Arte y utilería
 
 Roda 1.52.0 incluye **Eliminar elemento** arriba en la ficha, para elementos manuales y detectados. La confirmación afecta el inventario de todas las jornadas y conserva guion, desglose, planos y horarios. La eliminación queda guardada en `artItems.deleted`, por lo que una nueva importación no vuelve a mostrar la detección. Agregar el mismo nombre y categoría recupera su preparación. Requiere edición de Arte; los lectores no pueden eliminar.
+
+
+### Corregir escenas de Arte y utilería
+
+Roda 1.53.0 permite quitar asociaciones detectadas o manuales con **Quitar** y recuperarlas en **Gestionar escenas**. `artItems.excludedSceneIds` conserva las exclusiones al recargar o actualizar el guion; las jornadas usan las asociaciones corregidas. Para objetos distintos con un nombre genérico, se puede crear otro elemento con un nombre específico y asignarlo a la escena correspondiente. Se conservan el guion, el desglose, los planos y la preparación del elemento; requiere edición de Arte. Publicar servidor y Hosting juntos.
