@@ -38,3 +38,5 @@
 .artScenePicker p{line-height:1.5;}
 
 .artNameActions{display:flex;gap:8px;flex-wrap:wrap;}.artNameActions .btn{min-height:40px;}
+
+.artOrder{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);flex:none;font-size:12px;}.artOrder span{white-space:nowrap;}.artOrder .input{flex:1;min-width:0;min-height:40px;font-size:13px;}
