@@ -15,6 +15,7 @@ async function main(){
   const browser=await chromium.launch({headless:true,channel:process.env.RODA_BROWSER_CHANNEL||'msedge'});
   try{for(const width of [1920,390]){
     const page=await browser.newPage({viewport:{width,height:900}}),errors=[];
+    page.setDefaultTimeout(10000);
     page.on('pageerror',e=>errors.push(e.message));await page.setContent(html);
     for(const file of ['screenplay','script-pages','script-document'])await page.addScriptTag({path:path.join(app,'js',file+'.js')});
     await page.evaluate(()=>{
@@ -28,13 +29,19 @@ async function main(){
       }
       window.version={id:'v1',documentFormat:{version:1,blocks}};
       window.raw=blocks.map(b=>b.runs.map(r=>r.text).join('')).join('\n\n');
+      const original=RodaScriptPages.readingPages;
+      RodaScriptPages.readingPages=async(...args)=>{RodaScriptPages.readingPages=original;await new Promise(resolve=>window.finishFirstLayout=resolve);return original(...args);};
       RodaScriptDocument.update(version,raw);
       window.goToKey=()=>RodaScriptDocument.navigate({versionId:'v1',number:'31',variants:['llave'],orderedVariants:true});goToKey();
     });
     const waitForKey=async()=>{await page.waitForFunction(()=>document.querySelector('#scriptSceneSelect').value==='30');assert.equal((await page.locator('.script-cast-mention').allTextContents()).join(''),'llave');};
-    const intact=async()=>assert.ok(await page.evaluate(()=>document.querySelector('#scriptFullText').textContent===raw&&document.querySelectorAll('.script-scene-anchor').length===33));
+    const intact=async()=>assert.ok(await page.evaluate(()=>document.querySelector('#scriptFullText').textContent===raw&&document.querySelectorAll('#scriptFullText .script-scene-anchor').length===33&&document.querySelectorAll('[id^=script-scene-]').length===33));
     const search=async()=>{await page.locator('#scriptSearch').fill('dardo');await page.waitForFunction(()=>document.querySelector('#scriptSearchCount').textContent==='1 de 1');await intact();};
     await waitForKey();await intact();
+    await page.waitForFunction(()=>!!window.finishFirstLayout);
+    await search(); // Must work while pagination is explicitly prevented from finishing.
+    await page.evaluate(()=>finishFirstLayout());
+    await page.waitForFunction(()=>/páginas de lectura/.test(document.querySelector('#scriptFormatHint').textContent));
     // A resize queues pagination, then navigation hides the reader before that
     // frame runs. Returning at the measured width used to leave it stalled.
     await page.evaluate(()=>{
@@ -65,7 +72,21 @@ async function main(){
       RodaScriptPages.readingPages=async c=>{c.replaceChildren();throw Error('Simulated layout failure');};
       version.updatedAt='error';RodaScriptDocument.update(version,raw);
     });
-    await search();assert.match(await page.locator('#scriptFormatHint').textContent(),/Lectura continua/);
+    await search();assert.match(await page.locator('#scriptFormatHint').textContent(),/Lectura completa/);
+    // Never-resolving pagination used to block both direct search and prop links.
+    // Keep the promise pending while exercising the actual controls, then let an
+    // obsolete layout complete after a new version has been loaded.
+    await page.evaluate(()=>{
+      RodaScriptPages.readingPages=async c=>{c.replaceChildren();await new Promise(resolve=>window.releaseLayout=resolve);return 0;};
+      version.updatedAt='stalled';RodaScriptDocument.update(version,raw);
+    });
+    await page.waitForFunction(()=>!!window.releaseLayout);
+    await page.evaluate(()=>goToKey());await waitForKey();await intact();
+    await search();
+    assert.equal(await page.locator('#scriptSearchCount').textContent(),'1 de 1');
+    await page.waitForFunction(()=>document.querySelectorAll('[aria-hidden="true"].script-manuscript').length===0);
+    await page.evaluate(()=>{version.updatedAt='replacement';RodaScriptDocument.update(version,raw);releaseLayout();});
+    await search();await intact();
     assert.deepEqual(errors,[]);await page.close();console.log(`PASS ${width}: queued/in-flight hide, same-width resume, scene 31, direct search, layout fallback, full text`);
   }}finally{await browser.close();}
 }
