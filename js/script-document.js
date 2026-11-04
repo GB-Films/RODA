@@ -139,8 +139,9 @@
     }
     return first?{start:offsets[first.start],end:offsets[first.end]}:null;
   }
-  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver,ready=false,paginated=false,resumeLayout=null,pendingTarget=null,flashTimer;
+  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver,ready=false,paginated=false,resumeLayout=null,pendingTarget=null,flashTimer,expectedText='',pendingSearch=null;
   const $=id=>document.getElementById(id);
+  const completeReader=()=>$('scriptFullText').textContent===expectedText&&anchors.every((s,i)=>!!$('script-scene-'+i));
   function elementNotice(text=''){
     let notice=$('scriptElementNotice');
     if(!notice&&text){notice=document.createElement('p');notice.id='scriptElementNotice';notice.className='script-message';notice.setAttribute('role','status');document.querySelector('#view-script .script-workspace')?.before(notice);}
@@ -150,6 +151,7 @@
   function clearFlash(){clearTimeout(flashTimer);for(const mark of $('scriptFullText').querySelectorAll('.script-cast-mention'))mark.replaceWith(document.createTextNode(mark.textContent));}
   function followTarget(){
     if(!ready||!pendingTarget||$('scriptFullText').dataset.version!==pendingTarget.versionId)return;
+    if(!completeReader()){ready=false;resumeLayout?.();return;}
     // Keep an explicit destination through late font/layout pagination. A user
     // gesture clears it, so subsequent reading never gets pulled back here.
     const target=pendingTarget;
@@ -170,10 +172,15 @@
     flashTimer=setTimeout(clearFlash,1200);
   }
   // A completed layout may have finished while the reader was hidden.
-  function navigate(target){elementNotice();pendingTarget=target;if(!ready&&paginated&&$('scriptFullText').clientWidth>0)resumeLayout?.();followTarget();}
+  function navigate(target){elementNotice();pendingSearch=null;pendingTarget=target;if(!ready&&paginated&&$('scriptFullText').clientWidth>0)resumeLayout?.();followTarget();}
   function clearMatches(){for(const node of $('scriptFullText').querySelectorAll('mark'))node.replaceWith(document.createTextNode(node.textContent));$('scriptFullText').normalize();matches=[];current=-1;}
   function navigateMatch(direction=1){if(!matches.length)return;current=(current+direction+matches.length)%matches.length;for(const mark of $('scriptFullText').querySelectorAll('mark'))mark.classList.toggle('current',Number(mark.dataset.match)===current);$('scriptSearchCount').textContent=`${current+1} de ${matches.length}`;reveal(matches[current]);}
   function search(){
+    if(!ready||!completeReader()){
+      pendingSearch=$('scriptSearch').value;clearTimeout(searchTimer);searchTimer=null;
+      $('scriptSearchCount').textContent=pendingSearch?'Preparando búsqueda…':'';
+      if(ready||paginated){ready=false;resumeLayout?.();}return;
+    }
     clearTimeout(searchTimer);searchTimer=null;clearMatches();const query=$('scriptSearch').value.trim();$('scriptSearchCount').textContent=query?'Sin resultados':'';
     if(!query){$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;return;}
     const nodes=textNodes($('scriptFullText')),text=nodes.map(n=>n.node.data).join(''),normalize=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase(),needle=normalize(query),hay=normalize(text),ranges=[];
@@ -189,7 +196,7 @@
     if(pendingTarget&&pendingTarget.versionId!==v?.id){pendingTarget=null;elementNotice();}
     const {pdf,...readingFormat}=v?.documentFormat||{};
     const key=JSON.stringify([v?.id,v?.updatedAt,raw,readingFormat,v?.keywords]);
-    if(key===readerKey)return;readerKey=key;
+    if(key===readerKey){if(ready&&!completeReader()){ready=false;resumeLayout?.();}return;}readerKey=key;pendingSearch=null;
     const serial=++updateSerial,container=$('scriptFullText');ready=false;clearFlash();root.RodaScriptPages?.cancel();$('scriptDocumentScroll').scrollTop=0;
     layoutObserver?.disconnect();layoutObserver=null;
     container.classList.remove('script-pdf-pages','script-reading-pages');
@@ -200,10 +207,11 @@
       $('scriptSceneTotal').textContent=anchors.length+' escenas';
       for(const id of ['scriptSceneSelect','scriptSearch'])$(id).disabled=!anchors.length;
       $('scriptFormatHint').textContent=hint;
-      ready=container.clientWidth>0;followTarget();
+      ready=container.clientWidth>0;
+      if(ready&&pendingSearch!==null){$('scriptSearch').value=pendingSearch;pendingSearch=null;search();}else followTarget();
     }
     function reading(){root.RodaScriptPages?.cancel();container.classList.remove('script-pdf-pages');let measuredWidth=0,layoutRun=0;
-      async function paginate(){if(serial!==updateSerial)return;ready=false;paginated=false;clearFlash();const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);
+      async function paginate(){if(serial!==updateSerial)return;ready=false;paginated=false;clearFlash();const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);expectedText=container.textContent;
         if(raw&&container.clientWidth===0){finish(result.scenes,'Preparando las páginas de lectura…');return;}
         measuredWidth=container.clientWidth;
         const count=raw&&root.RodaScriptPages?await root.RodaScriptPages.readingPages(container,readingFormat,()=>serial===updateSerial&&run===layoutRun):0;
