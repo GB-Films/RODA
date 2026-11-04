@@ -44,3 +44,25 @@ test('prop mentions prefer the full name over generic earlier words and support 
  assert.equal(long.slice(match.start,match.end),'botellas');
  assert.equal(find('En la escena 6 no vemos objetos.',Art.mentionVariants('Guion impreso para el gag de página 6'),true),null);
 });
+
+test('deleting detected items persists across imports and preserves production and other categories',()=>{
+ const s=fixture(),original=structuredClone(s);s.scenes[0].elements.art.push('Llave');
+ const before=structuredClone(s),id=Art.idFor('props','Llave');assert.equal(Art.remove(s,id),true);assert.equal(Art.remove(s,id),false);
+ assert.equal(Art.validate(s.artItems),true);assert.ok(!Art.rows(s).some(r=>r.id===id));assert.ok(Art.rows(s).some(r=>r.id==='art:llave'));
+ for(const field of ['scenes','shootDays','crew','script'])assert.deepEqual(s[field],before[field]);
+ const reloaded=JSON.parse(JSON.stringify(s));reloaded.scenes.push({id:'s3',elements:{props:['LLÁVE']}});
+ assert.ok(!Art.rows(reloaded).some(r=>r.id===id));assert.equal(Art.totals(Art.rows(reloaded,'all',{includeDeleted:true})).count,3);
+ assert.throws(()=>Art.update(reloaded,id,'notes','stale edit'));
+ assert.equal(Art.validate([{...s.artItems[0],deleted:'true'}]),false);
+});
+test('manual and archived deletions can be re-added without losing preparation or duplicating rows',()=>{
+ const s=fixture(),id=Art.add(s,{name:'Sillón',sceneIds:['s1']});Art.update(s,id,'unitPrice',300);Art.update(s,id,'notes','Devolver a Sol');Art.update(s,id,'archived',true);
+ Art.remove(s,id);assert.ok(!Art.rows(s).some(r=>r.id===id));
+ assert.equal(Art.add(s,{name:'sillon',sceneIds:['s2']}),id);const row=Art.rows(s).find(r=>r.id===id);
+ assert.equal(row.archived,false);assert.equal(row.unitPrice,300);assert.equal(row.notes,'Devolver a Sol');assert.deepEqual(row.sceneIds,['s1','s2']);assert.equal(s.artItems.length,1);
+});
+test('concurrent inventory edits cannot bring back a deleted detection',()=>{
+ const base=fixture(),id=Art.idFor('props','Llave'),a=structuredClone(base),b=structuredClone(base);
+ Art.remove(a,id);Art.update(b,id,'responsible','Sol');const merged=global.Collaboration.mergeProject(base,a,b);
+ assert.ok(!Art.rows(merged).some(r=>r.id===id));assert.equal(merged.artItems.find(r=>r.id===id).responsible,'Sol');
+});
