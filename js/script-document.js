@@ -139,7 +139,7 @@
     }
     return first?{start:offsets[first.start],end:offsets[first.end]}:null;
   }
-  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver,ready=false,paginated=false,resumeLayout=null,pendingTarget=null,flashTimer,expectedText='',pendingSearch=null;
+  let readerKey='',matches=[],current=-1,anchors=[],searchTimer,layoutObserver,ready=false,paginated=false,resumeLayout=null,pendingTarget=null,flashTimer,expectedText='',pendingSearch=null,disposeLayout=null;
   const $=id=>document.getElementById(id);
   const completeReader=()=>$('scriptFullText').textContent===expectedText&&anchors.every((s,i)=>!!$('script-scene-'+i));
   function elementNotice(text=''){
@@ -151,7 +151,7 @@
   function clearFlash(){clearTimeout(flashTimer);for(const mark of $('scriptFullText').querySelectorAll('.script-cast-mention'))mark.replaceWith(document.createTextNode(mark.textContent));}
   function followTarget(){
     if(!ready||!pendingTarget||$('scriptFullText').dataset.version!==pendingTarget.versionId)return;
-    if(!completeReader()){ready=false;resumeLayout?.();return;}
+    if(!completeReader()){resumeLayout?.();if(!completeReader())return;}
     // Keep an explicit destination through late font/layout pagination. A user
     // gesture clears it, so subsequent reading never gets pulled back here.
     const target=pendingTarget;
@@ -176,11 +176,7 @@
   function clearMatches(){for(const node of $('scriptFullText').querySelectorAll('mark'))node.replaceWith(document.createTextNode(node.textContent));$('scriptFullText').normalize();matches=[];current=-1;}
   function navigateMatch(direction=1){if(!matches.length)return;current=(current+direction+matches.length)%matches.length;for(const mark of $('scriptFullText').querySelectorAll('mark'))mark.classList.toggle('current',Number(mark.dataset.match)===current);$('scriptSearchCount').textContent=`${current+1} de ${matches.length}`;reveal(matches[current]);}
   function search(){
-    if(!ready||!completeReader()){
-      pendingSearch=$('scriptSearch').value;clearTimeout(searchTimer);searchTimer=null;
-      $('scriptSearchCount').textContent=pendingSearch?'Preparando búsqueda…':'';
-      ready=false;resumeLayout?.();return;
-    }
+    if(!ready||!completeReader()){resumeLayout?.();if(!ready||!completeReader())return;}
     pendingSearch=null;clearTimeout(searchTimer);searchTimer=null;clearMatches();const query=$('scriptSearch').value.trim();$('scriptSearchCount').textContent=query?'Sin resultados':'';
     if(!query){$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;return;}
     const nodes=textNodes($('scriptFullText')),text=nodes.map(n=>n.node.data).join(''),normalize=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase(),needle=normalize(query),hay=normalize(text),ranges=[];
@@ -197,7 +193,7 @@
     const {pdf,...readingFormat}=v?.documentFormat||{};
     const key=JSON.stringify([v?.id,v?.updatedAt,raw,readingFormat,v?.keywords]);
     if(key===readerKey){resumeLayout?.();return;}readerKey=key;pendingSearch=null;
-    const serial=++updateSerial,container=$('scriptFullText');ready=false;clearFlash();root.RodaScriptPages?.cancel();$('scriptDocumentScroll').scrollTop=0;
+    disposeLayout?.();const serial=++updateSerial,container=$('scriptFullText');ready=false;clearFlash();root.RodaScriptPages?.cancel();$('scriptDocumentScroll').scrollTop=0;
     layoutObserver?.disconnect();layoutObserver=null;
     container.classList.remove('script-pdf-pages','script-reading-pages');
     $('scriptVersionUI').classList.add('script-paged-document');
@@ -207,44 +203,81 @@
       $('scriptSceneTotal').textContent=anchors.length+' escenas';
       for(const id of ['scriptSceneSelect','scriptSearch'])$(id).disabled=!anchors.length;
       $('scriptFormatHint').textContent=hint;
-      ready=paginated&&container.clientWidth>0;
+      ready=true;
       if(ready&&pendingSearch!==null){$('scriptSearch').value=pendingSearch;pendingSearch=null;search();}else followTarget();
     }
-    function reading(){root.RodaScriptPages?.cancel();container.classList.remove('script-pdf-pages');let measuredWidth=0,layoutRun=0,layoutBusy=false,layoutFrame=0;
-      async function paginate(){if(serial!==updateSerial||layoutBusy)return;
-        if(ready&&!pendingTarget&&$('scriptSearch').value)pendingSearch=$('scriptSearch').value;
-        ready=false;paginated=false;layoutBusy=true;clearFlash();const run=++layoutRun,result=render(container,raw,readingFormat,v?.keywords);expectedText=container.textContent;
-        if(raw&&container.clientWidth===0){measuredWidth=0;layoutBusy=false;finish(result.scenes,'Preparando las páginas de lectura…');return;}
-        measuredWidth=container.clientWidth;
+    function reading(){
+      let measuredWidth=0,layoutRun=0,stage=null,timer=null,layoutFrame=0,settled=false;
+      const cancel=()=>{++layoutRun;clearTimeout(timer);cancelAnimationFrame(layoutFrame);layoutFrame=0;stage?.remove();stage=null;};
+      disposeLayout=cancel;
+      // The complete text is the reader. Pagination only prepares a replacement
+      // offscreen; it never removes the text that search and scene links need.
+      function restoreText(){
+        clearFlash();container.classList.remove('script-reading-pages','script-pagination-ready');
+        const result=render(container,raw,readingFormat,v?.keywords);expectedText=container.textContent;
+        const sheet=document.createElement('section'),body=document.createElement('div');
+        sheet.className='script-reading-page';body.className='script-page-content';
+        sheet.style.width=Math.min(1000,Math.max(300,Number(readingFormat.page?.width)||612))*4/3+'px';
+        for(const side of ['top','right','bottom','left'])sheet.style.setProperty('--page-'+side,Math.max(12,Math.min(160,Number(readingFormat.page?.margins?.[side])||72))*4/3+'px');
+        body.append(...container.childNodes);sheet.append(body);container.append(sheet);
+        finish(result.scenes,raw?'Lectura completa':'');paginated=false;
+      }
+      function position(){
+        const scroller=$('scriptDocumentScroll');if(!scroller.scrollTop)return null;
+        const top=scroller.getBoundingClientRect().top;
+        const p=Array.from(container.querySelectorAll('p')).find(p=>p.textContent.trim()&&p.getBoundingClientRect().bottom>top);
+        if(!p)return null;const range=document.createRange();range.setStart(container,0);range.setEndBefore(p);
+        return {offset:range.toString().length,top:p.getBoundingClientRect().top-top};
+      }
+      function restorePosition(saved){
+        if(!saved)return;const entry=textNodes(container).find(n=>n.start<=saved.offset&&n.end>saved.offset);if(!entry)return;
+        const range=document.createRange();range.setStart(entry.node,saved.offset-entry.start);range.setEnd(entry.node,Math.min(entry.node.length,saved.offset-entry.start+1));
+        const scroller=$('scriptDocumentScroll');scroller.scrollTop+=range.getBoundingClientRect().top-scroller.getBoundingClientRect().top-saved.top;
+      }
+      async function paginate(){
+        layoutFrame=0;if(serial!==updateSerial||!raw||!root.RodaScriptPages||container.clientWidth===0)return;
+        cancel();const run=layoutRun,width=container.clientWidth;measuredWidth=width;settled=false;
+        const copy=document.createElement('div');stage=copy;copy.className='script-manuscript';copy.setAttribute('aria-hidden','true');copy.inert=true;
+        copy.style.cssText='position:absolute;left:-100000px;top:0;visibility:hidden;pointer-events:none;width:'+width+'px';
+        render(copy,raw,readingFormat,v?.keywords);
+        // Keep staging anchors out of document lookups and accessibility.
+        for(const anchor of copy.querySelectorAll('[id]')){anchor.dataset.readerAnchor=anchor.id;anchor.removeAttribute('id');}
+        container.after(copy);
         const isCurrent=()=>serial===updateSerial&&run===layoutRun;
+        timer=setTimeout(()=>{if(!isCurrent())return;cancel();settled=true;$('scriptFormatHint').textContent='Lectura completa';},5000);
         try{
-          const count=raw&&root.RodaScriptPages?await root.RodaScriptPages.readingPages(container,readingFormat,isCurrent):0;
-          if(count===null||!isCurrent())return;
-          layoutBusy=false;paginated=true;finish(result.scenes,!raw?'':count+' páginas de lectura');
+          const count=await root.RodaScriptPages.readingPages(copy,readingFormat,isCurrent);
+          if(!isCurrent()||count===null)return;
+          if(copy.textContent!==expectedText||copy.querySelectorAll('[data-reader-anchor]').length!==anchors.length)throw Error('Incomplete reading layout');
+          const saved=position(),query=$('scriptSearch').value,matchIndex=current;
+          clearTimeout(timer);clearFlash();
+          for(const anchor of copy.querySelectorAll('[data-reader-anchor]')){anchor.id=anchor.dataset.readerAnchor;delete anchor.dataset.readerAnchor;}
+          container.replaceChildren(...copy.childNodes);container.classList.add('script-reading-pages','script-pagination-ready');copy.remove();stage=null;
+          settled=true;paginated=true;$('scriptFormatHint').textContent=count+' páginas de lectura';
+          matches=[];current=-1;
+          if(pendingTarget)followTarget();
+          else if(query){$('scriptSearch').value=query;search();if(matchIndex>0&&matchIndex<matches.length){current=matchIndex-1;navigateMatch(1);}}
+          else{$('scriptSceneSelect').value='';restorePosition(saved);}
         }catch(error){
-          if(!isCurrent())return;
-          // A layout error must not strand search on a partial document.
-          render(container,raw,readingFormat,v?.keywords);container.classList.remove('script-reading-pages','script-pagination-ready');
-          layoutBusy=false;paginated=true;finish(result.scenes,'Lectura continua · No se pudieron organizar las páginas.');
+          if(!isCurrent())return;cancel();settled=true;$('scriptFormatHint').textContent='Lectura completa';
           console.warn('No se pudieron organizar las páginas del guion.',error);
         }
       }
-      resumeLayout=()=>{if(serial===updateSerial&&!layoutBusy&&!layoutFrame&&container.clientWidth>0&&(!ready||!completeReader()))paginate();};
-      paginate();
-      layoutObserver=new ResizeObserver(()=>{
+      resumeLayout=()=>{
         if(serial!==updateSerial)return;
-        const width=container.clientWidth;
-        if(!width){
-          // Hiding cancels both queued and in-flight layouts. Reset the measured
-          // width so returning at the SAME width still resumes the reader.
-          ++layoutRun;layoutBusy=false;ready=false;paginated=false;measuredWidth=0;
-          cancelAnimationFrame(layoutFrame);layoutFrame=0;return;
+        if(!ready||!completeReader()){
+          const query=$('scriptSearch').value;cancel();settled=false;restoreText();$('scriptSearch').value=query;
         }
-        if(Math.abs(width-measuredWidth)>1){
-          if(!pendingTarget&&$('scriptSearch').value)pendingSearch=$('scriptSearch').value;
-          ++layoutRun;layoutBusy=false;ready=false;paginated=false;measuredWidth=width;
-          cancelAnimationFrame(layoutFrame);layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;paginate();});
-        }
+        if(!stage&&!layoutFrame&&!settled&&container.clientWidth>0)layoutFrame=requestAnimationFrame(paginate);
+      };
+      restoreText();resumeLayout();
+      layoutObserver=new ResizeObserver(()=>{
+        if(serial!==updateSerial)return;const width=container.clientWidth;
+        if(!width){cancel();measuredWidth=0;settled=false;return;}
+        if(Math.abs(width-measuredWidth)>1){cancel();settled=false;measuredWidth=width;resumeLayout();}
+        // Opening a previously hidden reader must reveal a pending destination,
+        // even if pagination is slow, stalled or unavailable.
+        if(pendingTarget)followTarget();
       });layoutObserver.observe(container);
     }
     clearTimeout(searchTimer);anchors=[];matches=[];current=-1;$('scriptSearch').value='';$('scriptSearchCount').textContent='';$('scriptSearchPrev').disabled=$('scriptSearchNext').disabled=true;$('scriptSearch').disabled=true;$('scriptSceneSelect').disabled=true;
