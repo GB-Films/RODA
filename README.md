@@ -161,3 +161,7 @@ La integración de GB Studio 1.56.0 agrega la flecha Reparto al abrir una menci�
 ### Roda 1.57.0 · Realización del personaje
 
 La integración de Studio permite Con intérprete, Interpretado por alguien del equipo y Personaje digital (VFX / IA). El modelo compartido conserva la asignación previa al pasar a digital, excluye personajes digitales de citaciones y permite vincular personas de cualquier área sin duplicar ni cambiar su función técnica. La interfaz se publica desde GB-Studio.
+
+### Roda 1.58.0 · Selector de intérprete
+
+La integración de Studio usa un selector único con búsqueda, Cast primero y Equipo técnico después. Dos casillas reemplazan Realización: VFX / IA y Producción / equipo. El modelo conserva a la persona asignada al desmarcar Producción, permite elegir cualquier persona activa desde assignPerformer y mantiene las citaciones. La interfaz del editor legado continúa independiente.
