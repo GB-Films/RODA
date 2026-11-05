@@ -1,6 +1,6 @@
 (function(){
   const el = (id)=>document.getElementById(id);
-  const views = ["cast","breakdown","shooting","dayplan","schedule","shotlist","elements","crew","reports","callsheet"];
+  const views = ["cast","breakdown","shooting","dayplan","schedule","shotlist","elements","logistics","crew","reports","callsheet"];
 
   const cats = ["cast","props","wardrobe","art","makeup","sound","sfx","vfx","vehicles","animals","extras"];
   const catNames = {
@@ -306,19 +306,19 @@ const shotlistExpandedSceneIds = new Set();
     if(!dayNavigation)dayNavigation=RodaDayNavigation.create(main,{onSelect:chooseSharedDay,onCompare:openSchedDayPicker});
     const view=document.body.dataset.rodaView;
     const general=view==='schedule'||(view==='callsheet'&&reportsTab==='schedule');
-    const visible=['shooting','dayplan','schedule','shotlist','elements','crew','reports','callsheet'].includes(view);
+    const visible=['shooting','dayplan','schedule','shotlist','elements','crew','reports','callsheet','logistics'].includes(view);
     const days=(state.shootDays||[]).map(d=>({id:d.id,title:formatDayTitle(d.date)+(d.label?' · '+d.label:''),detail:[d.location,d.callTime?'Call '+d.callTime:'',(d.sceneIds||[]).length+' escenas'].filter(Boolean).join(' · ')}));
     let selection=selectedDayId;
     if(view==='shotlist')selection=selectedShotlistDayId;
     if(view==='dayplan')selection=selectedDayplanDayId;
     if(view==='callsheet')selection=callSheetDayId;
-    if(view==='elements')selection=scope;
+    if(view==='elements'||view==='logistics')selection=scope;
     if(view==='crew'||view==='reports')selection=getDay(scope)?scope:'all';
     if(general){
       const filter=loadSchedDayFilter(),selected=getScheduleDaysFiltered();
       selection=filter.mode==='all'?'all':selected.length===1?selected[0].id:filter.mode==='none'?'none':'multiple';
     }
-    const all=general||['elements','crew','reports'].includes(view);
+    const all=general||['elements','crew','reports','logistics'].includes(view);
     if(!all&&!getDay(selection))selection=days[0]?.id||null;
     const day=days.find(d=>d.id===selection);
     const title=day?.title||(selection==='all'?'Todas las jornadas':selection==='unassigned'?'Sin jornada asignada':selection==='multiple'?getScheduleDaysFiltered().length+' jornadas seleccionadas':selection==='none'?'Ninguna jornada seleccionada':'Sin jornadas');
@@ -564,7 +564,7 @@ const shotlistExpandedSceneIds = new Set();
       schedule:"🗓️",
       shotlist:"🎬",
       elements:"🧰",
-      crew:"👥",
+      logistics:"⌖", crew:"👥",
       reports:"⚙️",
       callsheet:"🧾"
     };
@@ -2261,6 +2261,7 @@ function setupScheduleWheelScroll(){
     if(name==="schedule"){ renderScheduleBoard(); }
     if(name==="shotlist"){ renderShotList(); }
     if(name==="elements"){ renderElementsExplorer(); }
+    if(name==="logistics") renderLogistics();
     if(name==="crew"){ renderCrew(); }
     if(name==="reports"){ renderReportsFilters(); renderReports(); }
     if(name==="callsheet"){ renderCallSheetCalendar(); applyReportsTabUI(); renderReportsDetail(); }
@@ -4478,6 +4479,12 @@ function renderDayCast(){
     dialog.querySelectorAll('[data-close]').forEach(button=>button.onclick=close);dialog.showModal();el('crewActionCancel')?.focus();
   }
 
+  let logisticsView=null;
+  function renderLogistics(){
+    const host=el('view-logistics');if(!host||!window.RodaLogisticsView)return;
+    logisticsView??=RodaLogisticsView.create(host,{getState:()=>state,getScope:sharedDayFilter,canEdit:()=>!isReadOnly('logistics'),save:touch,dayLabel:d=>[formatDayTitle(d.date),d.label].filter(Boolean).join(' · '),notify:toast});
+    logisticsView.render();
+  }
   function renderCrew(){
     renderDayNavigation();
     const historyButton=el("btnCrewMergeHistory");if(historyButton){historyButton.classList.toggle("hidden",!state.crew.some(p=>p.mergedInto));historyButton.onclick=()=>openCrewAction("history");}
@@ -4528,7 +4535,7 @@ function renderDayCast(){
         trG.className = "groupRow";
         const closed=collapsedAreas.has(c.area)&&!q;
         const count=areaCounts.get(c.area);
-        trG.innerHTML = `<td colspan="8"><button type="button" class="crewGroupToggle" data-ro-allow="1" aria-expanded="${!closed}"><span class="crewGroupCaret" aria-hidden="true">${closed?'▸':'▾'}</span><span>${esc(c.area)}</span><span class="crewGroupCount">${count} ${count===1?'integrante':'integrantes'}</span></button></td>`;
+        trG.innerHTML = `<td colspan="9"><button type="button" class="crewGroupToggle" data-ro-allow="1" aria-expanded="${!closed}"><span class="crewGroupCaret" aria-hidden="true">${closed?'▸':'▾'}</span><span>${esc(c.area)}</span><span class="crewGroupCount">${count} ${count===1?'integrante':'integrantes'}</span></button></td>`;
         const toggle=trG.querySelector('button');
         toggle.addEventListener('click',()=>{
           const close=toggle.getAttribute('aria-expanded')==='true';
@@ -4561,6 +4568,7 @@ function renderDayCast(){
         <td><input class="input" aria-label="Apellido" value="${esc(parts.lastName)}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Teléfono" value="${esc(c.phone||"")}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Email" value="${esc(c.email||"")}" ${readonly?'disabled':''}/></td>
+        <td><input class="input crew-address" aria-label="Dirección de recogida" placeholder="Calle, altura, ciudad y país" maxlength="500" value="${esc(c.address||'')}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Notas" value="${esc(c.notes||"")}" ${readonly?'disabled':''}/></td>
         <td class="crew-person-actions">${RodaCast.duplicates(state,c).length?`<button type="button" class="btn small" data-merge-person ${readonly?'disabled':''}>Unificar</button>`:''}<button class="btn danger" ${readonly?'disabled':''}>Borrar</button></td>
       `;
@@ -4578,7 +4586,7 @@ function renderDayCast(){
         });
       }
 
-      const [areaSel, role, name, lastName, phone, email, notes] = tr.querySelectorAll("select,input");
+      const [areaSel, role, name, lastName, phone, email, address, notes] = tr.querySelectorAll("select,input");
       const saveField=(field,value)=>{if(isReadOnly(scope))return false;RodaCast.preparePerson(state,real);if(field==='firstName'||field==='lastName'){const nextParts=RodaCast.personNameParts(real);nextParts[field]=value;RodaCast.setPersonName(real,nextParts.firstName,nextParts.lastName);}else real[field]=value;touch();return true;};
       areaSel.addEventListener("change", ()=>{const next=normalizeCrewArea(areaSel.value);if(isReadOnly(scope)||isReadOnly(next==='Cast'?'cast':'crew'))return;RodaCast.preparePerson(state,real);if(real.area==='Cast'&&next!=='Cast')for(const p of state.crew)if(p.castProfile&&p.actorId===real.id)p.actorId='';setCrewAreaCollapsed(next,false);real.area=next;if(next==='Cast')real.castPerson=true;touch();renderCrew();refreshElementSuggestions();renderReports();renderReportsDetail();});
       role.addEventListener("input", ()=>{if(saveField('role',role.value)){renderReports();renderReportsDetail();}});
@@ -4586,6 +4594,7 @@ function renderDayCast(){
       lastName.addEventListener("input", ()=>{if(saveField('lastName',lastName.value)){refreshElementSuggestions();renderReports();renderReportsDetail();}});
       phone.addEventListener("input", ()=>saveField('phone',phone.value));
       email.addEventListener("input", ()=>saveField('email',email.value));
+      address.addEventListener('input',()=>saveField('address',address.value));
       notes.addEventListener("input", ()=>saveField('notes',notes.value));
 
       tr.querySelector('[data-merge-person]')?.addEventListener('click',()=>openCrewAction('merge',real.id));
@@ -4608,7 +4617,7 @@ function renderDayCast(){
           : `<div class="muted small">No está asignado a ningún día del Plan de Rodaje.</div>`;
 
         trD.innerHTML = `
-          <td colspan="8">
+          <td colspan="9">
             <div class="crewDetailBox">
               <div class="muted small" style="margin-bottom:8px;">Días donde está cargado</div>
               ${daysHtml}
@@ -4621,7 +4630,7 @@ function renderDayCast(){
 
     if(!list.length){
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="8" class="muted">${getDay(journey)?'No hay personas citadas en esta jornada. Elegí «Todas las jornadas» para ver el equipo completo.':'No hay resultados.'}</td>`;
+      tr.innerHTML = `<td colspan="9" class="muted">${getDay(journey)?'No hay personas citadas en esta jornada. Elegí «Todas las jornadas» para ver el equipo completo.':'No hay resultados.'}</td>`;
       tbody.appendChild(tr);
     }
   }
@@ -10129,6 +10138,7 @@ if(!state.scenes.length){
     renderShotList();
     renderCallSheetCalendar();
     renderReportsDetail();
+    if(document.body.dataset.rodaView==='logistics')renderLogistics();
     applyBankCollapsedUI();
     initCollapsibles();
     syncPlanningHistory();

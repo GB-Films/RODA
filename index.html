@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="css/elements.css?v=1.33.1">
 <link rel="stylesheet" href="css/scene-detail.css?v=1.35.0">
 <link rel="preload" href="assets/gb-films-print.png" as="image">
+<link rel="stylesheet" href="js/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/logistics.css?v=1.60.0">
 </head>
 <body>
   <div class="shell">
@@ -48,6 +50,7 @@
         <button class="navBtn" data-view="schedule"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Plan General</span></button>
         <button class="navBtn" data-view="shotlist"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Shotlist</span></button>
         <button class="navBtn" data-view="elements"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Elementos</span></button>
+        <button class="navBtn" data-view="logistics"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Logística</span></button>
         <button class="navBtn" data-view="crew"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Equipo</span></button>
         <button class="navBtn" data-view="reports"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Filtros</span></button>
         <button class="navBtn" data-view="callsheet"><span class="navIco" aria-hidden="true"></span><span class="navLbl">REPORTES</span></button>
@@ -518,6 +521,7 @@
       </div></section>
 
       <!-- ================= CREW ================= -->
+      <section class="view hidden" id="view-logistics"></section>
       <section class="view hidden" id="view-crew">
         <div class="card" id="crewCard">
           <div class="cardHeader">
@@ -539,7 +543,7 @@
                     <th>Apellido</th>
                     <th style="width:140px;">Tel</th>
                     <th style="width:220px;">Email</th>
-                    <th>Notas</th>
+                    <th>Dirección de recogida</th><th>Notas</th>
                     <th style="width:110px;"></th>
                   </tr>
                 </thead>
@@ -668,7 +672,7 @@
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
     ];
-    const appFiles = ["js/firebase-config.js","js/dialogs.js","js/cast.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/planning-history.js","js/day-navigation.js","js/app.js"];
+    const appFiles = ["js/vendor/leaflet/leaflet.js","js/logistics.js","js/logistics-view.js","js/firebase-config.js","js/dialogs.js","js/cast.js","js/call-sheet.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/planning-history.js","js/day-navigation.js","js/app.js"];
 
     function loadScript(src){
       return new Promise((res)=>{
