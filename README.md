@@ -11,6 +11,12 @@ El mapa utiliza Leaflet 1.9.4 distribuido localmente y mapas de OpenStreetMap. P
 
 En Studio, Logística tiene permiso propio. Los colaboradores reciben las personas y ubicaciones necesarias sin teléfonos, correos ni texto del guion si no tienen esos otros permisos. Publicar el servidor antes que el cliente. Los permisos anteriores no habilitan automáticamente la nueva sección.
 
+## Guion por personaje
+
+`js/character-script.mjs` prepara un recorte de la versión de producción usando las asociaciones de Reparto, incluidos personajes sin diálogo y variantes de sus nombres. Conserva las escenas completas, su orden, numeración y formato, y agrega una portada con personaje, intérprete (si está asignado), cantidad y lista de escenas. No modifica el guion, reparto ni planificación. Un vínculo sin resolver impide descargar un recorte incompleto.
+
+La descarga PDF está integrada en GB Studio: **Reparto → personaje → Descargar guion del personaje (PDF)**. Usa el generador local existente, requiere lectura de Guion y Reparto y no envía el archivo a terceros. Pruebas del recorte: `node --test tests/character-script.test.mjs`.
+
 App web estatica para organizar proyectos de produccion: breakdown, plan de rodaje, equipo, reportes, call sheets y shotlist.
 
 ## Backend
