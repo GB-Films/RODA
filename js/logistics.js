@@ -25,18 +25,35 @@
   if(scope==='all')for(const p of people(s))if(!p.castProfile&&!p.mergedInto&&!persons.has(p.id))persons.set(p.id,{...p,kind:p.area==='Cast'?'cast':'crew'});
   const sceneIds=new Set(days.flatMap(d=>d.sceneIds||[])),locationIds=new Set((s.scenes||[]).filter(sc=>sceneIds.has(sc.id)).map(sc=>sc.shootingLocationId));
   const rows=[...[...persons.values()].map(p=>({id:'person:'+p.id,name:p.name||'Sin nombre',address:p.address||'',kind:p.kind})),...(s.shootingLocations||[]).filter(l=>scope==='all'||locationIds.has(l.id)).map(l=>({id:'location:'+l.id,name:l.name,address:l.address||'',kind:'location'})),...data(s).points.filter(p=>scope==='all'||!p.dayIds.length||p.dayIds.includes(scope)).map(p=>({...p,id:'point:'+p.id,kind:'point'}))];
-  return rows.map(r=>{const geo=data(s).geocodes[r.id];return {...r,geo:geo?.address===r.address?geo:null};});
+  return rows.map(r=>{const geo=data(s).geocodes[r.id];return {...r,geo:geo?.address===r.address?geo:addressInfo(r.address).geo};});
  }
- const mapsURL=r=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(r.geo?`${r.geo.lat},${r.geo.lng}`:r.address||r.name);
- function routeURL(stops){const q=r=>r.geo?`${r.geo.lat},${r.geo.lng}`:r.address||'';const usable=stops.filter(r=>q(r));if(usable.length<2)return '';const params=new URLSearchParams({api:'1',travelmode:'driving',origin:q(usable[0]),destination:q(usable.at(-1))});if(usable.length>2)params.set('waypoints',usable.slice(1,-1).map(q).join('|'));return 'https://www.google.com/maps/dir/?'+params;}
+ function addressInfo(value){
+  const address=String(value||'').trim(),empty={url:'',query:'',geo:null},search=q=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q);
+  if(!address)return empty;
+  if(!/^[a-z][a-z\d+.-]*:|^\/\/|^(?:www\.|maps\.|goo\.gl\/)/i.test(address))return {...empty,url:search(address),query:address};
+  try{
+   const url=new URL(address.startsWith('//')?'https:'+address:/^[a-z][a-z\d+.-]*:/i.test(address)?address:'https://'+address),host=url.hostname.toLowerCase(),google=/(^|\.)google\.(?:com|[a-z]{2}|com\.[a-z]{2}|co\.[a-z]{2})$/.test(host);
+   if(!['http:','https:'].includes(url.protocol)||url.username||url.password||!(host==='maps.app.goo.gl'||host==='goo.gl'&&/^\/maps(?:\/|$)/.test(url.pathname)||google&&(host.startsWith('maps.')||/^\/maps(?:\/|$)/.test(url.pathname))))return empty;
+   url.protocol='https:';
+   // Short links remain directly openable. Their opaque IDs are not addresses.
+   if(!google)return {...empty,url:url.href};
+   const query=url.searchParams.get('query')||url.searchParams.get('q')||url.searchParams.get('ll')||'',path=decodeURIComponent(url.pathname),pin=path.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/),pair=query.match(/^(?:loc:)?\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/i)||pin||path.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+   if(pair){const lat=Number(pair[1]),lng=Number(pair[2]);if(Math.abs(lat)<=90&&Math.abs(lng)<=180)return {url:url.href,query:'',geo:{address:String(value||''),lat,lng,label:'Ubicación del enlace de Maps',confirmed:false}};}
+   const text=query||path.match(/\/maps\/(?:place|search)\/([^/]+)/)?.[1]?.replace(/\+/g,' ')||'';
+   return {url:url.href,query:/^[a-z][a-z\d+.-]*:|^\/\//i.test(text)?'':text,geo:null};
+  }catch(_){return empty;}
+ }
+ const addressURL=value=>addressInfo(value).url,addressQuery=value=>addressInfo(value).query;
+ const mapsURL=r=>addressURL(r.geo?`${r.geo.lat},${r.geo.lng}`:r.address||r.name);
+ function routeURL(stops){const q=r=>r.geo?`${r.geo.lat},${r.geo.lng}`:addressQuery(r.address);const usable=stops.filter(r=>q(r));if(usable.length<2)return '';const params=new URLSearchParams({api:'1',travelmode:'driving',origin:q(usable[0]),destination:q(usable.at(-1))});if(usable.length>2)params.set('waypoints',usable.slice(1,-1).map(q).join('|'));return 'https://www.google.com/maps/dir/?'+params;}
  function validate(v){
   const obj=x=>x&&typeof x==='object'&&!Array.isArray(x),txt=(x,n=500)=>typeof x==='string'&&x.length<=n,id=x=>txt(x,200)&&!!x&&!['__proto__','prototype','constructor'].includes(x),keys=(x,allowed)=>obj(x)&&Object.keys(x).every(k=>allowed.includes(k));
   const dict=(x,fn)=>obj(x)&&Object.keys(x).length<=3000&&Object.entries(x).every(([k,v])=>id(k)&&fn(v));
   const list=(x,fn)=>Array.isArray(x)&&x.length<=2000&&x.every(fn)&&new Set(x.map(p=>p.id)).size===x.length;
-  const geo=g=>keys(g,['address','lat','lng','label','confirmed'])&&txt(g.address)&&txt(g.label)&&Number.isFinite(g.lat)&&Math.abs(g.lat)<=90&&Number.isFinite(g.lng)&&Math.abs(g.lng)<=180&&typeof g.confirmed==='boolean';
+  const geo=g=>keys(g,['address','lat','lng','label','confirmed'])&&txt(g.address,2000)&&txt(g.label)&&Number.isFinite(g.lat)&&Math.abs(g.lat)<=90&&Number.isFinite(g.lng)&&Math.abs(g.lng)<=180&&typeof g.confirmed==='boolean';
   const vehicle=v=>keys(v,['id','name','type','capacity','driver','departure','pointId','destinationId','notes','cost'])&&id(v.id)&&txt(v.name)&&['auto','uber','traffic','bus','otro'].includes(v.type)&&Number.isInteger(v.capacity)&&v.capacity>=1&&v.capacity<=100&&['driver','departure','pointId','destinationId','notes'].every(k=>txt(v[k]===undefined?'':v[k],k==='notes'?2000:500))&&(v.cost==null||Number.isFinite(v.cost)&&v.cost>=0&&v.cost<=1e12);
   const assignment=a=>keys(a,['mode','vehicleId','pointId','time','notes'])&&['pending','self','vehicle'].includes(a.mode)&&['vehicleId','pointId','time','notes'].every(k=>txt(a[k]===undefined?'':a[k],k==='notes'?2000:500));
   return keys(v,['points','geocodes','days'])&&list(v.points,p=>keys(p,['id','name','address','dayIds','notes'])&&id(p.id)&&txt(p.name)&&!!p.name.trim()&&txt(p.address)&&txt(p.notes||'',2000)&&Array.isArray(p.dayIds)&&p.dayIds.length<=2000&&p.dayIds.every(id))&&dict(v.geocodes,geo)&&dict(v.days,d=>keys(d,['ida','vuelta'])&&Object.values(d).every(l=>keys(l,['vehicles','assignments'])&&list(l.vehicles,vehicle)&&dict(l.assignments,assignment)));
  }
- const api={empty,data,people,roster,leg,ensure,status,occupancy,assign,markers,mapsURL,routeURL,validate};root.RodaLogistics=api;if(typeof module!=='undefined')module.exports=api;
+ const api={empty,data,people,roster,leg,ensure,status,occupancy,assign,markers,addressInfo,addressURL,addressQuery,mapsURL,routeURL,validate};root.RodaLogistics=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

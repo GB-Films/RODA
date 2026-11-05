@@ -4568,7 +4568,7 @@ function renderDayCast(){
         <td><input class="input" aria-label="Apellido" value="${esc(parts.lastName)}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Teléfono" value="${esc(c.phone||"")}" ${readonly?'disabled':''}/></td>
         <td><input class="input" aria-label="Email" value="${esc(c.email||"")}" ${readonly?'disabled':''}/></td>
-        <td><input class="input crew-address" aria-label="Dirección de recogida" placeholder="Calle, altura, ciudad y país" maxlength="500" value="${esc(c.address||'')}" ${readonly?'disabled':''}/></td>
+        <td><input class="input crew-address" aria-label="Dirección" placeholder="Dirección o enlace de Google Maps" maxlength="2000" value="${esc(c.address||'')}" ${readonly?'disabled':''}/><a class="crew-map-link" data-crew-map data-ro-allow="1" target="_blank" rel="noopener noreferrer" hidden>Abrir en Google Maps ↗</a></td>
         <td><input class="input" aria-label="Notas" value="${esc(c.notes||"")}" ${readonly?'disabled':''}/></td>
         <td class="crew-person-actions">${RodaCast.duplicates(state,c).length?`<button type="button" class="btn small" data-merge-person ${readonly?'disabled':''}>Unificar</button>`:''}<button class="btn danger" ${readonly?'disabled':''}>Borrar</button></td>
       `;
@@ -4594,7 +4594,9 @@ function renderDayCast(){
       lastName.addEventListener("input", ()=>{if(saveField('lastName',lastName.value)){refreshElementSuggestions();renderReports();renderReportsDetail();}});
       phone.addEventListener("input", ()=>saveField('phone',phone.value));
       email.addEventListener("input", ()=>saveField('email',email.value));
-      address.addEventListener('input',()=>saveField('address',address.value));
+      const mapLink=tr.querySelector('[data-crew-map]');
+      const refreshAddress=()=>{const url=window.RodaLogistics?.addressURL(address.value)||'';mapLink.hidden=!url;if(url)mapLink.href=url;else mapLink.removeAttribute('href');};
+      refreshAddress();address.addEventListener('input',()=>{if(saveField('address',address.value))refreshAddress();});
       notes.addEventListener("input", ()=>saveField('notes',notes.value));
 
       tr.querySelector('[data-merge-person]')?.addEventListener('click',()=>openCrewAction('merge',real.id));
