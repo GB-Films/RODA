@@ -4482,7 +4482,7 @@ function renderDayCast(){
   let logisticsView=null;
   function renderLogistics(){
     const host=el('view-logistics');if(!host||!window.RodaLogisticsView)return;
-    logisticsView??=RodaLogisticsView.create(host,{getState:()=>state,getScope:sharedDayFilter,canEdit:()=>!isReadOnly('logistics'),save:touch,dayLabel:d=>[formatDayTitle(d.date),d.label].filter(Boolean).join(' · '),notify:toast});
+    logisticsView??=RodaLogisticsView.create(host,{getState:()=>state,getScope:sharedDayFilter,canEdit:()=>!isReadOnly('logistics'),resolveMapsLink:typeof StorageLayer.resolveMapsLink==='function'?value=>StorageLayer.resolveMapsLink(value):null,save:touch,dayLabel:d=>[formatDayTitle(d.date),d.label].filter(Boolean).join(' · '),notify:toast});
     logisticsView.render();
   }
   function renderCrew(){
