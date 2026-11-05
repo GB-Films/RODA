@@ -83,3 +83,8 @@ test('digital and team realization preserve casting and production while updatin
  assert.deepEqual(state.shootDays,plan);assert.deepEqual(state.scenes,scenes);assert.throws(()=>cast.assignTeam(state,'ROL','missing'));assert.throws(()=>cast.setRealization(state,'ROL','invalid'));
  cast.unify(state,cast.rules('PAPEL = ROL'));assert.equal(cast.realizationFor(state,'PAPEL'),'team');assert.equal(cast.actorFor(state,'PAPEL').phone,'123');
 });
+
+test('one performer list accepts technical people and keeps assignments when toggling production flags',()=>{
+ const state={crew:[{id:'a',area:'Cast',castPerson:true,name:'Ana'},{id:'p',area:'Foto',name:'Sol',role:'DF'},{id:'hidden',area:'Foto',name:'Anterior',mergedInto:'p'},{id:'profile',area:'Cast',castProfile:true,role:'ROL'},{id:'empty',area:'Foto',name:''}]};
+ assert.deepEqual(cast.performers(state).map(p=>p.id),['a','p']);cast.assignPerformer(state,'ROL','p');assert.equal(cast.realizationFor(state,'ROL'),'team');cast.setRealization(state,'ROL','live');assert.equal(cast.actorFor(state,'ROL').id,'p');cast.setRealization(state,'ROL','digital');cast.setRealization(state,'ROL','live');assert.equal(cast.actorFor(state,'ROL').id,'p');cast.assignPerformer(state,'ROL','a');assert.equal(cast.realizationFor(state,'ROL'),'live');assert.throws(()=>cast.assignPerformer(state,'ROL','hidden'));cast.assignPerformer(state,'ROL','');assert.equal(cast.actorFor(state,'ROL'),null);assert.equal(state.crew.find(p=>p.id==='p').role,'DF');
+});
