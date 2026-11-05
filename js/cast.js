@@ -43,9 +43,13 @@
  const isPerson=person=>person.area==='Cast'&&!person.castProfile&&!person.mergedInto&&(person.castPerson||['name','phone','email'].some(field=>!!String(person[field]||'').trim()));
  const people=state=>(state.crew||[]).filter(isPerson);
  const profileFor=(state,name)=>(state.crew||[]).find(p=>p.area==='Cast'&&p.castProfile&&key(p.role)===key(name));
+ const realizationFor=(state,name)=>profileFor(state,canonical(name,state.script?.castAliases||[]))?.castRealization||'live';
+ const isDigital=(state,name)=>realizationFor(state,name)==='digital';
+ function setRealization(state,name,value){if(!['live','team','digital'].includes(value))throw Error('Realización inválida.');ensureProfile(state,name).castRealization=value;}
  function actorFor(state,name){
+  if(isDigital(state,name))return null;
   const profile=profileFor(state,name);
-  if(profile)return people(state).find(p=>p.id===resolvedPersonId(state,profile.actorId))||null;
+  if(profile)return (realizationFor(state,name)==='team'?(state.crew||[]).filter(p=>!p.castProfile&&!p.mergedInto):people(state)).find(p=>p.id===resolvedPersonId(state,profile.actorId))||null;
   return people(state).find(p=>!p.castPerson&&key(p.role||p.name)===key(name))||null;
  }
  function typeFor(state,name){
@@ -72,6 +76,7 @@
   if(actorId&&!people(state).some(p=>p.id===actorId&&String(p.name||'').trim()))throw Error('Elegí un actor o actriz del equipo.');
   ensureProfile(state,name).actorId=actorId||'';
  }
+ function assignTeam(state,name,personId){if(personId&&!(state.crew||[]).some(p=>p.id===personId&&!p.castProfile&&!p.mergedInto&&String(p.name||'').trim()))throw Error('Elegí una persona de Equipo.');const profile=ensureProfile(state,name);profile.castRealization='team';profile.actorId=personId||'';}
  const setType=(state,name,type)=>{if(!['character','extra','voice'].includes(type))throw Error('Participación inválida.');ensureProfile(state,name).castType=type;};
  function roster(state){const scenes=(state.scenes||[]).flatMap(s=>s.elements?.cast||[]),stored=(state.crew||[]).filter(p=>p.area==='Cast'&&!p.castPerson).map(p=>p.role||(!p.castProfile?p.name:''));return names(state.script?.activeVersionId?scenes:[...scenes,...stored]).filter(Boolean);}
  function personRoles(state,id){return roster(state).filter(name=>actorFor(state,name)?.id===id);}
@@ -120,7 +125,7 @@
    else{
     const archive={...person};existing.alternateAssignments??=[];existing.alternateAssignments.push(archive);
     for(const profile of state.crew||[])if(profile.castProfile&&profile.actorId===person.id)profile.actorId=existing.id;
-    for(const field of ['name','phone','email','castType'])if(!existing[field]&&person[field])existing[field]=person[field];
+    for(const field of ['name','phone','email','castType','castRealization'])if(!existing[field]&&person[field])existing[field]=person[field];
     if(existing.actorId===undefined&&person.actorId!==undefined)existing.actorId=person.actorId;
     if(person.notes&&!existing.notes?.includes(person.notes))existing.notes=[existing.notes,person.notes].filter(Boolean).join('\n');
    }
@@ -139,10 +144,11 @@
   return names([...(day.sceneIds||[]).flatMap(id=>{
    const scene=state.scenes.find(s=>s.id===id),excluded=new Set((day.castSceneExclusions?.[id]||[]).map(key));
    return (scene?.elements?.cast||[]).filter(n=>!excluded.has(key(n)));
-  }),...(day.blocks||[]).flatMap(b=>b.castNames||[])],aliases);
+  }),...(day.blocks||[]).flatMap(b=>b.castNames||[])],aliases).filter(name=>!isDigital(state,name));
  }
  function workWindow(state,day,name){
-  const actor=actorFor(state,name),same=n=>key(n)===key(name)||(actor&&actorFor(state,n)?.id===actor.id);
+  if(isDigital(state,name))return null;
+  const actor=actorFor(state,name),same=n=>!isDigital(state,n)&&(key(n)===key(name)||(actor&&actorFor(state,n)?.id===actor.id));
   const entries=[];
   for(const id of day.sceneIds||[]){
    const scene=state.scenes.find(s=>s.id===id),excluded=new Set((day.castSceneExclusions?.[id]||[]).map(key));
@@ -157,5 +163,5 @@
   const clock=n=>String(Math.floor(n/60)%24).padStart(2,'0')+':'+String(n%60).padStart(2,'0');
   return {first:clock(first),end:clock(last),call:clock(call)};
  }
- const api={scriptTarget,dayRoster,workWindow,duplicates,reconcileMergedPeople,mergePeople,restorePerson,personNameParts,syncPersonName,setPersonName,key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
+ const api={realizationFor,assignTeam,isDigital,setRealization,scriptTarget,dayRoster,workWindow,duplicates,reconcileMergedPeople,mergePeople,restorePerson,personNameParts,syncPersonName,setPersonName,key,rules,canonical,names,mentioned,resolveScene,unify,isPerson,people,profileFor,actorFor,typeFor,ensureProfile,assign,setType,roster,personRoles,preparePerson,removePerson};root.RodaCast=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

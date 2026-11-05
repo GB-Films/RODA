@@ -157,3 +157,7 @@ Roda 1.55.2 separa la búsqueda y los enlaces de escenas de la preparación de p
 ### Volver a Reparto desde el guion
 
 La integración de GB Studio 1.56.0 agrega la flecha Reparto al abrir una mención de personaje: recupera búsqueda, filtro, tarjetas abiertas, foco en el personaje y scroll. Funciona con acceso de lectura y no modifica actores ni planificación. El cambio de navegación vive en la aplicación integrada `GB-Films/GB-Studio/roda/js/app.js`; el editor legado conserva su navegación independiente.
+
+### Roda 1.57.0 · Realización del personaje
+
+La integración de Studio permite Con intérprete, Interpretado por alguien del equipo y Personaje digital (VFX / IA). El modelo compartido conserva la asignación previa al pasar a digital, excluye personajes digitales de citaciones y permite vincular personas de cualquier área sin duplicar ni cambiar su función técnica. La interfaz se publica desde GB-Studio.
