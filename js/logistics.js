@@ -33,10 +33,10 @@
   if(!/^[a-z][a-z\d+.-]*:|^\/\/|^(?:www\.|maps\.|goo\.gl\/)/i.test(address))return {...empty,url:search(address),query:address};
   try{
    const url=new URL(address.startsWith('//')?'https:'+address:/^[a-z][a-z\d+.-]*:/i.test(address)?address:'https://'+address),host=url.hostname.toLowerCase(),google=/(^|\.)google\.(?:com|[a-z]{2}|com\.[a-z]{2}|co\.[a-z]{2})$/.test(host);
-   if(!['http:','https:'].includes(url.protocol)||url.username||url.password||!(host==='maps.app.goo.gl'||host==='goo.gl'&&/^\/maps(?:\/|$)/.test(url.pathname)||google&&(host.startsWith('maps.')||/^\/maps(?:\/|$)/.test(url.pathname))))return empty;
+   if(!['http:','https:'].includes(url.protocol)||url.port||url.username||url.password||!(host==='maps.app.goo.gl'||host==='goo.gl'&&/^\/maps(?:\/|$)/.test(url.pathname)||google&&(host.startsWith('maps.')||/^\/maps(?:\/|$)/.test(url.pathname))))return empty;
    url.protocol='https:';
-   // Short links remain directly openable. Their opaque IDs are not addresses.
-   if(!google)return {...empty,url:url.href};
+   // Opaque short IDs must be expanded by the authenticated Maps resolver.
+   if(!google)return {...empty,url:url.href,short:true};
    const query=url.searchParams.get('query')||url.searchParams.get('q')||url.searchParams.get('ll')||'',path=decodeURIComponent(url.pathname),pin=path.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/),pair=query.match(/^(?:loc:)?\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/i)||pin||path.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
    if(pair){const lat=Number(pair[1]),lng=Number(pair[2]);if(Math.abs(lat)<=90&&Math.abs(lng)<=180)return {url:url.href,query:'',geo:{address:String(value||''),lat,lng,label:'Ubicación del enlace de Maps',confirmed:false}};}
    const text=query||path.match(/\/maps\/(?:place|search)\/([^/]+)/)?.[1]?.replace(/\+/g,' ')||'';
