@@ -3,9 +3,11 @@
 
 ## Logística de rodaje
 
-Logística reúne las direcciones de recogida cargadas en Equipo, las locaciones asignadas a escenas y puntos de encuentro personalizados. El selector compartido permite ver todas las jornadas o una sola. Las personas se calculan desde las citaciones vigentes del reparto y equipo técnico, sin duplicar a quien cumple varios roles; los personajes sin intérprete aparecen como pendientes de asignación.
+Logística reúne las direcciones o enlaces de Google Maps cargados en Equipo → Dirección, las locaciones asignadas a escenas y puntos de encuentro personalizados. El selector compartido permite ver todas las jornadas o una sola. Las personas se calculan desde las citaciones vigentes del reparto y equipo técnico, sin duplicar a quien cumple varios roles; los personajes sin intérprete aparecen como pendientes de asignación.
 
 Cada jornada tiene ida y vuelta independientes: autos compartidos, Uber/taxi, Traffic/combi, bus u otros vehículos; plazas, conductor/proveedor, horario, origen, destino, costo estimado y notas. Se asigna transporte, recogida y horario a cada persona o se marca «Por su cuenta». El filtro «Falta transporte» y los contadores permiten revisar pendientes; no se aceptan asignaciones por encima de la capacidad. Registrar un vehículo no realiza una reserva externa.
+
+La ruedita acerca y aleja el mapa sin desplazar la página. El campo Dirección permite abrir una dirección escrita o un enlace de Google Maps; los enlaces con coordenadas generan una marca revisable, mientras que los abreviados se abren directamente y permiten ubicar el punto manualmente.
 
 El mapa utiliza Leaflet 1.9.4 distribuido localmente y mapas de OpenStreetMap. Photon busca las direcciones en serie (una solicitud por segundo como máximo) y las coordenadas quedan guardadas en el proyecto; un cambio de dirección invalida el resultado. Las sugerencias se muestran como aproximadas, con confirmación y corrección manual. Se pueden crear puntos por dirección o tocando el mapa y abrir ubicaciones o recorridos en Google Maps. Solo se envía la dirección al buscador, sin nombres ni contactos; requiere conexión y la disponibilidad del proveedor. Se puede configurar otro servicio compatible mediante `RODA_GEOCODER_URL` y otra capa mediante `RODA_MAP_TILES`.
 

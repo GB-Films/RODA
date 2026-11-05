@@ -4319,3 +4319,6 @@ button.schedCalCell{font:inherit;color:inherit;width:100%;padding:0;}
   body.gbPrintingDayplan .dayplanPrintTable .dpClock2{ line-height:1.25; }
   body.gbPrintingDayplan .dayplanPrintTable td.cSum{ font-size:8pt; }
 }
+
+/* Cast actions grow with their labels in narrow cards. */
+#castDirectory .cast-details [data-cast-plan],#castDirectory .cast-details [data-cast-pdf]{height:auto;min-height:34px;max-width:100%;white-space:normal;line-height:1.35;}
