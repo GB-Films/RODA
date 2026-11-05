@@ -72,3 +72,14 @@ test('cast script links use the production scene identity, aliases and chapter w
  assert.equal(cast.scriptTarget(state,'missing','700'),null);
  assert.deepEqual(state,before);
 });
+
+test('digital and team realization preserve casting and production while updating citations',()=>{
+ const state={crew:[{id:'a',area:'Cast',castPerson:true,name:'Ana'},{id:'p',area:'Producción',name:'Sol',role:'Asistente',phone:'123'}],scenes:[{id:'s',elements:{cast:['ROL']}},{id:'s2',elements:{cast:['OTRO']}}],shootDays:[{sceneIds:['s','s2'],callTime:'08:00',times:{s:0,s2:180},durations:{s:30,s2:60},blocks:[]}]};
+ cast.assign(state,'ROL','a');cast.assign(state,'OTRO','a');const plan=structuredClone(state.shootDays),scenes=structuredClone(state.scenes);
+ cast.setRealization(state,'OTRO','digital');assert.equal(cast.actorFor(state,'OTRO'),null);assert.deepEqual(cast.dayRoster(state,state.shootDays[0]),['ROL']);assert.equal(cast.workWindow(state,state.shootDays[0],'OTRO'),null);assert.equal(cast.workWindow(state,state.shootDays[0],'ROL').end,'08:30');
+ cast.setRealization(state,'OTRO','live');assert.equal(cast.actorFor(state,'OTRO').id,'a');
+ cast.assignTeam(state,'ROL','p');assert.equal(cast.actorFor(state,'ROL').name,'Sol');assert.equal(state.crew.find(p=>p.id==='p').area,'Producción');assert.equal(state.crew.length,4);assert.ok(cast.dayRoster(state,state.shootDays[0]).includes('ROL'));
+ cast.setRealization(state,'ROL','digital');cast.setRealization(state,'ROL','team');assert.equal(cast.actorFor(state,'ROL').id,'p');
+ assert.deepEqual(state.shootDays,plan);assert.deepEqual(state.scenes,scenes);assert.throws(()=>cast.assignTeam(state,'ROL','missing'));assert.throws(()=>cast.setRealization(state,'ROL','invalid'));
+ cast.unify(state,cast.rules('PAPEL = ROL'));assert.equal(cast.realizationFor(state,'PAPEL'),'team');assert.equal(cast.actorFor(state,'PAPEL').phone,'123');
+});
