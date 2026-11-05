@@ -6,6 +6,8 @@
 
 La descarga PDF está integrada en GB Studio: **Reparto → personaje → Descargar guion del personaje (PDF)**. Usa el generador local existente, requiere lectura de Guion y Reparto y no envía el archivo a terceros. Pruebas del recorte: `node --test tests/character-script.test.mjs`.
 
+Los parlamentos del personaje llevan la marca `characterDialogue` en sus fragmentos de texto para resaltarlos en amarillo al generar el PDF. Reconoce alias, nombres numéricos, voces en off y diálogos compartidos; conserva sin resaltar las acotaciones, acciones y parlamentos ajenos. El resaltado no modifica el guion original ni el texto o la paginación de la copia.
+
 App web estatica para organizar proyectos de produccion: breakdown, plan de rodaje, equipo, reportes, call sheets y shotlist.
 
 ## Backend
