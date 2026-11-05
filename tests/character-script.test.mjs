@@ -46,3 +46,32 @@ test('clips a formatted block spanning two scene boundaries without leaking the 
  const state=fixture(),v=state.script.versions[1];v.documentFormat.blocks=[block(v.rawText,{left:0})];
  const sides=characterScript(state,'MARTA',dependencies);assert.doesNotMatch(sides.version.rawText,/Esta escena no debe salir/);assert.match(sides.version.rawText,/Me quedo/);
 });
+
+function dialogueFixture(blocks,rich=true){
+ const rawText=blocks.map(b=>b.runs.map(r=>r.text).join('')).join('\n\n'),scenes=parse(rawText).map((s,i)=>({...s,id:'v'+i,productionSceneId:'p'+i}));
+ return {meta:{title:'Película'},crew:[],scenes:scenes.map((s,i)=>({...s,id:'p'+i,elements:{cast:['MARTA','700','OTRO']}})),script:{activeVersionId:'active',castAliases:[{name:'MARTA',aliases:['REHÉN 1']}],versions:[{id:'active',name:'V1',scenes,rawText,...(rich?{documentFormat:{blocks}}:{})}]}};
+}
+const highlighted=sides=>sides.version.documentFormat.blocks.flatMap(b=>b.runs.filter(r=>r.style?.characterDialogue).map(r=>r.text));
+test('highlights spoken paragraphs including VO, aliases and shared cues, leaving action and directions intact',()=>{
+ const state=dialogueFixture([
+  block('ESCENA 1 INT. CASA - DÍA'),block('MARTA (V.O.)',{left:158}),block('(susurrando)',{left:108}),
+  block('Primera frase.',{left:72}),block('Segunda frase.',{left:72}),block('Marta mira a 700.',{left:0}),
+  block('MARTA',{left:158}),block('¡NO!',{left:72}),block('OTRO',{left:158}),block('Respuesta ajena.',{left:72}),
+  block('REHÉN 1 (CONT.)',{left:158}),block('Una más.',{left:72}),block('MARTA Y 700',{left:158}),block('Juntos.',{left:72}),
+  block('700',{left:158}),block('Solo 700.',{left:72}),block('MARTA',{left:158}),block('Final.',{left:72}),
+  block('DESCONOCIDO',{left:158}),block('No es de Marta.',{left:72}),block('ESCENA 2 EXT. CASA - DÍA'),block('Sigue la acción.')
+ ]),before=JSON.stringify(state),sides=characterScript(state,'MARTA',dependencies);
+ assert.deepEqual(highlighted(sides),['Primera frase.','Segunda frase.','¡NO!','Una más.','Juntos.','Final.']);
+ assert.equal(JSON.stringify(state),before);
+ assert.match(sides.version.rawText,/Respuesta ajena/);assert.match(sides.version.rawText,/Marta mira a 700/);
+ assert.deepEqual(highlighted(characterScript(state,'700',dependencies)),['Juntos.','Solo 700.']);
+});
+test('plain screenplay highlights wrapped dialogue until its blank line without marking surrounding prose',()=>{
+ const state=dialogueFixture([block('ESCENA 1 INT. CASA - DÍA\nMARTA (V.O.)\n(susurra)\nPrimera línea\nsegunda línea.\n\nMarta sale.\n\nOTRO\nSu respuesta.\n\nMARTA\n\nÚltima frase.')],false);
+ assert.deepEqual(highlighted(characterScript(state,'MARTA',dependencies)),['Primera línea','segunda línea.','Última frase.']);
+});
+test('preserves inline emphasis and splits a multiline run without highlighting its cue',()=>{
+ const state=dialogueFixture([block('ESCENA 1 INT. CASA - DÍA'),{runs:[{text:'MARTA\nHola ',style:{italic:true}},{text:'de nuevo.',style:{bold:true}}]}]);
+ const sides=characterScript(state,'MARTA',dependencies);assert.deepEqual(highlighted(sides),['Hola ','de nuevo.']);
+ const runs=sides.version.documentFormat.blocks.at(-1).runs;assert.equal(runs[0].style.characterDialogue,undefined);assert.equal(runs[1].style.italic,true);assert.equal(runs[2].style.bold,true);
+});

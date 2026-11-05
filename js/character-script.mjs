@@ -5,6 +5,50 @@ const sceneKey=scene=>String(scene.chapter||'')+'|'+String(scene.number||'').rep
 const paragraph=(text,style={})=>({runs:[{text}],style:{size:12,after:12,...style}});
 const chapter=/^(?:CAP[ÍI]TULO|EPISODIO|EP\.?|CHAPTER)\s*[:.\-]?\s*\d{1,3}\b/i;
 
+function highlightDialogue(blocks,{cast,aliases,character,roster,rich}){
+  const target=cast.key(character),known=new Set(roster.map(n=>cast.key(cast.canonical(n,aliases))));
+  const cueNames=text=>{
+    const cue=text.trim().replace(/^@/,'').replace(/\s*\^$/,'').replace(/(?:\s*\([^)]*\))+\s*$/,'').trim();
+    if(!cue||cue!==cue.toUpperCase())return null;
+    const key=cast.key(cast.canonical(cue,aliases));if(known.has(key))return [key];
+    const names=cue.split(/\s*(?:,|&|\/)\s*|\s+(?:Y|E|AND)\s+/).map(n=>cast.key(cast.canonical(n,aliases)));
+    return names.length>1&&names.every(n=>known.has(n))?names:null;
+  };
+  const hasLayout=rich&&blocks.some(b=>cueNames(textOf(b))&&(b.style?.left||0)>80);
+  const actionLeft=Math.min(0,...blocks.map(b=>b.style?.left||0));
+  let selected=false,spoken=false;
+  return blocks.map(block=>{
+    const text=textOf(block),ranges=[];let offset=0;
+    // Unformatted paragraphs have no reliable indentation; a paragraph break ends
+    // spoken text, while a break immediately after the cue still allows dialogue.
+    if(rich&&!hasLayout&&spoken){selected=false;spoken=false;}
+    for(const line of text.split('\n')){
+      const value=line.trim(),names=(!hasLayout||(block.style?.left||0)>120)?cueNames(value):null;
+      if(names){selected=names.includes(target);spoken=false;}
+      else if(!value){if(!hasLayout&&spoken){selected=false;spoken=false;}}
+      else if(/^\(.*\)$/.test(value)){/* Acting directions are context, not spoken words. */}
+      else if(hasLayout&&(block.style?.left||0)>120&&value===value.toUpperCase()){selected=false;spoken=false;}
+      else if((!hasLayout||(block.style?.left||0)<=actionLeft+15)&&/^(?:ESCENA\s+\d|SCENE\s+\d|(?:\d+[A-Z]*[.\s]+)?(?:INT|EXT)\.|CAP[ÍI]TULO\s+\d|CORTE A:|FUNDIDO A|INTERCUT\b)/i.test(value)){selected=false;spoken=false;}
+      else if(selected){
+        if(hasLayout&&(block.style?.left||0)<=actionLeft+15){selected=false;spoken=false;}
+        else{ranges.push([offset,offset+line.length]);spoken=true;}
+      }
+      offset+=line.length+1;
+    }
+    let start=0;const runs=[];
+    for(const run of block.runs||[]){
+      const end=start+String(run.text||'').length,cuts=[start,end,...ranges.flat().filter(n=>n>start&&n<end)].sort((a,b)=>a-b);
+      for(let i=1;i<cuts.length;i++)if(cuts[i]>cuts[i-1]){
+        const style={...run.style};delete style.characterDialogue;
+        if(ranges.some(([a,b])=>cuts[i-1]>=a&&cuts[i]<=b))style.characterDialogue=true;
+        runs.push({...run,text:run.text.slice(cuts[i-1]-start,cuts[i]-start),style});
+      }
+      start=end;
+    }
+    return {...block,style:{...block.style},runs};
+  });
+}
+
 function sliceBlocks(blocks,start,end){
   let offset=0;const result=[];
   for(const block of blocks){
@@ -51,7 +95,8 @@ export function characterScript(state,name,{cast=globalThis.RodaCast,parse=globa
   const source=version.rawText||(version.scenes||[]).map(s=>`ESCENA ${s.number} ${s.slugline}\n\n${s.body||''}`).join('\n\n');
   const original=version.documentFormat;
   const rich=original?.blocks?.length&&plain(original.blocks.map(textOf).join('\n\n'))===plain(source);
-  const blocks=rich?original.blocks:plainBlocks(source),text=blocks.map(textOf).join('\n\n');
+  const roster=[character,...(state.scenes||[]).flatMap(s=>s.elements?.cast||[]),...aliases.flatMap(a=>[a.name,...(a.aliases||[])])];
+  const blocks=highlightDialogue(rich?original.blocks:plainBlocks(source),{cast,aliases,character,roster,rich}),text=blocks.map(textOf).join('\n\n');
   const parsed=parse(text,version.keywords),lines=text.split('\n'),offsets=[];let offset=0;
   for(const line of lines){offsets.push(offset);offset+=line.length+1;}
   // Parse the actual exported text, not stale sourceLine offsets from an older import.
