@@ -92,11 +92,20 @@ export function characterScript(state,name,{cast=globalThis.RodaCast,parse=globa
     if(!target)throw Error('La escena '+scene.number+' no está vinculada al guion de producción. Revisá su vínculo antes de exportar.');
     selected.add(target.index);
   }
+  const roster=[character,...(state.scenes||[]).flatMap(s=>s.elements?.cast||[]),...aliases.flatMap(a=>[a.name,...(a.aliases||[])])];
+  const result=sceneScript(state,selected,{label:character,subtitle:'GUION POR PERSONAJE',actor:cast.actorFor(state,character)?.name,parse,transform:(blocks,rich)=>highlightDialogue(blocks,{cast,aliases,character,roster,rich})});
+  return {...result,character};
+}
+
+// Shared, read-only extraction. Selection uses screenplay indexes, not filming order.
+export function sceneScript(state,selected,{label='Guion',subtitle='GUION · SELECCIÓN DE ESCENAS',actor,parse=globalThis.RodaScreenplay?.parse,transform=blocks=>blocks}={}){
+  const version=state.script?.versions?.find(v=>v.id===state.script.activeVersionId&&!v.draft);
+  if(!version)throw Error('Elegí una versión de producción del guion antes de exportar.');
+  if(!selected.size||[...selected].some(i=>!Number.isInteger(i)||i<0||i>=version.scenes.length))throw Error('Seleccioná al menos una escena del guion.');
   const source=version.rawText||(version.scenes||[]).map(s=>`ESCENA ${s.number} ${s.slugline}\n\n${s.body||''}`).join('\n\n');
   const original=version.documentFormat;
   const rich=original?.blocks?.length&&plain(original.blocks.map(textOf).join('\n\n'))===plain(source);
-  const roster=[character,...(state.scenes||[]).flatMap(s=>s.elements?.cast||[]),...aliases.flatMap(a=>[a.name,...(a.aliases||[])])];
-  const blocks=highlightDialogue(rich?original.blocks:plainBlocks(source),{cast,aliases,character,roster,rich}),text=blocks.map(textOf).join('\n\n');
+  const blocks=transform(rich?original.blocks:plainBlocks(source),rich),text=blocks.map(textOf).join('\n\n');
   const parsed=parse(text,version.keywords),lines=text.split('\n'),offsets=[];let offset=0;
   for(const line of lines){offsets.push(offset);offset+=line.length+1;}
   // Parse the actual exported text, not stale sourceLine offsets from an older import.
@@ -115,12 +124,12 @@ export function characterScript(state,name,{cast=globalThis.RodaCast,parse=globa
     if(scene.chapter)slice[0].style.breakBefore=false;
     content.push(...slice);scenes.push({id:version.scenes[i].productionSceneId,number:scene.number,chapter:scene.chapter,slugline:scene.slugline});
   }
-  const project=String(state.meta?.title||state.project?.name||'Guion'),actor=cast.actorFor(state,character)?.name;
-  const cover=[paragraph(project,{align:'center',size:14,before:48,after:40}),paragraph(character,{align:'center',bold:true,size:26,after:18}),paragraph('GUION POR PERSONAJE',{align:'center',size:10,after:12})];
+  const project=String(state.meta?.title||state.project?.name||'Guion');
+  const cover=[paragraph(project,{align:'center',size:14,before:48,after:40}),paragraph(label,{align:'center',bold:true,size:26,after:18}),paragraph(subtitle,{align:'center',size:10,after:12})];
   if(actor)cover.push(paragraph(actor,{align:'center',size:12,after:12}));
   cover.push(paragraph(`${scenes.length} ${scenes.length===1?'escena':'escenas'} · ${version.name||'Versión de producción'}`,{align:'center',after:36}));
   cover.push(paragraph('ESCENAS INCLUIDAS',{size:10,bold:true,after:14}));
   for(const scene of scenes)cover.push(paragraph(`${scene.chapter?'Cap. '+scene.chapter+' · ':''}${scene.number} · ${scene.slugline}`,{size:10,after:8}));
   const outputBlocks=[...cover,...content];
-  return {character,project,scenes,version:{id:version.id,name:version.name,updatedAt:version.updatedAt,createdAt:version.createdAt,source:{name:project+' - '+character},rawText:outputBlocks.map(textOf).join('\n\n'),documentFormat:{version:1,page:rich?original.page:undefined,blocks:outputBlocks}}};
+  return {label,project,scenes,version:{id:version.id,name:version.name,updatedAt:version.updatedAt,createdAt:version.createdAt,source:{name:project+' - '+label},rawText:outputBlocks.map(textOf).join('\n\n'),documentFormat:{version:1,page:rich?original.page:undefined,blocks:outputBlocks}}};
 }

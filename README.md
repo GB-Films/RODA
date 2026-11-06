@@ -13,6 +13,10 @@ El mapa utiliza Leaflet 1.9.4 distribuido localmente y mapas de OpenStreetMap. P
 
 En Studio, Logística tiene permiso propio. Los colaboradores reciben las personas y ubicaciones necesarias sin teléfonos, correos ni texto del guion si no tienen esos otros permisos. Publicar el servidor antes que el cliente. Los permisos anteriores no habilitan automáticamente la nueva sección.
 
+## Descarga por locación o escenas
+
+En GB Studio, **Guion → Descargar guion…** permite elegir un rango de escenas (por ejemplo, 28 hasta la última) o una locación de rodaje/espacio del guion. Descarga un PDF de la versión de producción con las escenas completas, en orden de guion, conservando formato y numeración. No cambia la planificación ni la versión activa. El módulo compartido es `js/location-script.mjs`; pruebas: `node --test tests/location-script.test.mjs`.
+
 ## Guion por personaje
 
 `js/character-script.mjs` prepara un recorte de la versión de producción usando las asociaciones de Reparto, incluidos personajes sin diálogo y variantes de sus nombres. Conserva las escenas completas, su orden, numeración y formato, y agrega una portada con personaje, intérprete (si está asignado), cantidad y lista de escenas. No modifica el guion, reparto ni planificación. Un vínculo sin resolver impide descargar un recorte incompleto.
