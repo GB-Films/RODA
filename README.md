@@ -15,7 +15,7 @@ En Studio, Logística tiene permiso propio. Los colaboradores reciben las person
 
 ## Descarga por jornada, locación o escenas
 
-En GB Studio, **Guion → Descargar guion…** permite elegir un rango de escenas (por ejemplo, 28 hasta la última), una locación de rodaje/espacio del guion o una jornada del Plan de Rodaje. La jornada usa sus escenas asignadas actuales, sin repetirlas ni incluir bloques de logística; si una escena no está vinculada al guion activo se avisa antes de descargar. Descarga un PDF de la versión de producción con las escenas completas, en orden de guion, conservando formato y numeración. No cambia la planificación ni la versión activa. El módulo compartido es `js/location-script.mjs`; pruebas: `node --test tests/location-script.test.mjs`.
+En GB Studio, **Guion → Descargar guion…** permite elegir un rango de escenas (por ejemplo, 28 hasta la última), una locación de rodaje/espacio del guion o una jornada del Plan de Rodaje. En Jornada se puede elegir «Orden del guion» u «Orden del plan de rodaje»; este último sigue los horarios actuales y conserva el orden del plan cuando coinciden. La vista previa, la portada y el PDF respetan la selección. La jornada usa sus escenas asignadas actuales, sin repetirlas ni incluir bloques de logística; si una escena no está vinculada al guion activo se avisa antes de descargar. Descarga un PDF de la versión de producción con las escenas completas, en el orden elegido, conservando formato y numeración. No cambia la planificación ni la versión activa. El módulo compartido es `js/location-script.mjs`; pruebas: `node --test tests/location-script.test.mjs`.
 
 ## Guion por personaje
 

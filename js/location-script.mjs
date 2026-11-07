@@ -1,4 +1,4 @@
-import {sceneScript} from './character-script.mjs?v=1.60.11';
+import {sceneScript} from './character-script.mjs?v=1.60.13';
 
 const key=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
 const sceneKey=s=>key(s.chapter)+'|'+String(s.number||'').replace(/^0+(?=\d)/,'').toUpperCase();
@@ -8,7 +8,9 @@ export function dayChoices(state){
   const version=productionVersion(state);if(!version)return [];
   return (state.shootDays||[]).map((day,i)=>{
     const indexes=new Set(),unlinked=[];
-    for(const id of new Set(day.sceneIds||[])){
+    // Match the plan's stable time sort, including its fallback for missing times.
+    const scheduledIds=[...new Set(day.sceneIds||[])].sort((a,b)=>(Number(day.times?.[a]??0)||0)-(Number(day.times?.[b]??0)||0));
+    for(const id of scheduledIds){
       let matches=version.scenes.map((s,index)=>({s,index})).filter(({s})=>s.productionSceneId===id||s.id===id);
       if(!matches.length){
         const scene=(state.scenes||[]).find(s=>s.id===id);
@@ -19,7 +21,7 @@ export function dayChoices(state){
     const date=day.date?new Date(day.date+'T12:00:00'):null;
     const dateLabel=date&&!Number.isNaN(date.getTime())?new Intl.DateTimeFormat('es-AR',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}).format(date):'Sin fecha';
     const label=[day.label||`Jornada ${i+1}`,dateLabel,day.location].filter(Boolean).join(' · ');
-    return {id:day.id,label,indexes:[...indexes].sort((a,b)=>a-b),unlinked};
+    return {id:day.id,label,indexes:[...indexes].sort((a,b)=>a-b),scheduleIndexes:[...indexes],unlinked};
   });
 }
 
@@ -41,13 +43,16 @@ export function locationChoices(state){
 
 export function locationScript(state,selection,{parse=globalThis.RodaScreenplay?.parse}={}){
   const version=productionVersion(state);if(!version)throw Error('Elegí una versión de producción antes de descargar.');
-  let indexes,label,subtitle;
+  let indexes,label,subtitle,preserveSelectionOrder=false;
   if(selection.mode==='day'){
     const day=dayChoices(state).find(d=>d.id===selection.day);
     if(!day)throw Error('Elegí una jornada vigente del Plan de Rodaje.');
     if(day.unlinked.length)throw Error('Hay escenas de esta jornada sin vínculo con el guion de producción. Revisá sus vínculos antes de descargar para no omitirlas.');
     if(!day.indexes.length)throw Error('Esta jornada todavía no tiene escenas asignadas en el Plan de Rodaje.');
-    indexes=day.indexes;label=day.label;subtitle='GUION POR JORNADA';
+    if(selection.order&&!['script','schedule'].includes(selection.order))throw Error('Elegí el orden del guion o del Plan de Rodaje.');
+    preserveSelectionOrder=selection.order==='schedule';
+    indexes=preserveSelectionOrder?day.scheduleIndexes:day.indexes;label=day.label;
+    subtitle='GUION POR JORNADA · '+(preserveSelectionOrder?'ORDEN DEL PLAN DE RODAJE':'ORDEN DEL GUION');
   }else if(selection.mode==='location'){
     const place=locationChoices(state).find(p=>p.id===selection.location);
     if(!place)throw Error('Esta locación no tiene escenas en el guion de producción.');
@@ -58,7 +63,7 @@ export function locationScript(state,selection,{parse=globalThis.RodaScreenplay?
     indexes=Array.from({length:to-from+1},(_,i)=>from+i);
     label=`Escenas ${version.scenes[from].number} a ${version.scenes[to].number}`;subtitle='GUION · SELECCIÓN DE ESCENAS';
   }else throw Error('Elegí cómo recortar el guion.');
-  return sceneScript(state,new Set(indexes),{label,subtitle,parse});
+  return sceneScript(state,new Set(indexes),{label,subtitle,preserveSelectionOrder,parse});
 }
 
 // This dialog only reads production data. It never changes the selected version or schedule.
@@ -68,18 +73,19 @@ export function openScriptDownload({getState,canRead=()=>true,projectKey=()=>'',
   if(!version?.scenes?.length)throw Error('Elegí una versión de producción antes de descargar.');
   const opener=document.activeElement,identity=projectKey(),dialog=document.createElement('dialog');
   dialog.className='roda-message-dialog script-download-dialog';dialog.dataset.roAllow='1';dialog.setAttribute('aria-labelledby','scriptDownloadTitle');
-  dialog.innerHTML='<form><header class="roda-message-heading"><h2 id="scriptDownloadTitle">Descargar guion</h2><button class="btn icon ghost" type="button" data-close aria-label="Cerrar">×</button></header><p data-version></p><div class="script-download-fields"><label>Seleccionar por<select class="input" name="mode"><option value="range">Rango de escenas</option><option value="location">Locación</option><option value="day">Jornada</option></select></label><label data-location hidden>Locación<select class="input" name="location"></select></label><label data-day hidden>Jornada<select class="input" name="day"></select></label><div data-range class="script-download-range"><label>Desde la escena<select class="input" name="from"></select></label><label>Hasta la escena<select class="input" name="to"></select></label></div><section aria-label="Escenas incluidas"><strong data-count></strong><ul data-preview></ul></section><p class="small muted">Solo el guion, con diálogos y acciones completos. Se conservan el orden del guion, los números de escena y el formato; cada escena comienza en una hoja nueva.</p><p data-error role="alert" hidden></p></div><footer class="roda-message-actions"><button class="btn" type="button" data-cancel>Cancelar</button><button class="btn primary" type="submit">Descargar PDF</button></footer></form>';
-  const form=dialog.querySelector('form'),mode=form.elements.mode,location=form.elements.location,day=form.elements.day,from=form.elements.from,to=form.elements.to,submit=form.querySelector('[type=submit]'),error=form.querySelector('[data-error]');
+  dialog.innerHTML='<form><header class="roda-message-heading"><h2 id="scriptDownloadTitle">Descargar guion</h2><button class="btn icon ghost" type="button" data-close aria-label="Cerrar">×</button></header><p data-version></p><div class="script-download-fields"><label>Seleccionar por<select class="input" name="mode"><option value="range">Rango de escenas</option><option value="location">Locación</option><option value="day">Jornada</option></select></label><label data-location hidden>Locación<select class="input" name="location"></select></label><label data-day hidden>Jornada<select class="input" name="day"></select></label><label data-order hidden>Orden de las escenas<select class="input" name="order"><option value="script">Orden del guion</option><option value="schedule">Orden del plan de rodaje</option></select></label><div data-range class="script-download-range"><label>Desde la escena<select class="input" name="from"></select></label><label>Hasta la escena<select class="input" name="to"></select></label></div><section aria-label="Escenas incluidas"><strong data-count></strong><ul data-preview></ul></section><p class="small muted" data-order-hint></p><p data-error role="alert" hidden></p></div><footer class="roda-message-actions"><button class="btn" type="button" data-cancel>Cancelar</button><button class="btn primary" type="submit">Descargar PDF</button></footer></form>';
+  const form=dialog.querySelector('form'),mode=form.elements.mode,location=form.elements.location,day=form.elements.day,order=form.elements.order,from=form.elements.from,to=form.elements.to,submit=form.querySelector('[type=submit]'),error=form.querySelector('[data-error]');
   dialog.querySelector('[data-version]').textContent='Versión de producción · '+(version.name||'Guion');
   const option=(select,value,label)=>{const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);};
   for(const choice of locationChoices(state))option(location,choice.id,choice.name+' · '+choice.indexes.length+' escenas · '+choice.kind);
   for(const [i,scene] of version.scenes.entries())for(const select of [from,to])option(select,String(i),[scene.chapter?'Cap. '+scene.chapter:'',scene.number,scene.slugline].filter(Boolean).join(' · '));
   for(const choice of dayChoices(state))option(day,choice.id,choice.label);
   to.value=String(version.scenes.length-1);
-  const selection=()=>({mode:mode.value,location:location.value,day:day.value,from:Number(from.value),to:Number(to.value)});
+  const selection=()=>({mode:mode.value,location:location.value,day:day.value,order:order.value,from:Number(from.value),to:Number(to.value)});
   let busy=false;
   const preview=()=>{
-    form.querySelector('[data-day]').hidden=mode.value!=='day';form.querySelector('[data-location]').hidden=mode.value!=='location';form.querySelector('[data-range]').hidden=mode.value!=='range';
+    form.querySelector('[data-order]').hidden=mode.value!=='day';form.querySelector('[data-day]').hidden=mode.value!=='day';form.querySelector('[data-location]').hidden=mode.value!=='location';form.querySelector('[data-range]').hidden=mode.value!=='range';
+    form.querySelector('[data-order-hint]').textContent=(mode.value==='day'&&order.value==='schedule'?'Las escenas siguen los horarios del Plan de Rodaje de esta jornada. ':'Las escenas siguen el orden del guion. ')+'Se conservan diálogos, acciones, numeración y formato; cada escena comienza en una hoja nueva.';
     error.hidden=true;submit.disabled=false;
     const list=form.querySelector('[data-preview]');list.replaceChildren();
     try{const excerpt=locationScript(getState(),selection());form.querySelector('[data-count]').textContent=excerpt.scenes.length+' escenas incluidas';for(const scene of excerpt.scenes){const li=document.createElement('li');li.textContent=[scene.chapter?'Cap. '+scene.chapter:'',scene.number,scene.slugline].filter(Boolean).join(' · ');list.append(li);}}

@@ -97,8 +97,8 @@ export function characterScript(state,name,{cast=globalThis.RodaCast,parse=globa
   return {...result,character};
 }
 
-// Shared, read-only extraction. Selection uses screenplay indexes, not filming order.
-export function sceneScript(state,selected,{label='Guion',subtitle='GUION · SELECCIÓN DE ESCENAS',actor,parse=globalThis.RodaScreenplay?.parse,transform=blocks=>blocks}={}){
+// Shared, read-only extraction. Selection always references original screenplay indexes.
+export function sceneScript(state,selected,{label='Guion',subtitle='GUION · SELECCIÓN DE ESCENAS',actor,preserveSelectionOrder=false,parse=globalThis.RodaScreenplay?.parse,transform=blocks=>blocks}={}){
   const version=state.script?.versions?.find(v=>v.id===state.script.activeVersionId&&!v.draft);
   if(!version)throw Error('Elegí una versión de producción del guion antes de exportar.');
   if(!selected.size||[...selected].some(i=>!Number.isInteger(i)||i<0||i>=version.scenes.length))throw Error('Seleccioná al menos una escena del guion.');
@@ -111,8 +111,8 @@ export function sceneScript(state,selected,{label='Guion',subtitle='GUION · SEL
   // Parse the actual exported text, not stale sourceLine offsets from an older import.
   if(parsed.length!==version.scenes.length||parsed.some((s,i)=>sceneKey(s)!==sceneKey(version.scenes[i])))throw Error('Las escenas del guion necesitan actualizarse antes de exportar este recorte.');
   const scenes=[],content=[];
-  for(let i=0;i<parsed.length;i++){
-    if(!selected.has(i))continue;
+  const indexes=[...selected];if(!preserveSelectionOrder)indexes.sort((a,b)=>a-b);
+  for(const i of indexes){
     const scene=parsed[i],start=offsets[scene.sourceLine];let endLine=parsed[i+1]?.sourceLine??lines.length;
     for(let j=scene.sourceLine+1;j<endLine;j++)if(chapter.test(lines[j].trim())){endLine=j;break;}
     const slice=sliceBlocks(blocks,start,offsets[endLine]??text.length);
