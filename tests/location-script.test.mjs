@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-import {locationChoices,locationScript} from '../js/location-script.mjs';
+import {dayChoices,locationChoices,locationScript} from '../js/location-script.mjs';
 const require=createRequire(import.meta.url),{parse}=require('../js/screenplay.js');
 function fixture(){
  const blocks=[27,28,29,30,31,32,33].flatMap(n=>[{style:{bold:true},runs:[{text:`ESCENA ${n} INT. ${n<28?'CASA':'HOTEL'} - DÍA`}]},{style:{left:72,right:94},runs:[{text:`Diálogo completo ${n}.`,style:{italic:true}}]}]);
@@ -33,4 +33,29 @@ test('no active production version and changed parsing fail rather than exportin
  assert.throws(()=>locationScript(state,{mode:'range',from:1,to:6},{parse}),/actualizarse/);
  state.script.activeVersionId=null;assert.deepEqual(locationChoices(state),[]);
  assert.throws(()=>locationScript(state,{mode:'range',from:1,to:6},{parse}),/producción/);
+});
+
+test('day export uses assigned scenes once, in script order, excluding other days and logistics blocks',()=>{
+ const state=fixture();state.shootDays=[{id:'hotel',label:'Hotel',date:'2026-11-06',location:'Hotel real',sceneIds:['p6','p1','p6'],times:{p6:600,p1:660},durations:{p6:60,p1:30},blocks:[{title:'Almuerzo',detail:'Nota privada de logística'}]},{id:'office',sceneIds:['p2']}];
+ const before=JSON.stringify(state),out=locationScript(state,{mode:'day',day:'hotel'},{parse});
+ assert.deepEqual(out.scenes.map(s=>s.number),['28','33']);assert.match(out.label,/Hotel.*viernes.*06.*11.*2026/);
+ assert.match(out.version.rawText,/GUION POR JORNADA/);assert.doesNotMatch(out.version.rawText,/Diálogo completo 29|Almuerzo|Nota privada/);
+ assert.equal(JSON.stringify(state),before);
+ state.shootDays[0].sceneIds=['p2'];assert.deepEqual(locationScript(state,{mode:'day',day:'hotel'},{parse}).scenes.map(s=>s.number),['29']);
+});
+
+test('day export rejects deleted, empty and unresolved days rather than silently omitting scheduled scenes',()=>{
+ const state=fixture();state.shootDays=[{id:'empty',sceneIds:[],blocks:[{title:'Almuerzo'}]},{id:'broken',sceneIds:['p1','missing']}];
+ assert.throws(()=>locationScript(state,{mode:'day',day:'deleted'},{parse}),/vigente/);
+ assert.throws(()=>locationScript(state,{mode:'day',day:'empty'},{parse}),/no tiene escenas/);
+ assert.throws(()=>locationScript(state,{mode:'day',day:'broken'},{parse}),/sin vínculo/);
+ assert.match(dayChoices(state)[0].label,/Sin fecha/);
+ state.script.activeVersionId=null;assert.deepEqual(dayChoices(state),[]);
+});
+
+test('day mapping accepts unique chapter-number links but rejects ambiguous historical links',()=>{
+ const state=fixture();state.scenes[1].id='relinked';state.shootDays=[{id:'day',sceneIds:['relinked']}];
+ assert.deepEqual(locationScript(state,{mode:'day',day:'day'},{parse}).scenes.map(s=>s.number),['28']);
+ state.script.versions[0].scenes.push({...state.script.versions[0].scenes[1],id:'duplicate',productionSceneId:'other'});
+ assert.throws(()=>locationScript(state,{mode:'day',day:'day'},{parse}),/sin vínculo/);
 });
