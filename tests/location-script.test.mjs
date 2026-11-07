@@ -59,3 +59,25 @@ test('day mapping accepts unique chapter-number links but rejects ambiguous hist
  state.script.versions[0].scenes.push({...state.script.versions[0].scenes[1],id:'duplicate',productionSceneId:'other'});
  assert.throws(()=>locationScript(state,{mode:'day',day:'day'},{parse}),/sin vínculo/);
 });
+
+test('shooting order follows times rather than scene IDs, with matching cover and complete formatted bodies',()=>{
+ const state=fixture();state.shootDays=[{id:'hotel',sceneIds:['p1','p3','p6','p1'],times:{p1:720,p3:660,p6:600}}];
+ const before=JSON.stringify(state),out=locationScript(state,{mode:'day',day:'hotel',order:'schedule'},{parse});
+ assert.deepEqual(out.scenes.map(s=>s.number),['33','30','28']);
+ assert.deepEqual([...out.version.rawText.matchAll(/ESCENA (\d+) INT\./g)].map(m=>m[1]),['33','30','28']);
+ assert.match(out.version.rawText,/ORDEN DEL PLAN DE RODAJE/);
+ assert.ok(out.version.rawText.indexOf('33 ·')<out.version.rawText.indexOf('30 ·'));
+ assert.ok(out.version.rawText.indexOf('Diálogo completo 33.')<out.version.rawText.indexOf('Diálogo completo 30.'));
+ assert.equal(out.version.documentFormat.blocks.at(-1).style.left,72);
+ assert.equal(JSON.stringify(state),before);
+ assert.deepEqual(locationScript(state,{mode:'day',day:'hotel',order:'script'},{parse}).scenes.map(s=>s.number),['28','30','33']);
+ state.shootDays[0].times.p1=500;
+ assert.deepEqual(locationScript(state,{mode:'day',day:'hotel',order:'schedule'},{parse}).scenes.map(s=>s.number),['28','33','30']);
+});
+
+test('equal or missing times follow plan ordering and shooting order does not affect other export modes',()=>{
+ const state=fixture();state.shootDays=[{id:'day',sceneIds:['p3','p1','p2'],times:{p3:600,p1:600}}];
+ assert.deepEqual(locationScript(state,{mode:'day',day:'day',order:'schedule'},{parse}).scenes.map(s=>s.number),['29','30','28']);
+ assert.deepEqual(locationScript(state,{mode:'range',from:1,to:3,order:'schedule'},{parse}).scenes.map(s=>s.number),['28','29','30']);
+ assert.throws(()=>locationScript(state,{mode:'day',day:'day',order:'invalid'},{parse}),/Elegí el orden/);
+});
