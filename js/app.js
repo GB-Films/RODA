@@ -3070,6 +3070,9 @@ function setupScheduleWheelScroll(){
     }
     return null;
   }
+  function transferShotPlan(sceneId,target){
+    for(const day of state.shootDays)if(day!==target&&day.shotPlanning?.[sceneId]){target.shotPlanning??={};target.shotPlanning[sceneId]=day.shotPlanning[sceneId];delete day.shotPlanning[sceneId];}
+  }
   function removeSceneFromAllDays(sceneId){
     for(const d of state.shootDays){
       d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
@@ -3344,7 +3347,7 @@ const zone = document.createElement("div");
         if(data.type!=="scene") return;
 
         const sid = data.sceneId;
-        removeSceneFromAllDays(sid);
+        transferShotPlan(sid,d);removeSceneFromAllDays(sid);
 
         ensureDayTimingMaps(d);
         d.sceneIds.push(sid);
@@ -5084,6 +5087,27 @@ function bindSchedDayPickerUI(){
   updateSchedDaysButton();
 }
 
+
+  let planningShots=false;
+  try{planningShots=localStorage.getItem('gb_planning_unit')==='shots';}catch(_e){}
+  function isShotPlan(){return planningShots&&!!window.RodaShotPlanningView&&(!window.RodaAccess||RodaAccess.canView('shotlist'));}
+  function shotPlanChange(action){
+    if(isReadOnly('planning'))return;
+    try{if(!action())return;touch();renderDayPlan();renderScheduleBoard();renderShotList();renderDayDetail();renderReports();renderReportsDetail();}
+    catch(error){toast(error.message);renderDayPlan();renderScheduleBoard();}
+  }
+  function renderShotPlan(host,day,query=''){
+    RodaShotPlanningView.render(host,{state,day,query,canEdit:()=>!isReadOnly('planning'),change:shotPlanChange,
+      openScene:sceneId=>{selectedShotlistDayId=day.id;selectedShotlistSceneId=sceneId;shotlistExpandedSceneIds.add(sceneId);showView('shotlist');renderShotList();requestAnimationFrame(()=>Array.from(el('shotlistWrap').querySelectorAll('[data-scene-id]')).find(n=>n.dataset.sceneId===sceneId)?.scrollIntoView({block:'start'}));}});
+  }
+  function shotPlanPrint(day){
+    const base=minutesFromHHMM(day.callTime||'08:00');
+    const rows=RodaShotPlanning.rows(state,day).map(r=>dayplanPrintedRow({...r,number:r.number,slugline:r.kind==='shot'?`Plano ${r.shotNumber} · ${r.title}`:r.title,summary:r.desc,detail:r.desc},base+r.start,r.dur,base+r.start+r.dur)).join('');
+    return `<div class="catBlock dpPrintBlock">${buildDayplanPrintHeader(day)}<div class="items">${dayplanPrintedTable(day,rows)}</div></div>`;
+  }
+  function plannedShotDuration(day,sceneId,shot){return (day.shotPlanning?.[sceneId]||isShotPlan())&&window.RodaShotPlanning?RodaShotPlanning.sceneRows(state,day,sceneId).find(r=>r.shotId===shot.id)?.dur??shotDurMin(shot):shotDurMin(shot);}
+  function plannedShotsTotal(day,scene){return scene.shots.reduce((total,shot)=>total+plannedShotDuration(day,scene.id,shot),0);}
+
   let planningCompact=false;
   try{planningCompact=localStorage.getItem('gb_planning_view')==='compact';}catch(_e){}
   function isCompactPlan(){return planningCompact;}
@@ -5091,6 +5115,17 @@ function bindSchedDayPickerUI(){
   function syncPlanningView(){
     for(const [cardId,selectId] of [['dayplanCard','dayplanView'],['scheduleCard','schedView']]){
       const card=el(cardId),select=el(selectId);if(!card||!select)continue;
+
+      card.classList.toggle('shot-unit-active',isShotPlan());
+      let unit=card.querySelector('.shotPlanningUnit select');
+      if(!unit&&window.RodaShotPlanningView){
+        const label=document.createElement('label');label.className='shotPlanningUnit row gap';label.innerHTML='Organizar por <select class="input" data-ro-allow="1" aria-label="Organizar plan por"><option value="scenes">Escenas</option><option value="shots">Planos</option></select>';
+        select.parentElement.before(label);unit=label.querySelector('select');
+        unit.addEventListener('change',()=>{planningShots=unit.value==='shots';try{localStorage.setItem('gb_planning_unit',unit.value);}catch(_e){}renderDayPlan();renderScheduleBoard();});
+      }
+      if(unit){unit.value=isShotPlan()?'shots':'scenes';unit.querySelector('[value="shots"]').disabled=!!window.RodaAccess&&!RodaAccess.canView('shotlist');}
+      select.parentElement.classList.add('planningViewControl');
+      for(const id of cardId==='dayplanCard'?['dayplanSnap','dayplanZoom']:['schedSnap','schedZoom'])el(id)?.parentElement.classList.add('planningScaleControl');
       card.classList.toggle('planning-compact',planningCompact);select.value=planningCompact?'compact':'timeline';
       if(!select.dataset.bound){select.dataset.bound='1';select.addEventListener('change',()=>{
         planningCompact=select.value==='compact';
@@ -5152,6 +5187,19 @@ function bindSchedDayPickerUI(){
       if(document.body.dataset.rodaView==='schedule')renderDayplanInspector(null,[]);
       setupScheduleTopScrollbar();
       return;
+    }
+
+
+    board.classList.toggle('shotPlanBoard',isShotPlan());
+    if(isShotPlan()){
+      renderDayplanInspector(null,[]);
+      for(const day of daysToShow){
+        ensureDayTimingMaps(day);
+        const column=document.createElement('section');column.className='shotPlanDayColumn';
+        const heading=document.createElement('header');heading.className='shotPlanDayHeading';heading.textContent=[formatDayTitle(day.date),day.label,day.location].filter(Boolean).join(' · ');
+        const host=document.createElement('div');column.append(heading,host);board.append(column);renderShotPlan(host,day,q);
+      }
+      setupScheduleTopScrollbar();return;
     }
 
     const globalBaseHour = computeScheduleGlobalBaseHour(daysToShow);
@@ -5602,6 +5650,7 @@ function bindScheduleDnD(){
         const sid = d0.itemId;
         const keepDur = fromDay.durations?.[sid] ?? d0.dur0;
 
+        transferShotPlan(sid,toDay);
         fromDay.sceneIds = (fromDay.sceneIds||[]).filter(x=>x!==sid);
         delete fromDay.times[sid];
         delete fromDay.durations[sid];
@@ -5718,6 +5767,7 @@ function updateScheduleDayDOM(dayId){
     ensureDayTimingMaps(day);
     let changed = false;
     for(const sid of (day.sceneIds||[]).filter(id=>!sceneId||id===sceneId)){
+      if(day.shotPlanning?.[sid])continue;
       const sc = shootingScene(sid);
       if(!sc) continue;
       const shotsMin = sceneShotsTotalMin(sc);
@@ -6122,6 +6172,7 @@ items.push({
       lane.innerHTML = "";
       inspector.innerHTML = "";
       printWrap.innerHTML = "";
+      if(el("shotPlanDay"))el("shotPlanDay").innerHTML="";
       return;
     }
 
@@ -6393,6 +6444,12 @@ items.push({
     const call = esc(d.callTime || "");
     const loc = esc(d.location || "");
 
+
+    let shotHost=el('shotPlanDay');
+    if(!shotHost){shotHost=document.createElement('div');shotHost.id='shotPlanDay';el('dayplanCard').querySelector('.dayplanBody').before(shotHost);}
+    shotHost.hidden=!isShotPlan();
+    if(isShotPlan()){renderShotPlan(shotHost,d);printWrap.innerHTML=shotPlanPrint(d);renderDayplanInspector(null,[]);return;}
+
     // Timeline sizing
     const ppm = getDayplanPPM() || DAYPLAN_PPM;
     scroller.dataset.ppm = String(ppm);
@@ -6515,7 +6572,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
         const curDay = sceneAssignedDayId(sid);
 
         if(curDay && curDay !== d0.id){
-          removeSceneFromAllDays(sid);
+          transferShotPlan(sid,d0);removeSceneFromAllDays(sid);
         }
 
         ensureDayTimingMaps(d0);
@@ -7239,11 +7296,11 @@ box.addEventListener("input", (e)=>{
 
   // A shot stays in its screenplay scene; its shooting anchor supplies the day/time.
   function shotOwner(shotId){return state.scenes.find(s=>(s.shots||[]).some(sh=>sh.id===shotId));}
-  function shootingScene(sceneId){
+  function shootingScene(sceneId,day=null){
     const scene=getScene(sceneId);if(!scene)return null;
     const shots=state.scenes.flatMap(owner=>(owner.shots||[]).filter(sh=>(getScene(sh.shootingSceneId)?sh.shootingSceneId:owner.id)===sceneId));
     shots.sort((a,b)=>(a.shootingOrder??100000)-(b.shootingOrder??100000));
-    return {...scene,shots};
+    return {...scene,shots:day?.shotPlanning?.[sceneId]&&window.RodaShotPlanning?RodaShotPlanning.shots(state,day,sceneId).map(r=>r.shot):shots};
   }
   function shotBatchFields(sh,owner){
     return `<details class="shotBatchFields" data-ro-allow="1"><summary>Escena original <b>#${esc(owner?.number||'')}</b> · Tanda #${esc(getScene(sh.shootingSceneId||owner?.id)?.number||'')}</summary><label>Tanda de rodaje<select class="input compact shotBatchSelect" aria-label="Tanda de rodaje del plano" ${(isReadOnly('shotlist')||isReadOnly('planning'))?'disabled':''}>${state.scenes.map(s=>{const day=state.shootDays.find(d=>d.sceneIds.includes(s.id));return `<option value="${esc(s.id)}" ${(sh.shootingSceneId||owner?.id)===s.id?'selected':''}>#${esc(s.number)} · ${esc(day?.label||'Sin jornada')} · ${esc(s.slugline||'')}</option>`;}).join('')}</select></label></details>`;
@@ -7265,13 +7322,15 @@ box.addEventListener("input", (e)=>{
 // Shot clocks are derived from cumulative durations; a reorder only changes IDs' order.
 function reorderShot(sceneId,shotId,targetId,after=false){
   if(isReadOnly('shotlist'))return false;
-  const shots=shootingScene(sceneId)?.shots;
+  const planDay=getDay(selectedShotlistDayId);
+  const shots=shootingScene(sceneId,planDay)?.shots;
   if(!Array.isArray(shots)||shotId===targetId)return false;
   const from=shots.findIndex(s=>s.id===shotId),to=shots.findIndex(s=>s.id===targetId);
   if(from<0||to<0)return false;
   const next=shots.slice(),[shot]=next.splice(from,1);
   next.splice(next.findIndex(s=>s.id===targetId)+(after?1:0),0,shot);
   if(next.every((s,i)=>s===shots[i]))return false;
+  if(planDay?.shotPlanning?.[sceneId]&&window.RodaShotPlanning){if(isReadOnly('planning'))return false;planDay.shotPlanning[sceneId].order=next.map(sh=>shotOwner(sh.id).id+'|'+sh.id);touch();renderShotList();return true;}
   const original=getScene(sceneId)?.shots;
   if(original?.length===shots.length&&shots.every(sh=>original.includes(sh))){original.splice(0,original.length,...next);for(const sh of next)delete sh.shootingOrder;}
   else next.forEach((sh,i)=>sh.shootingOrder=i);
@@ -7288,7 +7347,7 @@ function bindShotReorder(handle,row,tbody,sceneId,shotId){
   handle.addEventListener('keydown',e=>{
     if(!['ArrowUp','ArrowDown'].includes(e.key)||isReadOnly('shotlist'))return;
     e.preventDefault();
-    const shots=shootingScene(sceneId)?.shots||[],at=shots.findIndex(s=>s.id===shotId),target=shots[at+(e.key==='ArrowUp'?-1:1)];
+    const shots=shootingScene(sceneId,getDay(selectedShotlistDayId))?.shots||[],at=shots.findIndex(s=>s.id===shotId),target=shots[at+(e.key==='ArrowUp'?-1:1)];
     if(target)reorderShot(sceneId,shotId,target.id,e.key==='ArrowDown');
   });
   handle.addEventListener('pointerdown',e=>{
@@ -7400,11 +7459,11 @@ function renderShotList(){
     let totalMin = 0;
     let lastEnd = 0;
     for(const sid of daySceneIds){
-      const sc = shootingScene(sid);
+      const sc = shootingScene(sid,d);
       if(!sc) continue;
       ensureSceneExtras_toggleThumb(sc);
       totalShots += (sc.shots||[]).length;
-      const sMin = sceneShotsTotalMin(sc);
+      const sMin = plannedShotsTotal(d,sc);
       totalMin += sMin;
       const st = Number(d.times?.[sid] ?? 0) || 0;
       const du = Number(d.durations?.[sid] ?? 60) || 0;
@@ -7434,7 +7493,7 @@ function renderShotList(){
     }
 
     for(const sid of daySceneIds){
-      const sc = shootingScene(sid);
+      const sc = shootingScene(sid,d);
       if(!sc) continue;
       ensureSceneExtras_toggleThumb(sc);
 
@@ -7442,7 +7501,7 @@ function renderShotList(){
       const du = Number(d.durations?.[sid] ?? 60) || 60;
       const scStart = d.callTime ? fmtClockFromCall(d.callTime, st) : "";
       const scEnd = d.callTime ? fmtClockFromCall(d.callTime, st+du) : "";
-      const shotsMin = sceneShotsTotalMin(sc);
+      const shotsMin = plannedShotsTotal(d,sc);
       const warn = shotsMin > du ? "Planos > duración" : "";
 
       const isCollapsed = !shotlistExpandedSceneIds.has(sid);
@@ -7526,9 +7585,10 @@ function renderShotList(){
       }else{
         let offset = 0;
         (sc.shots||[]).forEach((sh, idx)=>{
-          const dur = shotDurMin(sh);
+          const dur = plannedShotDuration(d,sid,sh);
           const owner=shotOwner(sh.id)||getScene(sid);
           const key = `${owner.id}|${sh.id}`;
+          const shotNumber=d.shotPlanning?.[sid]||isShotPlan()?owner.shots.findIndex(s=>s.id===sh.id)+1:idx+1;
           const done = !!d.shotsDone[key];
           const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
 
@@ -7543,7 +7603,7 @@ function renderShotList(){
           if(done) tr.classList.add("shotRowDone");
           tr.innerHTML = `
             <td class="shotChk"><input type="checkbox" aria-label="Plano ${idx+1} realizado" ${done?"checked":""} ${(isReadOnly('shotlist')||isReadOnly('planning'))?"disabled":""} /></td>
-            <td class="shotNum"><button type="button" class="shotDragHandle" aria-label="Reordenar plano ${idx+1}" title="Arrastrá para reordenar · ↑ / ↓ con el teclado" ${isReadOnly('shotlist')?"disabled":""}><span class="shotGrip" aria-hidden="true">⠿</span><span>${idx+1}</span></button></td>
+            <td class="shotNum"><button type="button" class="shotDragHandle" aria-label="Reordenar plano ${idx+1}" title="Arrastrá para reordenar · ↑ / ↓ con el teclado" ${isReadOnly('shotlist')?"disabled":""}><span class="shotGrip" aria-hidden="true">⠿</span><span>${shotNumber}</span></button></td>
             <td class="shotTime">${esc(t||"")}</td>
             <td class="shotType">
               <select class="input compact shotTypeSel" aria-label="Tipo de plano ${idx+1}" ${isReadOnly('shotlist')?"disabled":""}>
@@ -7585,6 +7645,7 @@ function renderShotList(){
 
           selDur?.addEventListener("change", ()=>{
             if(isReadOnly('shotlist')) return;
+            if(d.shotPlanning?.[sid]&&window.RodaShotPlanning){shotPlanChange(()=>RodaShotPlanning.duration(state,d,sid,key,selDur.value));return;}
             sh.durMin = Number(selDur.value) || DEFAULT_SHOT_MIN;
             const changed2 = syncAllDaysDurationsFromShotsForScene(sid, snapMin);
             touch();
@@ -8361,7 +8422,7 @@ function renderReportDayplanDetail(d){
 
     let out = header;
     for(const sid of (d.sceneIds||[])){
-      const sc = shootingScene(sid);
+      const sc = shootingScene(sid,d);
       if(!sc) continue;
       ensureSceneExtras(sc);
       const st = Number(d.times?.[sid] ?? 0) || 0;
@@ -8369,7 +8430,7 @@ function renderReportDayplanDetail(d){
       const scStart = d.callTime ? fmtClockFromCall(d.callTime, st) : "";
       const scEnd = d.callTime ? fmtClockFromCall(d.callTime, st+du) : "";
 
-      const shotsMin = sceneShotsTotalMin(sc);
+      const shotsMin = plannedShotsTotal(d,sc);
       const warn = shotsMin > du ? "Planos > duración" : "";
 
       let rows = "";
@@ -8379,16 +8440,17 @@ function renderReportDayplanDetail(d){
         rows = `<tr><td colspan="7" class="muted">Sin planos cargados para esta escena.</td></tr>`;
       }else{
         rows = shots.map((sh, idx)=>{
-          const dur = shotDurMin(sh);
+          const dur = plannedShotDuration(d,sid,sh);
           const owner=shotOwner(sh.id)||getScene(sid);
           const key = `${owner.id}|${sh.id}`;
+          const shotNumber=d.shotPlanning?.[sid]||isShotPlan()?owner.shots.findIndex(s=>s.id===sh.id)+1:idx+1;
           const done = !!d.shotsDone?.[key];
           const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
           offset += dur;
           return `
             <tr class="${done?"shotRowDone":""}">
               <td class="shotChk"><input type="checkbox" ${done?"checked":""} /></td>
-              <td class="shotNum">${idx+1}</td>
+              <td class="shotNum">${shotNumber}</td>
               <td class="shotTime">${esc(t||"")}</td>
               <td class="shotType">${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
               <td class="shotThumb">${(sh.thumbUrl?`<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>`:"")}</td>
@@ -8687,6 +8749,7 @@ function buildPlanGeneralPrintHTML(){
 async function printPlanGeneral(){
   applyPrintDeviceFlag();
   const root = ensureGbPrintRoot();
+  if(isShotPlan()){printDayplanContents(getScheduleDaysFiltered().map(d=>shotPlanPrint(d)).join(''));return;}
   root.innerHTML = buildPlanGeneralPrintHTML();
   document.body.classList.add("gbPrintingSchedule");
   setPrintOrientation("landscape", 12);

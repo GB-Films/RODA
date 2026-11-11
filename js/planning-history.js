@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const fields=['date','label','location','callTime','night','notes','times','durations','sceneColors','shotsDone'];
+  const fields=['date','label','location','callTime','night','notes','times','durations','sceneColors','shotsDone','shotPlanning'];
   const clone=value=>value===undefined?undefined:JSON.parse(JSON.stringify(value));
   const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
   const equal=(a,b)=>{
@@ -31,7 +31,7 @@
       const next=snapshot(current);if(!sameDays(baseline,next)){rebase(current);return false;}
       const patches=diff(baseline,next);if(!patches.length)return false;
       const entry={patches,beforeOrder:baselineOrder,afterOrder:orders(current)};
-      entry.label=patches.some(p=>p.path[1]==='scenes')?'Cambio de escenas':patches.some(p=>p.path.includes('durations')||p.path.at(-1)==='durMin')?'Cambio de duración':patches.some(p=>p.path.includes('times')||p.path.at(-1)==='startMin'||p.path.includes('callTime'))?'Cambio de horarios':patches.some(p=>p.path.includes('sceneColors')||p.path.at(-1)==='color')?'Cambio de colores':'Cambio de bloques';
+      entry.label=patches.some(p=>p.path.includes('shotPlanning'))?'Cambio de planos':patches.some(p=>p.path[1]==='scenes')?'Cambio de escenas':patches.some(p=>p.path.includes('durations')||p.path.at(-1)==='durMin')?'Cambio de duración':patches.some(p=>p.path.includes('times')||p.path.at(-1)==='startMin'||p.path.includes('callTime'))?'Cambio de horarios':patches.some(p=>p.path.includes('sceneColors')||p.path.at(-1)==='color')?'Cambio de colores':'Cambio de bloques';
       undo.push(entry);undo=undo.slice(-limit);redo=[];baseline=next;baselineOrder=entry.afterOrder;save();return true;
     }
     function apply(current,direction,validSceneIds){

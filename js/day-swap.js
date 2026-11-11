@@ -40,7 +40,7 @@
     }
     const sourceDuration=Number(first.durations?.[sourceId]??60),targetDuration=Number(second.durations?.[targetId]??60);
     const a=prepare(first,sourceId,targetDuration),b=prepare(second,targetId,sourceDuration);if(!a||!b)return false;
-    const maps=['sceneColors','shotsDone'];
+    const maps=['sceneColors','shotsDone',...(first.shotPlanning||second.shotPlanning?['shotPlanning']:[])];
     const metadata=maps.map(key=>({key,source:first[key]?.[sourceId],target:second[key]?.[targetId]}));
     function apply(day,outgoing,incoming,duration,plan){
       day.sceneIds=day.sceneIds.map(id=>id===outgoing?incoming:id);day.times??={};day.durations??={};
@@ -127,7 +127,8 @@
   }
   function swapDayScenes(first, second){
     if(!first || !second || first.id === second.id) return false;
-    for(const key of ["sceneIds","times","durations","sceneColors","shotsDone"]){
+    for(const key of ["sceneIds","times","durations","sceneColors","shotsDone","shotPlanning"]){
+      if(key==="shotPlanning"){const a=first[key],b=second[key];if(b===undefined)delete first[key];else first[key]=b;if(a===undefined)delete second[key];else second[key]=a;continue;}
       const empty = ()=>key === "sceneIds" ? [] : {};
       const value = first[key] || empty();
       first[key] = second[key] || empty();
