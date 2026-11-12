@@ -1,5 +1,6 @@
 (function(root){
   function editing(document){
+    if(document.body?.classList.contains('shot-plan-dragging'))return true;
     const active=document.activeElement;
     return !!(active?.matches('input,textarea,select,[contenteditable="true"]')&&!active.disabled&&!active.readOnly&&!active.closest('[data-ro-allow="1"]'));
   }

@@ -5,12 +5,22 @@
   function fit(){const host=document.getElementById('shotPlanDay');if(host&&!host.hidden)host.style.maxHeight=Math.max(160,innerHeight-host.getBoundingClientRect().top-24)+'px';}
   const observer=new ResizeObserver(()=>requestAnimationFrame(fit));
   window.addEventListener('resize',()=>requestAnimationFrame(fit));
-  function render(host,{state,day,canEdit,change,openScene,query=''}){
-    const api=root.RodaShotPlanning,rows=api.rows(state,day),top=host.scrollTop;
+  function render(host,{state,day,canEdit,change,openScene,query='',grouped=false}){
+    const api=root.RodaShotPlanning,rows=grouped?api.groups(state,day):api.rows(state,day),top=host.scrollTop;
     const selected=host.dataset.selected;
-    host.className='shotPlanning';
-    host.innerHTML=`<p class="shotPlanHint">Planos agrupados por escena / tanda. Arrastrá el asa para reordenarlos dentro de cada tanda. Al cambiar una duración, se ajustan los horarios siguientes del día.</p><div class="shotPlanRows"></div><aside class="shotPlanDetail" hidden></aside>`;
+    host.className='shotPlanning';host.dataset.dayId=day.id;
+    host.innerHTML=`<p class="shotPlanHint">${grouped?'Escenas agrupadas por sus planos consecutivos. Elegí Planos para moverlos o cambiar sus duraciones.':'Arrastrá un plano entre escenas o hacia otra jornada. La línea indica dónde se insertará; los horarios siguientes se ajustan conservando cada duración.'}</p><div class="shotPlanRows"></div><aside class="shotPlanDetail" hidden></aside>`;
     const list=host.querySelector('.shotPlanRows');
+    if(!grouped&&canEdit()){
+      const scheduled=new Set((state.shootDays||[]).flatMap(d=>api.rows(state,d).filter(r=>r.kind==='shot').map(r=>r.key)));
+      const available=state.scenes.flatMap(owner=>(owner.shots||[]).map((shot,i)=>({owner,shot,number:i+1,key:owner.id+'|'+shot.id}))).filter(r=>!scheduled.has(r.key));
+      if(available.length){
+        const add=document.createElement('details');add.className='shotPlanAdd';
+        add.innerHTML='<summary>+ Programar un plano pendiente ('+available.length+')</summary><label>Plano<select class="input" aria-label="Plano pendiente"></select></label><button type="button" class="btn">Agregar a esta jornada</button>';
+        const select=add.querySelector('select');for(const r of available){const opt=document.createElement('option');opt.value=r.key;opt.textContent=`E${r.owner.number} · P${r.number} · ${r.shot.type||'Plano'} · ${r.shot.desc||''}`;select.append(opt);}
+        add.querySelector('button').onclick=()=>{const r=available.find(r=>r.key===select.value);if(r&&canEdit())change(()=>api.addShot(state,day,r.owner.id,r.shot.id));};host.insertBefore(add,list);
+      }
+    }
     let lastScene=null;
     for(const row of rows){
       if(query&&!`${row.number||''} ${row.title} ${row.desc}`.toLowerCase().includes(query.toLowerCase()))continue;
@@ -22,25 +32,57 @@
       list.append(node);
       node.querySelector('.shotPlanSelect').onclick=()=>select(row);
       const grip=node.querySelector('.shotPlanGrip');if(!grip)continue;
-      const move=(target)=>{if(!canEdit())return;change(()=>api.reorder(state,day,row.sceneId,row.key,target));};
-      grip.onkeydown=e=>{if(!['ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const siblings=rows.filter(r=>r.sceneId===row.sceneId),index=siblings.findIndex(r=>r.key===row.key),target=siblings[index+(e.key==='ArrowUp'?-1:1)];if(target)move(target.key);};
+      const move=(target,targetDay=day,position='before')=>{if(!canEdit())return;change(()=>api.move(state,day,row.key,targetDay,target,position));};
+      grip.onkeydown=e=>{if(!['ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const index=rows.findIndex(r=>r.key===row.key),target=rows[index+(e.key==='ArrowUp'?-1:1)];if(target)move(target.key,day,e.key==='ArrowDown'?'after':'before');};
       grip.onpointerdown=e=>{
         if(e.button!==0||!canEdit())return;e.preventDefault();
-        const pointer=e.pointerId,y0=e.clientY;let y=y0,target=null,moving=false,frame=0,finished=false;
+        const pointer=e.pointerId,x0=e.clientX,y0=e.clientY;let x=x0,y=y0,target=null,moving=false,frame=0,finished=false;
         grip.setPointerCapture(pointer);
-        const locate=()=>{host.querySelectorAll('.dropTarget').forEach(n=>n.classList.remove('dropTarget'));target=null;const b=list.getBoundingClientRect();if(y<b.top||y>b.bottom)return;for(const n of list.querySelectorAll('.shotPlanRow.shot')){const r=n.getBoundingClientRect();if(y>=r.top&&y<=r.bottom&&n.dataset.scene===row.sceneId&&n!==node){target=n.dataset.key;n.classList.add('dropTarget');break;}}};
-        const tick=()=>{const b=host.getBoundingClientRect();if(y<b.top+50)host.scrollTop-=10;else if(y>b.bottom-50)host.scrollTop+=10;locate();frame=requestAnimationFrame(tick);};
-        const onmove=event=>{if(event.pointerId!==pointer)return;y=event.clientY;if(!moving&&Math.abs(y-y0)>4){moving=true;node.classList.add('dragging');frame=requestAnimationFrame(tick);}if(moving)locate();};
-        const finish=event=>{if(finished||event.pointerId!==undefined&&event.pointerId!==pointer)return;finished=true;cancelAnimationFrame(frame);window.removeEventListener('pointermove',onmove);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',finish);window.removeEventListener('keydown',escape);window.removeEventListener('blur',finish);node.classList.remove('dragging');host.querySelectorAll('.dropTarget').forEach(n=>n.classList.remove('dropTarget'));if(grip.hasPointerCapture(pointer))grip.releasePointerCapture(pointer);if(event.type==='pointerup'&&moving&&target)move(target);};
+        const clear=()=>document.querySelectorAll('.shotPlanning .dropTarget,.shotPlanning.dropEmpty').forEach(n=>{n.classList.remove('dropTarget','dropEmpty');delete n.dataset.dropPosition;});
+        const locate=()=>{
+          clear();target=null;
+          const destination=Array.from(document.querySelectorAll('.shotPlanning')).find(n=>{const r=n.getBoundingClientRect();return n.offsetWidth&&x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;});
+          if(!destination||destination.querySelector('.shotPlanDetail:not([hidden])')?.contains(document.elementFromPoint(x,y)))return;
+          const targetDay=(state.shootDays||[]).find(d=>d.id===destination.dataset.dayId);if(!targetDay)return;
+          const nodes=Array.from(destination.querySelectorAll('.shotPlanRow'));
+          const hit=nodes.find(n=>y<=n.getBoundingClientRect().bottom)||nodes.at(-1);
+          if(hit){if(hit===node)return;const r=hit.getBoundingClientRect(),position=y<(r.top+r.bottom)/2?'before':'after';hit.classList.add('dropTarget');hit.dataset.dropPosition=position;target={day:targetDay,key:hit.dataset.key,position};}
+          else{destination.classList.add('dropEmpty');target={day:targetDay,key:null,position:'before'};}
+        };
+        const tick=()=>{
+          for(const destination of document.querySelectorAll('.shotPlanning')){const b=destination.getBoundingClientRect();if(x>=b.left&&x<=b.right&&y>=b.top&&y<=b.bottom){if(y<b.top+50)destination.scrollTop-=10;else if(y>b.bottom-50)destination.scrollTop+=10;}}
+          const board=document.getElementById('schedWrap');if(board&&host.closest('.shotPlanBoard')){const b=board.getBoundingClientRect();if(x<b.left+50)board.scrollLeft-=12;else if(x>b.right-50)board.scrollLeft+=12;}
+          locate();frame=requestAnimationFrame(tick);
+        };
+        const onmove=event=>{if(event.pointerId!==pointer)return;x=event.clientX;y=event.clientY;if(!moving&&Math.hypot(x-x0,y-y0)>4){moving=true;node.classList.add('dragging');document.body.classList.add('shot-plan-dragging');frame=requestAnimationFrame(tick);}if(moving)locate();};
+        const finish=event=>{if(finished||event.pointerId!==undefined&&event.pointerId!==pointer)return;finished=true;cancelAnimationFrame(frame);window.removeEventListener('pointermove',onmove);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',finish);window.removeEventListener('keydown',escape);window.removeEventListener('blur',finish);node.classList.remove('dragging');document.body.classList.remove('shot-plan-dragging');clear();if(grip.hasPointerCapture(pointer))grip.releasePointerCapture(pointer);if(event.type==='pointerup'&&moving&&target)move(target.key,target.day,target.position);};
         const escape=event=>{if(event.key==='Escape')finish(event);};
         window.addEventListener('pointermove',onmove);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',finish);window.addEventListener('keydown',escape);window.addEventListener('blur',finish);
       };
     }
-    if(!rows.length)list.innerHTML='<p class="muted">Asigná escenas a esta jornada para organizar sus planos.</p>';
+    if(!rows.length)list.innerHTML='<p class="muted">Jornada sin actividades. Arrastrá un plano acá o elegí esta jornada desde el detalle del plano.</p>';
     function select(row){
       host.dataset.selected=row.key;host.querySelectorAll('.shotPlanRow').forEach(n=>n.classList.toggle('selected',n.dataset.key===row.key));
       const detail=host.querySelector('.shotPlanDetail');detail.hidden=false;
-      detail.innerHTML=`<button class="btn small shotPlanClose" data-ro-allow="1">Cerrar ×</button><h3>${row.kind==='shot'?`Escena ${esc(row.number)} · Plano ${row.shotNumber}`:esc(row.title)}</h3><p>${esc(row.title)}</p><p class="shotPlanFullDescription">${esc(row.desc)}</p><p><b>${time(day,row.start)}–${time(day,row.start+row.dur)}</b> · ${row.dur} min</p>${row.kind==='shot'?`<label>Duración de rodaje (min)<input class="input" type="number" min="1" max="720" step="1" aria-label="Duración del plano" value="${row.dur}" ${canEdit()?'':'disabled'}></label><p class="small muted">La duración inicial se distribuye dentro del tiempo reservado para la escena. Ajustala según lo que requiera este plano.</p>`:''}${row.sceneId?'<button class="btn shotPlanOpen" data-ro-allow="1">Abrir en Shotlist →</button>':''}`;
+      detail.innerHTML=`<button class="btn small shotPlanClose" data-ro-allow="1">Cerrar ×</button><h3>${row.kind==='shot'?`Escena ${esc(row.number)} · Plano ${row.shotNumber}`:esc(row.title)}</h3><p>${esc(row.title)}</p><p class="shotPlanFullDescription">${esc(row.desc)}</p><p><b>${time(day,row.start)}–${time(day,row.start+row.dur)}</b> · ${row.dur} min</p>${['shot','block'].includes(row.kind)?`<label>Duración de rodaje (min)<input class="input" type="number" min="1" max="720" step="1" aria-label="Duración del plano" value="${row.dur}" ${canEdit()?'':'disabled'}></label><p class="small muted">Cada plano conserva su duración. Los siguientes se acomodan al moverlo o cambiar sus minutos.</p>`:''}${row.sceneId?'<button class="btn shotPlanOpen" data-ro-allow="1">Abrir en Shotlist →</button>':''}`;
+      if(row.kind==='block'&&canEdit()){
+        const form=document.createElement('div');form.className='shotPlanBlockFields';
+        form.innerHTML='<label>Título<input class="input" aria-label="Título del bloque"></label><label>Detalle<textarea class="input" aria-label="Detalle del bloque"></textarea></label><label>Color<input type="color" aria-label="Color del bloque"></label>';
+        const b=(day.blocks||[]).find(b=>b.id===row.id);
+        for(const [selector,field] of [['input[type="color"]','color'],['textarea','detail'],['input.input','title']]){const input=form.querySelector(selector);input.value=b[field]|| (field==='color'?'#f97316':'');input.onchange=()=>{if(canEdit())change(()=>{const current=(day.blocks||[]).find(b=>b.id===row.id);if(!current)return false;current[field]=input.value;return true;});};}detail.append(form);
+      }
+      if(row.kind==='shot'){
+        const box=document.createElement('div');box.className='shotPlanMove';
+        box.innerHTML='<label>Jornada de destino<select class="input" aria-label="Jornada de destino"></select></label><label>Ubicación<select class="input" aria-label="Ubicación del plano"></select></label><button class="btn" type="button">Mover plano</button>';
+        detail.append(box);
+        const [destination,position]=box.querySelectorAll('select'),button=box.querySelector('button');
+        for(const d of state.shootDays||[]){const option=document.createElement('option');option.value=d.id;option.textContent=[d.date,d.label,d.location].filter(Boolean).join(' · ')||'Jornada';destination.append(option);}
+        destination.value=day.id;
+        const fill=()=>{const d=state.shootDays.find(d=>d.id===destination.value);position.replaceChildren();for(const r of api.rows(state,d).filter(r=>r.key!==row.key)){const option=document.createElement('option');option.value=r.key;option.textContent='Antes de '+(r.kind==='shot'?`E${r.number} · P${r.shotNumber}`:r.title)+' · '+time(d,r.start);position.append(option);}const end=document.createElement('option');end.value='';end.textContent='Al final de la jornada';position.append(end);};
+        destination.onchange=fill;fill();
+        for(const input of [destination,position,button])input.disabled=!canEdit();
+        button.onclick=()=>{if(canEdit())change(()=>api.move(state,day,row.key,state.shootDays.find(d=>d.id===destination.value),position.value||null));};
+      }
       detail.querySelector('.shotPlanClose').onclick=()=>{detail.hidden=true;delete host.dataset.selected;nodeSelection();};
       detail.querySelector('input')?.addEventListener('change',e=>{if(canEdit())change(()=>api.duration(state,day,row.sceneId,row.key,e.target.value));});
       detail.querySelector('.shotPlanOpen')?.addEventListener('click',()=>openScene(row.sceneId));

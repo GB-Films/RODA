@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const fields=['date','label','location','callTime','night','notes','times','durations','sceneColors','shotsDone','shotPlanning'];
+  const fields=['date','label','location','callTime','night','notes','times','durations','sceneColors','shotsDone','shotPlanning','shotTimeline','callHiddenScenes','castSceneExclusions'];
   const clone=value=>value===undefined?undefined:JSON.parse(JSON.stringify(value));
   const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
   const equal=(a,b)=>{
@@ -31,7 +31,7 @@
       const next=snapshot(current);if(!sameDays(baseline,next)){rebase(current);return false;}
       const patches=diff(baseline,next);if(!patches.length)return false;
       const entry={patches,beforeOrder:baselineOrder,afterOrder:orders(current)};
-      entry.label=patches.some(p=>p.path.includes('shotPlanning'))?'Cambio de planos':patches.some(p=>p.path[1]==='scenes')?'Cambio de escenas':patches.some(p=>p.path.includes('durations')||p.path.at(-1)==='durMin')?'Cambio de duración':patches.some(p=>p.path.includes('times')||p.path.at(-1)==='startMin'||p.path.includes('callTime'))?'Cambio de horarios':patches.some(p=>p.path.includes('sceneColors')||p.path.at(-1)==='color')?'Cambio de colores':'Cambio de bloques';
+      entry.label=patches.some(p=>(p.path.includes('shotPlanning')||p.path.includes('shotTimeline')))?'Cambio de planos':patches.some(p=>p.path[1]==='scenes')?'Cambio de escenas':patches.some(p=>p.path.includes('durations')||p.path.at(-1)==='durMin')?'Cambio de duración':patches.some(p=>p.path.includes('times')||p.path.at(-1)==='startMin'||p.path.includes('callTime'))?'Cambio de horarios':patches.some(p=>p.path.includes('sceneColors')||p.path.at(-1)==='color')?'Cambio de colores':'Cambio de bloques';
       undo.push(entry);undo=undo.slice(-limit);redo=[];baseline=next;baselineOrder=entry.afterOrder;save();return true;
     }
     function apply(current,direction,validSceneIds){
@@ -41,11 +41,12 @@
         undo=[];redo=[];baseline=now;baselineOrder=orders(current);save();return {ok:false,reason:'conflict'};
       }
       const next=clone(now);for(const p of entry.patches)write(next,p.path,p[target+'Exists'],p[target]);
-      const valid=validSceneIds?new Set(validSceneIds):null,assigned=new Set();
-      let conflict=false;for(const day of Object.values(next))for(const id of Object.keys(day.scenes)){if(assigned.has(id)||valid&&!valid.has(id))conflict=true;assigned.add(id);}
+      const valid=validSceneIds?new Set(validSceneIds):null,assigned=new Map();
+      let conflict=false;for(const day of Object.values(next))for(const id of Object.keys(day.scenes)){if((assigned.has(id)&&(!day.fields.shotTimeline||!assigned.get(id)))||valid&&!valid.has(id))conflict=true;assigned.set(id,!!day.fields.shotTimeline);}
       // An unrelated colleague may have filled the old slot. Undo must not overlap it.
-      const affected=new Map();for(const p of entry.patches){let id;if(p.path[1]==='fields'&&['night','callTime'].includes(p.path[2]))id='*';if(p.path[1]==='scenes')id='scene:'+p.path[2];if(p.path[1]==='fields'&&['times','durations'].includes(p.path[2]))id='scene:'+p.path[3];if(p.path[1]==='blocks'&&(p.path.length===3||['startMin','durMin'].includes(p.path[3])))id='block:'+p.path[2];if(id){if(!affected.has(p.path[0]))affected.set(p.path[0],new Set());affected.get(p.path[0]).add(id);}}
-      for(const [dayId,changed] of affected){const day=next[dayId],items=[...Object.keys(day.scenes).map(id=>({key:'scene:'+id,start:day.fields.times?.[id]??0,dur:day.fields.durations?.[id]??60})),...Object.values(day.blocks).map(b=>({key:'block:'+b.id,start:b.startMin,dur:b.durMin}))];const clock=String(day.fields.callTime||'08:00').split(':').map(Number),call=clock[0]*60+clock[1],end=day.fields.night?1800:1440;if(items.some(it=>(changed.has('*')||changed.has(it.key))&&(!Number.isFinite(it.start)||!Number.isFinite(it.dur)||it.dur<=0||call+it.start<0||call+it.start+it.dur>end)))conflict=true;for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){const a=items[i],b=items[j];if((changed.has('*')||changed.has(a.key)||changed.has(b.key))&&a.start<b.start+b.dur&&b.start<a.start+a.dur)conflict=true;}}
+      const affected=new Map();for(const p of entry.patches){let id;if(p.path[1]==='fields'&&['night','callTime','shotTimeline'].includes(p.path[2]))id='*';if(p.path[1]==='scenes')id='scene:'+p.path[2];if(p.path[1]==='fields'&&['times','durations'].includes(p.path[2]))id='scene:'+p.path[3];if(p.path[1]==='blocks'&&(p.path.length===3||['startMin','durMin'].includes(p.path[3])))id='block:'+p.path[2];if(id){if(!affected.has(p.path[0]))affected.set(p.path[0],new Set());affected.get(p.path[0]).add(id);}}
+      for(const [dayId,changed] of affected){const day=next[dayId],items=[...(day.fields.shotTimeline?Object.entries(day.fields.shotTimeline).map(([key,r])=>({key,start:r.start,dur:r.dur})):Object.keys(day.scenes).map(id=>({key:'scene:'+id,start:day.fields.times?.[id]??0,dur:day.fields.durations?.[id]??60}))),...Object.values(day.blocks).map(b=>({key:'block:'+b.id,start:b.startMin,dur:b.durMin}))];const clock=String(day.fields.callTime||'08:00').split(':').map(Number),call=clock[0]*60+clock[1],end=day.fields.night?1800:1440;if(items.some(it=>(changed.has('*')||changed.has(it.key))&&(!Number.isFinite(it.start)||!Number.isFinite(it.dur)||it.dur<=0||call+it.start<0||call+it.start+it.dur>end)))conflict=true;for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){const a=items[i],b=items[j];if((changed.has('*')||changed.has(a.key)||changed.has(b.key))&&a.start<b.start+b.dur&&b.start<a.start+a.dur)conflict=true;}}
+      const shotKeys=new Set();for(const day of Object.values(next))for(const [key,r] of Object.entries(day.fields.shotTimeline||{})){if(shotKeys.has(key)||valid&&!valid.has(r.sceneId)||valid&&r.ownerId&&!valid.has(r.ownerId))conflict=true;shotKeys.add(key);}
       if(conflict){undo=[];redo=[];baseline=now;baselineOrder=orders(current);save();return {ok:false,reason:'conflict'};}
       for(const day of current){const value=next[day.id];for(const field of fields){if(Object.hasOwn(value.fields,field))day[field]=clone(value.fields[field]);else delete day[field];}day.sceneIds=order(day.sceneIds||[],value.scenes,entry[target+'Order']?.[day.id]?.scenes||[]);day.blocks=order((day.blocks||[]).map(b=>b.id),value.blocks,entry[target+'Order']?.[day.id]?.blocks||[]).map(id=>clone(value.blocks[id]));}
       from.pop();to.push(entry);baseline=snapshot(current);baselineOrder=orders(current);save();return {ok:true,label:entry.label};

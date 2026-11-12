@@ -60,16 +60,45 @@
     return clone(local);
   }
 
+  // Timing changes in a free plan are one transaction across its connected
+  // days. On a simultaneous edit to that layout, the local transaction wins;
+  // unrelated crew, screenplay, notes and independent days still merge normally.
+  function reconcileShotSchedules(out,base,local,remote){
+    if(![base,local,remote].some(state=>state?.shootDays?.some(d=>d.shotTimeline)))return;
+    const schedule=d=>d&&({sceneIds:d.sceneIds,times:d.times,durations:d.durations,shotPlanning:d.shotPlanning,shotTimeline:d.shotTimeline,blocks:(d.blocks||[]).map(b=>({id:b.id,startMin:b.startMin,durMin:b.durMin}))});
+    const byId=state=>new Map((state?.shootDays||[]).map(d=>[d.id,d]));
+    const b=byId(base),l=byId(local),r=byId(remote),graph=new Map(),owners=new Map();
+    for(const state of [base,local,remote])for(const day of state?.shootDays||[]){
+      if(!graph.has(day.id))graph.set(day.id,new Set());
+      for(const key of root.RodaShotPlanning?root.RodaShotPlanning.rows(state,day).filter(r=>r.kind==='shot').map(r=>r.key):Object.keys(day.shotTimeline||{})){if(!owners.has(key))owners.set(key,new Set());owners.get(key).add(day.id);}
+    }
+    for(const ids of owners.values())for(const a of ids)for(const c of ids)graph.get(a).add(c);
+    const touched=new Set();
+    for(const [id,day] of l){
+      if(!(day.shotTimeline||r.get(id)?.shotTimeline)||equal(schedule(day),schedule(b.get(id)))||equal(schedule(r.get(id)),schedule(b.get(id))))continue;
+      const pending=[id];while(pending.length){const next=pending.pop();if(touched.has(next))continue;touched.add(next);pending.push(...(graph.get(next)||[]));}
+    }
+    for(const day of out.shootDays){
+      if(!touched.has(day.id)||!l.has(day.id))continue;
+      const winner=l.get(day.id);
+      for(const key of ['sceneIds','times','durations','shotPlanning','shotTimeline']){if(winner[key]===undefined)delete day[key];else day[key]=clone(winner[key]);}
+      // Preserve block content edited by a colleague, but use the winning times.
+      day.blocks=(winner.blocks||[]).map(block=>({...clone((day.blocks||[]).find(b=>b.id===block.id)||block),startMin:block.startMin,durMin:block.durMin}));
+    }
+  }
+
   function mergeProject(base, local, remote){
     const out = merge(base,local,remote);
     if(root.RodaCast){for(const person of out?.crew||[])root.RodaCast.syncPersonName(person);root.RodaCast.reconcileMergedPeople(out||{});}
     if(!out || !Array.isArray(out.shootDays)) return out;
+    reconcileShotSchedules(out,base,local,remote);
     const assignments = state => new Map((state?.shootDays||[]).flatMap(d=>(d.sceneIds||[]).map(id=>[id,d.id])));
     const b = assignments(base), l = assignments(local), r = assignments(remote);
     const scenes = new Set((out.scenes||[]).map(s=>s.id));
     // Moving the same scene to different days is one conflict, even though its
     // membership is stored on two separate day objects.
     for(const day of out.shootDays){
+      if(day.shotTimeline){root.RodaShotPlanning?.syncDay(out,day);continue;}
       day.sceneIds = (day.sceneIds||[]).filter(id=>{
         const target = l.get(id) !== b.get(id) ? l.get(id) : r.get(id);
         return scenes.has(id) && target === day.id;

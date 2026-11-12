@@ -12,6 +12,7 @@
     return (day.sceneIds||[]).find(id=>id!==sourceId&&minute>=Number(day.times?.[id]||0)&&minute<Number(day.times?.[id]||0)+Number(day.durations?.[id]??60))||null;
   }
   function swapScenes(day,sourceId,targetId){
+    if(day?.shotTimeline)return false;
     if(!day||sourceId===targetId||!day.sceneIds?.includes(sourceId)||!day.sceneIds.includes(targetId))return false;
     const items=[...day.sceneIds.map(id=>({kind:'scene',id,start:Number(day.times?.[id]??0),dur:Number(day.durations?.[id]??60)})),...(day.blocks||[]).map(b=>({kind:'block',id:b.id,start:Number(b.startMin??0),dur:Number(b.durMin??30)}))].sort((a,b)=>a.start-b.start);
     if(items.some(it=>!Number.isFinite(it.start)||!Number.isFinite(it.dur)||it.dur<=0))return false;
@@ -27,6 +28,7 @@
 
 
   function swapScenesBetweenDays(first,sourceId,second,targetId){
+    if(first?.shotTimeline||second?.shotTimeline)return false;
     if(!first||!second||first.id===second.id||!first.sceneIds?.includes(sourceId)||!second.sceneIds?.includes(targetId)||first.sceneIds.includes(targetId)||second.sceneIds.includes(sourceId))return false;
     function prepare(day,outgoing,incomingDuration){
       const start=Number(day.times?.[outgoing]??0),duration=Number(day.durations?.[outgoing]??60),end=start+duration,delta=incomingDuration-duration;
@@ -126,6 +128,7 @@
     return ()=>finish(false);
   }
   function swapDayScenes(first, second){
+    if(first?.shotTimeline||second?.shotTimeline)return false;
     if(!first || !second || first.id === second.id) return false;
     for(const key of ["sceneIds","times","durations","sceneColors","shotsDone","shotPlanning"]){
       if(key==="shotPlanning"){const a=first[key],b=second[key];if(b===undefined)delete first[key];else first[key]=b;if(a===undefined)delete second[key];else second[key]=a;continue;}
