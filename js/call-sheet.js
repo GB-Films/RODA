@@ -30,12 +30,14 @@
   function removeCrew(day,id){setCrewActive(day,id,false);day.callCrewRemoved??={};day.callCrewRemoved[id]=true;}
   function restoreCrew(day,id){day.callCrewRemoved??={};day.callCrewRemoved[id]=false;setCrewActive(day,id,true);}
   function removeScene(day,id){
+    root.RodaShotPlanning?.removeScene(day,id);
     if(!day.sceneIds?.includes(id))return false;
     day.sceneIds=day.sceneIds.filter(key=>key!==id);
     for(const field of ['times','durations','sceneColors','shotsDone','castSceneExclusions','callHiddenScenes'])if(day[field])delete day[field][id];
     return true;
   }
   function editSceneTiming(day,id,start,duration){
+    if(day.shotTimeline)throw Error('Esta jornada está organizada por planos. Ajustá sus horarios desde Plan de Rodaje → Planos.');
     if(!day.sceneIds?.includes(id))throw Error('Esta escena ya no pertenece a la jornada.');
     const [h,m]=String(day.callTime||'08:00').split(':').map(Number),base=h*60+m,end=day.night?1800:1440;
     if(!Number.isInteger(start)||!Number.isInteger(duration)||duration<1||base+start<0||base+start+duration>end)throw Error('Revisá el horario y la duración: deben quedar dentro de la jornada.');

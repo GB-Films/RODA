@@ -40,7 +40,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   },data);
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
-  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','form-autosave','day-navigation','responsive','planning-history','shot-planning','shot-planning-view','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
+  for(const f of ['dialogs','roda-policy','roda-access','cast','call-sheet','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','form-autosave','day-navigation','responsive','planning-history','shot-planning','shot-planning-view','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
   await page.waitForFunction(isStudio=>isStudio?!!window.RODA_READY:!document.body.classList.contains('bootLoading'),studio);await page.evaluate(()=>{document.querySelector('.shell').hidden=false;window.RodaAccess?.bind();});
   }
 
@@ -59,7 +59,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   const clock=()=>page.locator('#shotPlanDay .shotPlanRow.shot .shotPlanClock').allTextContents();
   assert.ok((await clock())[0].includes('08:00–08:10'));
   const grip=page.locator('#shotPlanDay [data-key="s1|c"] .shotPlanGrip');await grip.press('ArrowUp');
-  assert.deepEqual(await page.evaluate(()=>savedState.shootDays[0].shotPlanning.s1.order),['s1|a','s1|c','s1|b']);
+  assert.deepEqual(await page.evaluate(()=>Object.entries(savedState.shootDays[0].shotTimeline).filter(([,r])=>r.kind==='shot').sort((a,b)=>a[1].start-b[1].start).map(([key])=>key)),['s1|a','s1|c','s1|b']);
   await page.locator('#shotPlanDay [data-key="s1|a"] .shotPlanSelect').click();
   const input=page.locator('#shotPlanDay [aria-label="Duración del plano"]');await input.fill('25');await input.press('Tab');
   await page.waitForFunction(()=>savedState.shootDays[0].durations.s1===75);
@@ -89,16 +89,67 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
     assert.ok(fit.h>=140,JSON.stringify(fit));assert.ok(fit.scroll<=fit.w+2,JSON.stringify(fit));assert.ok(fit.b<=920,JSON.stringify(fit));
   }
   await page.setViewportSize({width:1600,height:1000});
-  await unit.selectOption('scenes');assert.equal(await page.locator('#shotPlanDay').isVisible(),false);
+  await unit.selectOption('scenes');assert.equal(await page.locator('#shotPlanDay').isVisible(),true);assert.equal(await page.locator('#shotPlanDay .shotPlanGrip').count(),0);
   assert.deepEqual(await page.evaluate(()=>savedState.scenes.map(s=>s.shots)),baseline.scenes.map(s=>s.shots));
   const persisted=await page.evaluate(()=>structuredClone(savedState));await page.reload();await boot(persisted);
   await page.locator('.navBtn[data-view="dayplan"]').click();await page.locator('#dayplanCard [aria-label="Organizar plan por"]').selectOption('shots');
   assert.deepEqual(await page.locator('#shotPlanDay .shotPlanRow.shot').evaluateAll(ns=>ns.map(n=>n.dataset.key)),['s1|a','s1|c','s1|b']);
   // A real pointer drag conserves duration, IDs, schedule end and non-shot data.
   const from=await page.locator('#shotPlanDay [data-key="s1|a"] .shotPlanGrip').boundingBox(),to=await page.locator('#shotPlanDay [data-key="s1|c"]').boundingBox();
-  await page.mouse.move(from.x+from.width/2,from.y+from.height/2);await page.mouse.down();await page.mouse.move(to.x+60,to.y+to.height/2,{steps:8});await page.mouse.up();
-  assert.deepEqual(await page.evaluate(()=>savedState.shootDays[0].shotPlanning.s1.order),['s1|c','s1|a','s1|b']);
+  await page.mouse.move(from.x+from.width/2,from.y+from.height/2);await page.mouse.down();await page.mouse.move(to.x+60,to.y+to.height*.8,{steps:8});await page.mouse.up();
+  assert.deepEqual(await page.evaluate(()=>Object.entries(savedState.shootDays[0].shotTimeline).filter(([,r])=>r.kind==='shot').sort((a,b)=>a[1].start-b[1].start).map(([key])=>key)),['s1|c','s1|a','s1|b']);
   assert.deepEqual(await page.evaluate(()=>savedState.shootDays[0].times),persisted.shootDays[0].times);
+  // Move across days using the accessible detail controls, preserving duration.
+  await page.locator('#shotPlanDay [data-key="s1|b"] .shotPlanSelect').click();
+  await page.locator('#shotPlanDay [aria-label="Jornada de destino"]').selectOption('d2');
+  await page.locator('#shotPlanDay [aria-label="Ubicación del plano"]').selectOption('s3|c');
+  const beforeMove=await page.evaluate(()=>structuredClone(savedState));
+  await page.locator('#shotPlanDay .shotPlanMove button').click();
+  await page.waitForFunction(()=>!!savedState.shootDays.find(d=>d.id==='d2').shotTimeline?.['s1|b']);
+  assert.equal(await page.evaluate(()=>savedState.shootDays.find(d=>d.id==='d2').shotTimeline['s1|b'].dur),20);
+  assert.equal(await page.evaluate(()=>savedState.shootDays.find(d=>d.id==='d2').shotTimeline['s3|c'].start),20);
+  await page.locator('#btnDayplanUndo').click();assert.deepEqual(await page.evaluate(()=>savedState.shootDays),beforeMove.shootDays);
+  await page.locator('#btnDayplanRedo').click();
+  // Compare all days and drag from the hotel into the middle of another scene.
+  await page.locator('.navBtn[data-view="schedule"]').click();
+  await page.locator('#dayNavigation summary').click();await page.locator('#dayNavigation [data-day="all"]').click();
+  await page.waitForFunction(()=>document.querySelectorAll('.shotPlanDayColumn').length===3);
+  async function drag(fromSelector,toSelector,fraction=.2){
+    const from=page.locator(fromSelector),to=page.locator(toSelector);await from.scrollIntoViewIfNeeded();await to.scrollIntoViewIfNeeded();
+    const a=await from.boundingBox(),b=await to.boundingBox();assert(a&&b);
+    await page.mouse.move(a.x+a.width/2,a.y+a.height/2);await page.mouse.down();await page.mouse.move(b.x+Math.min(80,b.width/2),b.y+b.height*fraction,{steps:12});await page.mouse.up();
+  }
+  await drag('#shotPlanDay-d2 [data-key="s3|c"] .shotPlanGrip','#shotPlanDay-d1 [data-key="s1|a"]');
+  await page.waitForFunction(()=>!!savedState.shootDays.find(d=>d.id==='d1').shotTimeline?.['s3|c']);
+  assert.deepEqual(await page.locator('#shotPlanDay-d1 .shotPlanRow.shot').evaluateAll(ns=>ns.map(n=>n.dataset.key)),['s1|c','s3|c','s1|a']);
+  assert.equal(await page.evaluate(()=>savedState.shootDays.find(d=>d.id==='d1').shotTimeline['s3|c'].dur),30);
+  assert.equal(await page.evaluate(()=>savedState.shootDays.find(d=>d.id==='d2').shotTimeline['s3|c']),undefined);
+  await page.screenshot({path:path.join(output,'planos-intercalados.png')});
+  // Drop into an empty day; the day starts at its own call time.
+  await drag('#shotPlanDay-d1 [data-key="s3|c"] .shotPlanGrip','#shotPlanDay-d3 .shotPlanRows');
+  await page.waitForFunction(()=>!!savedState.shootDays.find(d=>d.id==='d3').shotTimeline?.['s3|c']);
+  assert.equal(await page.evaluate(()=>savedState.shootDays.find(d=>d.id==='d3').shotTimeline['s3|c'].start),0);
+  // Shotlist on the destination only contains its assigned shot with the actual clock.
+  await page.locator('.navBtn[data-view="shotlist"]').click();
+  await page.locator('#dayNavigation summary').click();await page.locator('#dayNavigation [data-day="d2"]').click();
+  const destinationScene=page.locator('.shotSceneBox[data-scene-id="s1"]');
+  if(await destinationScene.locator('.shotSceneToggle').getAttribute('aria-expanded')==='false')await destinationScene.locator('.shotSceneToggle').click();
+  assert.deepEqual(await destinationScene.locator('tbody tr[data-shot-id]').evaluateAll(ns=>ns.map(n=>n.dataset.shotId)),['b']);
+  assert.deepEqual((await destinationScene.locator('.shotTime').allTextContents()).slice(1),['10:00']);
+  assert.deepEqual(await page.evaluate(()=>savedState.scenes.map(s=>s.shots)),baseline.scenes.map(s=>s.shots));
+  const freeSaved=await page.evaluate(()=>structuredClone(savedState));await page.reload();await boot(freeSaved);
+  await page.locator('.navBtn[data-view="dayplan"]').click();
+  await page.locator('#dayNavigation summary').click();await page.locator('#dayNavigation [data-day="d2"]').click();
+  await page.locator('#dayplanCard [aria-label="Organizar plan por"]').selectOption('shots');
+  assert.deepEqual(await page.locator('#shotPlanDay .shotPlanRow.shot').evaluateAll(ns=>ns.map(n=>n.dataset.key)),['s1|b']);
+  // Mobile destination controls, rather than requiring two visible columns.
+  await page.setViewportSize({width:390,height:900});await page.waitForTimeout(400);
+  await page.locator('#shotPlanDay .shotPlanSelect').first().click();
+  assert.equal(await page.locator('#shotPlanDay [aria-label="Jornada de destino"]').isVisible(),true);
+  const bounds=await page.locator('#shotPlanDay').evaluate(n=>({width:n.clientWidth,scroll:n.scrollWidth}));assert(bounds.scroll<=bounds.width+2);
+  await page.screenshot({path:path.join(output,'planos-mover-mobile.png')});
+  await page.locator('#shotPlanDay .shotPlanClose').click();assert.equal(await page.locator('#shotPlanDay .shotPlanDetail').isVisible(),false);
+  await page.setViewportSize({width:1600,height:1000});
   if(studio){
     await page.evaluate(()=>{RODA_STUDIO.canEdit=false;RODA_STUDIO.project.rodaAccess={admin:false,sections:{planning:'read',shotlist:'read'}};RodaAccess.apply();});
     const handle=page.locator('#shotPlanDay .shotPlanGrip').first();assert.equal(await handle.isEnabled(),false);

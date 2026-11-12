@@ -1330,6 +1330,7 @@ function enforceScriptVersionsLimit(notify=false){
   }
 
   function ensureDayTimingMaps(d){
+    if(d.shotTimeline&&window.RodaShotPlanning)RodaShotPlanning.syncDay(state,d);
     d.durations = d.durations || {};
     d.times = d.times || {};
     d.sceneIds = d.sceneIds || [];
@@ -1700,6 +1701,7 @@ async function setShotThumb(sh, file){
   }
 
   function resolveOverlapsPushDown(d, snapMin){
+    if(d.shotTimeline)return;
     ensureDayTimingMaps(d);
 
     // Snap controls the active gesture. Existing slots retain their own duration.
@@ -3071,10 +3073,13 @@ function setupScheduleWheelScroll(){
     return null;
   }
   function transferShotPlan(sceneId,target){
+    if(target?.shotTimeline||state.shootDays.some(d=>d.shotTimeline&&d.sceneIds?.includes(sceneId))){toast('Esta escena está planificada por planos. Usá Organizar por → Planos para moverlos o programar planos pendientes.');return false;}
     for(const day of state.shootDays)if(day!==target&&day.shotPlanning?.[sceneId]){target.shotPlanning??={};target.shotPlanning[sceneId]=day.shotPlanning[sceneId];delete day.shotPlanning[sceneId];}
+    return true;
   }
   function removeSceneFromAllDays(sceneId){
     for(const d of state.shootDays){
+      RodaShotPlanning.removeScene(d,sceneId);
       d.sceneIds = (d.sceneIds||[]).filter(x=>x!==sceneId);
       if(d.times) delete d.times[sceneId];
       if(d.durations) delete d.durations[sceneId];
@@ -3116,6 +3121,7 @@ function setupScheduleWheelScroll(){
         const did = node.dataset.dayId;
         const d = did ? getDay(did) : null;
         if(!d) return;
+        RodaShotPlanning.removeScene(d,scene.id);
         d.sceneIds = (d.sceneIds||[]).filter(x=>x!==scene.id);
         if(d.times) delete d.times[scene.id];
         if(d.durations) delete d.durations[scene.id];
@@ -3347,7 +3353,7 @@ const zone = document.createElement("div");
         if(data.type!=="scene") return;
 
         const sid = data.sceneId;
-        transferShotPlan(sid,d);removeSceneFromAllDays(sid);
+        if(!transferShotPlan(sid,d))return;removeSceneFromAllDays(sid);
 
         ensureDayTimingMaps(d);
         d.sceneIds.push(sid);
@@ -5093,11 +5099,12 @@ function bindSchedDayPickerUI(){
   function isShotPlan(){return planningShots&&!!window.RodaShotPlanningView&&(!window.RodaAccess||RodaAccess.canView('shotlist'));}
   function shotPlanChange(action){
     if(isReadOnly('planning'))return;
-    try{if(!action())return;touch();renderDayPlan();renderScheduleBoard();renderShotList();renderDayDetail();renderReports();renderReportsDetail();}
+    try{if(!action())return;syncPlanningHistory('record');touch();const paint=()=>{renderDayPlan();renderScheduleBoard();renderShotList();renderDayDetail();renderReports();renderReportsDetail();};if(window.RodaLiveView)RodaLiveView.paint(document,paint);else paint();}
     catch(error){toast(error.message);renderDayPlan();renderScheduleBoard();}
   }
   function renderShotPlan(host,day,query=''){
-    RodaShotPlanningView.render(host,{state,day,query,canEdit:()=>!isReadOnly('planning'),change:shotPlanChange,
+    const grouped=!isShotPlan();
+    RodaShotPlanningView.render(host,{state,day,query,grouped,canEdit:()=>!isReadOnly('planning'),change:shotPlanChange,
       openScene:sceneId=>{selectedShotlistDayId=day.id;selectedShotlistSceneId=sceneId;shotlistExpandedSceneIds.add(sceneId);showView('shotlist');renderShotList();requestAnimationFrame(()=>Array.from(el('shotlistWrap').querySelectorAll('[data-scene-id]')).find(n=>n.dataset.sceneId===sceneId)?.scrollIntoView({block:'start'}));}});
   }
   function shotPlanPrint(day){
@@ -5105,7 +5112,7 @@ function bindSchedDayPickerUI(){
     const rows=RodaShotPlanning.rows(state,day).map(r=>dayplanPrintedRow({...r,number:r.number,slugline:r.kind==='shot'?`Plano ${r.shotNumber} · ${r.title}`:r.title,summary:r.desc,detail:r.desc},base+r.start,r.dur,base+r.start+r.dur)).join('');
     return `<div class="catBlock dpPrintBlock">${buildDayplanPrintHeader(day)}<div class="items">${dayplanPrintedTable(day,rows)}</div></div>`;
   }
-  function plannedShotDuration(day,sceneId,shot){return (day.shotPlanning?.[sceneId]||isShotPlan())&&window.RodaShotPlanning?RodaShotPlanning.sceneRows(state,day,sceneId).find(r=>r.shotId===shot.id)?.dur??shotDurMin(shot):shotDurMin(shot);}
+  function plannedShotDuration(day,sceneId,shot){return (day.shotTimeline||day.shotPlanning?.[sceneId]||isShotPlan())&&window.RodaShotPlanning?RodaShotPlanning.sceneRows(state,day,sceneId).find(r=>r.shotId===shot.id)?.dur??shotDurMin(shot):shotDurMin(shot);}
   function plannedShotsTotal(day,scene){return scene.shots.reduce((total,shot)=>total+plannedShotDuration(day,scene.id,shot),0);}
 
   let planningCompact=false;
@@ -5116,7 +5123,7 @@ function bindSchedDayPickerUI(){
     for(const [cardId,selectId] of [['dayplanCard','dayplanView'],['scheduleCard','schedView']]){
       const card=el(cardId),select=el(selectId);if(!card||!select)continue;
 
-      card.classList.toggle('shot-unit-active',isShotPlan());
+      card.classList.toggle('shot-unit-active',isShotPlan()||(cardId==='dayplanCard'?!!getDay(selectedDayplanDayId)?.shotTimeline:state.shootDays.some(d=>d.shotTimeline)));
       let unit=card.querySelector('.shotPlanningUnit select');
       if(!unit&&window.RodaShotPlanningView){
         const label=document.createElement('label');label.className='shotPlanningUnit row gap';label.innerHTML='Organizar por <select class="input" data-ro-allow="1" aria-label="Organizar plan por"><option value="scenes">Escenas</option><option value="shots">Planos</option></select>';
@@ -5190,14 +5197,15 @@ function bindSchedDayPickerUI(){
     }
 
 
-    board.classList.toggle('shotPlanBoard',isShotPlan());
-    if(isShotPlan()){
+    const freeBoard=isShotPlan()||daysToShow.some(d=>d.shotTimeline);
+    board.classList.toggle('shotPlanBoard',freeBoard);
+    if(freeBoard){
       renderDayplanInspector(null,[]);
       for(const day of daysToShow){
         ensureDayTimingMaps(day);
         const column=document.createElement('section');column.className='shotPlanDayColumn';
         const heading=document.createElement('header');heading.className='shotPlanDayHeading';heading.textContent=[formatDayTitle(day.date),day.label,day.location].filter(Boolean).join(' · ');
-        const host=document.createElement('div');column.append(heading,host);board.append(column);renderShotPlan(host,day,q);
+        const host=document.createElement('div');host.id='shotPlanDay-'+day.id;column.append(heading,host);board.append(column);renderShotPlan(host,day,q);
       }
       setupScheduleTopScrollbar();return;
     }
@@ -5650,7 +5658,7 @@ function bindScheduleDnD(){
         const sid = d0.itemId;
         const keepDur = fromDay.durations?.[sid] ?? d0.dur0;
 
-        transferShotPlan(sid,toDay);
+        if(!transferShotPlan(sid,toDay))return;
         fromDay.sceneIds = (fromDay.sceneIds||[]).filter(x=>x!==sid);
         delete fromDay.times[sid];
         delete fromDay.durations[sid];
@@ -5767,7 +5775,7 @@ function updateScheduleDayDOM(dayId){
     ensureDayTimingMaps(day);
     let changed = false;
     for(const sid of (day.sceneIds||[]).filter(id=>!sceneId||id===sceneId)){
-      if(day.shotPlanning?.[sid])continue;
+      if(day.shotTimeline||day.shotPlanning?.[sid])continue;
       const sc = shootingScene(sid);
       if(!sc) continue;
       const shotsMin = sceneShotsTotalMin(sc);
@@ -5940,6 +5948,7 @@ function updateScheduleDayDOM(dayId){
 
   function buildDayplanItems(d){
     ensureDayTimingMaps(d);
+    if(d.shotTimeline)return RodaShotPlanning.groups(state,d).map(r=>{const scene=getScene(r.sceneId);return {...r,id:r.sceneId||r.id,slugline:scene?.slugline||r.title,number:scene?.number,summary:r.desc,detail:r.desc,location:scene?.location||'',intExt:scene?.intExt||'',timeOfDay:scene?.timeOfDay||''};});
     const items = [];
 
     for(const sid of (d.sceneIds||[])){
@@ -6447,8 +6456,8 @@ items.push({
 
     let shotHost=el('shotPlanDay');
     if(!shotHost){shotHost=document.createElement('div');shotHost.id='shotPlanDay';el('dayplanCard').querySelector('.dayplanBody').before(shotHost);}
-    shotHost.hidden=!isShotPlan();
-    if(isShotPlan()){renderShotPlan(shotHost,d);printWrap.innerHTML=shotPlanPrint(d);renderDayplanInspector(null,[]);return;}
+    shotHost.hidden=!(isShotPlan()||d.shotTimeline);
+    if(isShotPlan()||d.shotTimeline){renderShotPlan(shotHost,d);printWrap.innerHTML=shotPlanPrint(d);renderDayplanInspector(null,[]);return;}
 
     // Timeline sizing
     const ppm = getDayplanPPM() || DAYPLAN_PPM;
@@ -6572,7 +6581,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
         const curDay = sceneAssignedDayId(sid);
 
         if(curDay && curDay !== d0.id){
-          transferShotPlan(sid,d0);removeSceneFromAllDays(sid);
+          if(!transferShotPlan(sid,d0))return;removeSceneFromAllDays(sid);
         }
 
         ensureDayTimingMaps(d0);
@@ -7300,7 +7309,7 @@ box.addEventListener("input", (e)=>{
     const scene=getScene(sceneId);if(!scene)return null;
     const shots=state.scenes.flatMap(owner=>(owner.shots||[]).filter(sh=>(getScene(sh.shootingSceneId)?sh.shootingSceneId:owner.id)===sceneId));
     shots.sort((a,b)=>(a.shootingOrder??100000)-(b.shootingOrder??100000));
-    return {...scene,shots:day?.shotPlanning?.[sceneId]&&window.RodaShotPlanning?RodaShotPlanning.shots(state,day,sceneId).map(r=>r.shot):shots};
+    return {...scene,shots:(day?.shotTimeline||day?.shotPlanning?.[sceneId])&&window.RodaShotPlanning?RodaShotPlanning.shots(state,day,sceneId).map(r=>r.shot):shots};
   }
   function shotBatchFields(sh,owner){
     return `<details class="shotBatchFields" data-ro-allow="1"><summary>Escena original <b>#${esc(owner?.number||'')}</b> · Tanda #${esc(getScene(sh.shootingSceneId||owner?.id)?.number||'')}</summary><label>Tanda de rodaje<select class="input compact shotBatchSelect" aria-label="Tanda de rodaje del plano" ${(isReadOnly('shotlist')||isReadOnly('planning'))?'disabled':''}>${state.scenes.map(s=>{const day=state.shootDays.find(d=>d.sceneIds.includes(s.id));return `<option value="${esc(s.id)}" ${(sh.shootingSceneId||owner?.id)===s.id?'selected':''}>#${esc(s.number)} · ${esc(day?.label||'Sin jornada')} · ${esc(s.slugline||'')}</option>`;}).join('')}</select></label></details>`;
@@ -7308,6 +7317,7 @@ box.addEventListener("input", (e)=>{
   function bindShotBatchSelect(row,sh,owner){
     row.querySelector('.shotBatchSelect')?.addEventListener('change',e=>{
       if(isReadOnly('shotlist')||isReadOnly('planning')||!getScene(e.target.value))return;
+      if(state.shootDays.some(d=>d.shotTimeline?.[owner.id+'|'+sh.id])){e.target.value=sh.shootingSceneId||owner.id;toast('Mové este plano desde Plan de Rodaje → Planos para elegir su jornada y posición.');return;}
       const old=sh.shootingSceneId||owner.id,target=e.target.value;
       if(target===owner.id)delete sh.shootingSceneId;else sh.shootingSceneId=target;
       delete sh.shootingOrder;
@@ -7330,6 +7340,7 @@ function reorderShot(sceneId,shotId,targetId,after=false){
   const next=shots.slice(),[shot]=next.splice(from,1);
   next.splice(next.findIndex(s=>s.id===targetId)+(after?1:0),0,shot);
   if(next.every((s,i)=>s===shots[i]))return false;
+  if(planDay?.shotTimeline&&window.RodaShotPlanning){if(isReadOnly('planning'))return false;shotPlanChange(()=>RodaShotPlanning.move(state,planDay,shotOwner(shotId).id+'|'+shotId,planDay,shotOwner(targetId).id+'|'+targetId,after?'after':'before'));return true;}
   if(planDay?.shotPlanning?.[sceneId]&&window.RodaShotPlanning){if(isReadOnly('planning'))return false;planDay.shotPlanning[sceneId].order=next.map(sh=>shotOwner(sh.id).id+'|'+sh.id);touch();renderShotList();return true;}
   const original=getScene(sceneId)?.shots;
   if(original?.length===shots.length&&shots.every(sh=>original.includes(sh))){original.splice(0,original.length,...next);for(const sh of next)delete sh.shootingOrder;}
@@ -7569,6 +7580,7 @@ function renderShotList(){
         if(isReadOnly('shotlist')){ toast("Modo lector 🔒 (desbloqueá para editar)"); return; }
         sc.shots = Array.isArray(sc.shots) ? sc.shots : [];
         getScene(sid).shots.push({ id: uid("shot"), type: "Plano general", desc: "", durMin: DEFAULT_SHOT_MIN, thumbUrl: "" });
+        if(d.shotTimeline){const added=getScene(sid).shots.at(-1);try{RodaShotPlanning.addShot(state,d,sid,added.id);}catch(error){toast(error.message);}}
         selectedShotlistSceneId = sid;
         shotlistExpandedSceneIds.add(sid); // asegurar abierto
         const adjusted=syncAllDaysDurationsFromShotsForScene(sid,snapMin);
@@ -7588,9 +7600,9 @@ function renderShotList(){
           const dur = plannedShotDuration(d,sid,sh);
           const owner=shotOwner(sh.id)||getScene(sid);
           const key = `${owner.id}|${sh.id}`;
-          const shotNumber=d.shotPlanning?.[sid]||isShotPlan()?owner.shots.findIndex(s=>s.id===sh.id)+1:idx+1;
+          const shotNumber=d.shotTimeline||d.shotPlanning?.[sid]||isShotPlan()?owner.shots.findIndex(s=>s.id===sh.id)+1:idx+1;
           const done = !!d.shotsDone[key];
-          const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
+          const t = d.callTime ? fmtClockFromCall(d.callTime, d.shotTimeline?.[key]?.start ?? (st + offset)) : "";
 
           const hasThumb = !!sh.thumbUrl;
           const uploading = !!_shotThumbUploading[sh.id];
@@ -7645,7 +7657,7 @@ function renderShotList(){
 
           selDur?.addEventListener("change", ()=>{
             if(isReadOnly('shotlist')) return;
-            if(d.shotPlanning?.[sid]&&window.RodaShotPlanning){shotPlanChange(()=>RodaShotPlanning.duration(state,d,sid,key,selDur.value));return;}
+            if((d.shotTimeline||d.shotPlanning?.[sid])&&window.RodaShotPlanning){shotPlanChange(()=>RodaShotPlanning.duration(state,d,sid,key,selDur.value));return;}
             sh.durMin = Number(selDur.value) || DEFAULT_SHOT_MIN;
             const changed2 = syncAllDaysDurationsFromShotsForScene(sid, snapMin);
             touch();
@@ -8395,7 +8407,7 @@ function renderReportDayplanDetail(d){
     const dayLabel = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
 
     // KPIs
-    const scenes = (d.sceneIds||[]).map(id=>shootingScene(id)).filter(Boolean);
+    const scenes = (d.sceneIds||[]).map(id=>shootingScene(id,d)).filter(Boolean);
     const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
     const totalShots = scenes.reduce((acc, s)=> acc + ((s.shots||[]).length), 0);
 
@@ -8443,9 +8455,9 @@ function renderReportDayplanDetail(d){
           const dur = plannedShotDuration(d,sid,sh);
           const owner=shotOwner(sh.id)||getScene(sid);
           const key = `${owner.id}|${sh.id}`;
-          const shotNumber=d.shotPlanning?.[sid]||isShotPlan()?owner.shots.findIndex(s=>s.id===sh.id)+1:idx+1;
+          const shotNumber=d.shotTimeline||d.shotPlanning?.[sid]||isShotPlan()?owner.shots.findIndex(s=>s.id===sh.id)+1:idx+1;
           const done = !!d.shotsDone?.[key];
-          const t = d.callTime ? fmtClockFromCall(d.callTime, st + offset) : "";
+          const t = d.callTime ? fmtClockFromCall(d.callTime, d.shotTimeline?.[key]?.start ?? (st + offset)) : "";
           offset += dur;
           return `
             <tr class="${done?"shotRowDone":""}">
@@ -8518,7 +8530,7 @@ function renderReportDayplanDetail(d){
 
   function buildCallSheetPrint(d){
     const scenes=(d.sceneIds||[]).map(getScene).filter(Boolean);
-    const timeline=[...scenes.map(s=>({scene:s,start:Number(d.times?.[s.id]??0),dur:Number(d.durations?.[s.id]??60)})),
+    const timeline=d.shotTimeline?RodaShotPlanning.groups(state,d).filter(r=>!r.sceneId||RodaCallSheet.sceneVisible(d,r.sceneId)).map(r=>r.kind==='block'?{block:d.blocks.find(b=>b.id===r.id),start:r.start,dur:r.dur}:{scene:{...getScene(r.sceneId),slugline:getScene(r.sceneId).slugline+' · '+r.desc},start:r.start,dur:r.dur}):[...scenes.map(s=>({scene:s,start:Number(d.times?.[s.id]??0),dur:Number(d.durations?.[s.id]??60)})),
       ...(d.blocks||[]).map(b=>({block:b,start:Number(b.startMin??0),dur:Number(b.durMin??0)}))].sort((a,b)=>a.start-b.start);
     const clock=min=>fmtClockFromCall(baseDayCall(d),min);
     const title=state.meta?.title||'Proyecto';
@@ -8749,7 +8761,7 @@ function buildPlanGeneralPrintHTML(){
 async function printPlanGeneral(){
   applyPrintDeviceFlag();
   const root = ensureGbPrintRoot();
-  if(isShotPlan()){printDayplanContents(getScheduleDaysFiltered().map(d=>shotPlanPrint(d)).join(''));return;}
+  if(isShotPlan()||getScheduleDaysFiltered().some(d=>d.shotTimeline)){printDayplanContents(getScheduleDaysFiltered().map(d=>shotPlanPrint(d)).join(''));return;}
   root.innerHTML = buildPlanGeneralPrintHTML();
   document.body.classList.add("gbPrintingSchedule");
   setPrintOrientation("landscape", 12);
