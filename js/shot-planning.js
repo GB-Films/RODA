@@ -150,11 +150,11 @@
     const out=[];
     for(const row of rows(state,day)){
       const last=out.at(-1);
-      if(row.kind==='shot'&&last?.sceneId===row.sceneId&&last.start+last.dur===row.start){last.dur+=row.dur;last.count++;last.desc+=', P'+row.shotNumber;}
-      else if(row.kind==='shot'){const scene=state.scenes.find(s=>s.id===row.sceneId);out.push({...row,kind:'scene',title:scene.slugline,number:scene.number,count:1,desc:'Planos: P'+row.shotNumber});}
+      if(row.kind==='shot'&&last?.sceneId===row.sceneId&&last.start+last.dur===row.start){last.dur+=row.dur;last.count++;last.members.push(row.key);last.desc+=', P'+row.shotNumber;}
+      else if(row.kind==='shot'){const scene=state.scenes.find(s=>s.id===row.sceneId);out.push({...row,kind:'scene',title:scene.slugline,number:scene.number,members:[row.key],count:1,desc:'Planos: P'+row.shotNumber});}
       else out.push({...row});
     }
     return out;
   }
-  const api={shots,allocate,sceneRows,rows,reorder,duration,move,syncDay,groups,addShot,removeScene};root.RodaShotPlanning=api;if(typeof module!=='undefined')module.exports=api;
+  const api={storeRows,shots,allocate,sceneRows,rows,reorder,duration,move,syncDay,groups,addShot,removeScene};root.RodaShotPlanning=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

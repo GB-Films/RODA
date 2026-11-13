@@ -5099,7 +5099,7 @@ function bindSchedDayPickerUI(){
   function isShotPlan(){return planningShots&&!!window.RodaShotPlanningView&&(!window.RodaAccess||RodaAccess.canView('shotlist'));}
   function shotPlanChange(action){
     if(isReadOnly('planning'))return;
-    try{if(!action())return;syncPlanningHistory('record');touch();const paint=()=>{renderDayPlan();renderScheduleBoard();renderShotList();renderDayDetail();renderReports();renderReportsDetail();};if(window.RodaLiveView)RodaLiveView.paint(document,paint);else paint();}
+    try{if(!action())return;syncPlanningHistory('record');touch();const paint=()=>{renderDayPlan();renderScheduleBoard();renderSceneBank();renderShotList();renderDayDetail();renderReports();renderReportsDetail();};if(window.RodaLiveView)RodaLiveView.paint(document,paint);else paint();}
     catch(error){toast(error.message);renderDayPlan();renderScheduleBoard();}
   }
   function renderShotPlan(host,day,query=''){
@@ -5128,8 +5128,8 @@ function bindSchedDayPickerUI(){
       card.classList.toggle('shot-unit-active',isShotPlan()||(cardId==='dayplanCard'?!!getDay(selectedDayplanDayId)?.shotTimeline:state.shootDays.some(d=>d.shotTimeline)));
       let unit=card.querySelector('.shotPlanningUnit select');
       if(!unit&&window.RodaShotPlanningView){
-        const label=document.createElement('label');label.className='shotPlanningUnit row gap';label.innerHTML='Organizar por <select class="input" data-ro-allow="1" aria-label="Organizar plan por"><option value="scenes">Escenas</option><option value="shots">Planos</option></select>';
-        select.parentElement.before(label);unit=label.querySelector('select');
+        const label=document.createElement('label');label.className='shotPlanningUnit';label.innerHTML='Organizar por <select class="input" data-ro-allow="1" aria-label="Organizar plan por"><option value="scenes">Escenas</option><option value="shots">Planos</option></select>';
+        if(cardId==='dayplanCard')card.querySelector('.cardTitle').after(label);else select.parentElement.before(label);unit=label.querySelector('select');
         unit.addEventListener('change',()=>{planningShots=unit.value==='shots';try{localStorage.setItem('gb_planning_unit',unit.value);}catch(_e){}renderDayPlan();renderScheduleBoard();});
       }
       if(unit){unit.value=isShotPlan()?'shots':'scenes';unit.querySelector('[value="shots"]').disabled=!!window.RodaAccess&&!RodaAccess.canView('shotlist');}
@@ -5146,24 +5146,19 @@ function bindSchedDayPickerUI(){
   }
 
   function bindCompactPlanningSwap(container,general=false){
-    if(!container||container.dataset.compactSwapBound)return;
-    container.dataset.compactSwapBound='1';
-    RodaDaySwap.bindCompactSceneSwap(container,{
-      enabled:()=>isCompactPlan()&&!isReadOnly('planning'),
-      allowCrossDay:general,
-      readItem:node=>({kind:node.dataset.kind,id:general?node.dataset.itemId:node.dataset.id,dayId:general?node.dataset.dayId:selectedDayplanDayId}),
-      getScroller:()=>el(general?'schedWrap':'dpScroller'),
-      onSwap:(dayId,sourceId,targetId,targetDayId=dayId)=>{
-        const day=getDay(dayId);if(!day||isReadOnly('planning'))return;
-        const success=targetDayId===dayId?RodaDaySwap.swapScenes(day,sourceId,targetId):RodaDaySwap.swapScenesBetweenDays(day,sourceId,getDay(targetDayId),targetId);
-        if(!success){toast('No se pudo intercambiar: revisá superposiciones o el límite de la jornada.');return;}
-        const scrollers=['dpScroller','schedWrap'].map(id=>({node:el(id),top:el(id)?.scrollTop||0,left:el(id)?.scrollLeft||0}));
-        selectedDayplanDayId=targetDayId;dayplanSelectedKey='scene:'+sourceId;dayplanSelectedKeys=new Set([dayplanSelectedKey]);
-        if(general)el('schedBoard').dataset.selectedItem=JSON.stringify([targetDayId,'scene',sourceId]);
-        touch();renderDayPlan();renderScheduleBoard();renderSceneBank();renderDayDetail();renderReportsDetail();renderReports();
-        for(const {node,top,left} of scrollers)if(node){node.scrollTop=top;node.scrollLeft=left;}
-        toast('Escenas intercambiadas; se conservaron sus duraciones.');
-      }
+    if(!container||!window.RodaPlanningMovementView)return;
+    const free=()=>!!container.querySelector('.shotPlanRow')||container.classList.contains('shotPlanBoard')||container.id==='shotPlanDay';
+    const displayed=dayId=>{const d=getDay(dayId);if(!d)return [];return free()?(isShotPlan()?RodaShotPlanning.rows(state,d):RodaShotPlanning.groups(state,d)):buildDayplanItems(d);};
+    RodaPlanningMovementView.bind(container,{
+      state:()=>state,day:getDay,canEdit:()=>!isReadOnly('planning'),shots:()=>isShotPlan()||free(),change:shotPlanChange,
+      items:dayId=>displayed(dayId).map(r=>({...r,dayId})),
+      members:(dayId,key)=>{const row=displayed(dayId).find(r=>r.key===key);return row?.members||[key];},
+      read:node=>{if(!node)return null;const dayId=general?(node.dataset.dayId||node.closest('.shotPlanning')?.dataset.dayId):selectedDayplanDayId,key=node.dataset.key||(node.dataset.kind+':'+node.dataset.itemId);return {dayId,key,label:node.getAttribute('aria-label')||node.textContent.trim()};},
+      bars:()=>general?Array.from(container.querySelectorAll('.schedDay,.shotPlanDayColumn')).map(n=>({dayId:n.querySelector('[data-day-id]')?.dataset.dayId,node:n.querySelector('.schedHead,.shotPlanDayHeading')})).filter(r=>r.dayId&&r.node):[{dayId:selectedDayplanDayId,node:el('dayplanHead')}],
+      zones:()=>general?Array.from(container.querySelectorAll('.schedGrid,.shotPlanning')).map(node=>({node,dayId:node.dataset.dayId})): [{node:el(free()?'shotPlanDay':'dpScroller'),dayId:selectedDayplanDayId}],
+      timeline:()=>!free()&&!isCompactPlan(),
+      minute:(zone,y)=>{const d=getDay(zone.dayId),snapMin=Number(el(general?'schedSnap':'dayplanSnap')?.value||15),ppm=general?Number(el('schedZoom')?.value||90)/60:getDayplanPPM();const top=general?zone.node.getBoundingClientRect().top:el('dpLane').getBoundingClientRect().top;return snap((y-top)/ppm+(general?getScheduleBoardBaseHour():0)-minutesFromHHMM(d.callTime||'08:00'),snapMin);},
+      scrollers:()=>general?[el('schedWrap'),...container.querySelectorAll('.shotPlanning')]:[el(free()?'shotPlanDay':'dpScroller')]
     });
   }
 
@@ -5209,7 +5204,7 @@ function bindSchedDayPickerUI(){
         const heading=document.createElement('header');heading.className='shotPlanDayHeading';heading.textContent=[formatDayTitle(day.date),day.label,day.location].filter(Boolean).join(' · ');
         const host=document.createElement('div');host.id='shotPlanDay-'+day.id;column.append(heading,host);board.append(column);renderShotPlan(host,day,q);
       }
-      setupScheduleTopScrollbar();return;
+      bindCompactPlanningSwap(board,true);setupScheduleTopScrollbar();return;
     }
 
     const globalBaseHour = computeScheduleGlobalBaseHour(daysToShow);
@@ -5452,7 +5447,7 @@ function bindScheduleDnD(){
     if(block)selectScheduleItem(block.dataset.dayId,block.dataset.kind,block.dataset.itemId);
   });
   board.addEventListener("pointerdown", (e)=>{
-    if(isCompactPlan())return;
+    if(isCompactPlan()||!e.target.closest(".resize"))return;
     const block = e.target.closest(".schedBlock");
     if(!block) return;
 
@@ -6459,7 +6454,7 @@ items.push({
     let shotHost=el('shotPlanDay');
     if(!shotHost){shotHost=document.createElement('div');shotHost.id='shotPlanDay';el('dayplanCard').querySelector('.dayplanBody').before(shotHost);}
     shotHost.hidden=!(isShotPlan()||d.shotTimeline);
-    if(isShotPlan()||d.shotTimeline){renderShotPlan(shotHost,d);printWrap.innerHTML=shotPlanPrint(d);renderDayplanInspector(null,[]);return;}
+    if(isShotPlan()||d.shotTimeline){renderShotPlan(shotHost,d);bindCompactPlanningSwap(shotHost);printWrap.innerHTML=shotPlanPrint(d);renderDayplanInspector(null,[]);return;}
 
     // Timeline sizing
     const ppm = getDayplanPPM() || DAYPLAN_PPM;
@@ -6803,7 +6798,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
 
       // Drag / resize
       lane.addEventListener("pointerdown", (e)=>{
-        if(isCompactPlan())return;
+        if(isCompactPlan()||!e.target.closest('[data-action="resize"]'))return;
         const block = e.target.closest(".dpBlock");
         if(!block) return;
 
@@ -8332,7 +8327,7 @@ function renderReportDayplanDetail(d){
     const title=block?(it.title||'Bloque'):(it.slugline||it.title||'');
     const detail=block?String(it.detail||''):String(it.notes||'').trim()||firstWords(it.summary,28);
     const color=safeHexColor(it.color||(block?RodaProductionBlocks.palette.block:RodaProductionBlocks.palette.sceneAccent));
-    return `<tr class="${block?'dpPrintNote':''}" style="--row-accent:${esc(color)}">
+    return `<tr class="${block?'dpPrintNote':''}" style="--row-accent:${esc(color)};--row-ink:${RodaProductionBlocks.appearance(color).ink}">
       <td class="cHour"><div class="dpClock2"><b>${esc(clockLabelAbs(start))}</b><span>${esc(clockLabelAbs(end))}</span></div></td>
       <td class="cDur">${esc(formatDuration(Math.round(dur)))}</td>
       <td class="cNro">${block?'—':esc(it.number||'—')}</td>
@@ -8556,7 +8551,7 @@ function renderReportDayplanDetail(d){
       const labelKey=value=>String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,' ').trim().toLowerCase();
       const sceneDetail=s?[s.intExt,s.location,s.timeOfDay].filter(value=>value&&!labelKey(heading).includes(labelKey(value))).join(' · '):'';
       const detail=s?[sceneDetail,Number(s.pages)>0?`${fmtPages(s.pages)} pág`:'' ].filter(Boolean).join(' · '):(b.detail||'');
-      return `<tr class="${b?'csPrintBlock':''}"><td class="csPrintTime"><b>${esc(clock(it.start))}</b><span class="csPrintEnd"> – ${esc(clock(it.start+it.dur))}</span></td><td class="csPrintTime">${esc(formatDuration(Math.round(it.dur)))}</td><td class="csPrintScene">${s?esc(s.number||'—'):'—'}</td><td><strong>${esc(s?s.slugline:(b.title||'Bloque'))}</strong>${detail?`<p>${esc(detail)}</p>`:''}</td></tr>`;
+      return `<tr class="${b?'csPrintBlock':''}"${b?` style="--row-accent:${safeHexColor(b.color||RodaProductionBlocks.palette.block)};--row-ink:${RodaProductionBlocks.appearance(b.color).ink}"`:""}><td class="csPrintTime"><b>${esc(clock(it.start))}</b><span class="csPrintEnd"> – ${esc(clock(it.start+it.dur))}</span></td><td class="csPrintTime">${esc(formatDuration(Math.round(it.dur)))}</td><td class="csPrintScene">${s?esc(s.number||'—'):'—'}</td><td><strong>${esc(s?s.slugline:(b.title||'Bloque'))}</strong>${detail?`<p>${esc(detail)}</p>`:''}</td></tr>`;
     }).join('')||'<tr><td colspan="4">Sin escenas ni bloques programados.</td></tr>';
     const castColumns=[{label:'Actor / actriz · personaje',width:''},...(d.pickupCastEnabled?[{label:'Recogida<br>(PU)',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')}]:[]),{label:'Citación',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')},{label:'Primera<br>escena',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')},{label:'Fin<br>estimado',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')},...(d.rtsEnabled?[{label:'Listo en set<br>(RTS)',width:(d.pickupCastEnabled&&d.rtsEnabled?'12%':'14%')}]:[])];
     // Group only identical calls for the same person; retain any role-specific overrides.
