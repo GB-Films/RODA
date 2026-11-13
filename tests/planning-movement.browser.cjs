@@ -46,28 +46,30 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   seed.shootDays[0].sceneIds=['s1','s2','s4'];seed.shootDays[0].times={s1:0,s2:60,s4:90};seed.shootDays[0].durations={s1:30,s2:30,s4:45};seed.shootDays[0].blocks=[{id:'meal',title:'Almuerzo',startMin:30,durMin:30}];
   await boot(seed);await page.locator('.navBtn[data-view="dayplan"]').click();
   const unit=page.locator('#dayplanCard [aria-label="Organizar plan por"]');assert.equal(await unit.isVisible(),true);
-  async function drag(from,to,after=false,touch=false){const a=await page.locator(from).boundingBox(),b=await page.locator(to).boundingBox(),x=a.x+a.width/2,y=a.y+a.height/2,tx=b.x+b.width/2,ty=b.y+b.height*(after?.8:.3);if(touch){const grip=await page.locator(from+' .planTouchGrip').boundingBox(),cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:grip.x+grip.width/2,y}]});for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:grip.x+grip.width/2+(tx-grip.x-grip.width/2)*i/8,y:y+(ty-y)*i/8}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();}else{await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(tx,ty,{steps:8});await page.mouse.up();}await page.waitForTimeout(100);}
+  async function drag(from,to,after=false,touch=false){const a=await page.locator(from).boundingBox(),b=await page.locator(to).boundingBox(),x=a.x+a.width/2,y=a.y+a.height/2,tx=b.x+b.width/2,ty=after==='swap'?b.y+b.height/2:after?b.y+b.height-3:b.y+3;if(touch){const grip=await page.locator(from+' .planTouchGrip').boundingBox(),cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:grip.x+grip.width/2,y}]});for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:grip.x+grip.width/2+(tx-grip.x-grip.width/2)*i/8,y:y+(ty-y)*i/8}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();}else{await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(tx,ty,{steps:8});assert.equal(await page.locator('.planningDragGhost,.planningDragMode').count(),0);assert.equal(await page.locator(after==='swap'?'.planning-swap-target':after?'.planning-insert-after':'.planning-insert-before').count(),1);await page.screenshot({path:path.join(output,after==='swap'?'swap-preview.png':'insert-preview.png')});await page.mouse.up();}await page.waitForTimeout(100);}
   async function box(first,last,gutter){const a=await page.locator(first).boundingBox(),b=await page.locator(last).boundingBox();await page.mouse.move(a.x-gutter,a.y+2);await page.mouse.down();await page.mouse.move(a.x+60,b.y+b.height-2,{steps:8});await page.mouse.up();}
-  assert.equal(await page.locator('.planningCheck,.planningSelectionBar').count(),0);
+  assert.equal(await page.locator('.planningCheck,.planningSelectionBar,.planningDragMode,.daySwapHint').count(),0);
   await page.locator('#dpScroller').evaluate(n=>n.scrollTop=Math.max(0,n.scrollTop-100));
   await box('#dpLane [data-key="scene:s1"]','#dpLane [data-key="block:meal"]',20);
   assert.equal(await page.locator('#dpLane .movement-selected').count(),2);
-  await drag('#dpLane [data-key="scene:s1"]','#dpLane [data-key="scene:s4"]',true);
+  await page.keyboard.down('Shift');await drag('#dpLane [data-key="scene:s1"]','#dpLane [data-key="scene:s4"]',true);await page.keyboard.up('Shift');
   assert.deepEqual(await page.evaluate(()=>savedState.shootDays[0].times),{s2:0,s4:30,s1:75});assert.equal(await page.evaluate(()=>savedState.shootDays[0].blocks[0].startMin),105);
   await page.keyboard.press('Control+z');await page.keyboard.press('Escape');
   await page.locator('#dayplanView').selectOption('compact');
   await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('#dayNavigation summary').click();await page.locator('#dayNavigation [data-day="all"]').click();
   await box('#schedBoard [data-item-id="s1"]','#schedBoard [data-item-id="meal"]',15);assert.equal(await page.locator('#schedBoard .movement-selected').count(),2);
   await drag('#schedBoard [data-item-id="s1"]','#schedBoard [data-item-id="s3"]');assert.equal(await page.evaluate(()=>savedState.shootDays[1].times.s3),60);await page.locator('#btnSchedUndo').click();await page.keyboard.press('Escape');
+  await drag('#schedBoard [data-item-id="s4"]','#schedBoard [data-item-id="s3"]','swap');
+  assert.equal(await page.evaluate(()=>savedState.shootDays[1].durations.s4),45);assert.equal(await page.evaluate(()=>savedState.shootDays[0].times.s3),90);
+  await page.locator('#btnSchedUndo').click();await page.keyboard.press('Escape');
   await page.locator('.navBtn[data-view="dayplan"]').click();
   for(const width of [820,390]){
    await page.setViewportSize({width,height:1000});await page.waitForTimeout(150);
-   const mode=page.locator('#dayplanHead [data-drag-mode="swap"]');await mode.click();assert.equal(await mode.getAttribute('aria-pressed'),'true');
    const before=await page.evaluate(()=>structuredClone(savedState.shootDays[0]));
-   await drag('#dpLane [data-key="block:meal"]','#dpLane [data-key="scene:s4"]',false,true);
+   await drag('#dpLane [data-key="block:meal"]','#dpLane [data-key="scene:s4"]','swap',true);
    assert.equal(await page.evaluate(()=>savedState.shootDays[0].blocks[0].startMin),105);assert.equal(await page.evaluate(()=>savedState.shootDays[0].times.s4),30);assert.equal(await page.evaluate(()=>savedState.shootDays[0].durations.s4),45);
    await page.keyboard.press('Control+z');await page.keyboard.press('Escape');
-   await page.locator('#dayplanHead [data-drag-mode="insert"]').click();await drag('#dpLane [data-key="block:meal"]','#dpLane [data-key="scene:s4"]',false,true);
+   await drag('#dpLane [data-key="block:meal"]','#dpLane [data-key="scene:s4"]',false,true);
    assert.equal(await page.evaluate(()=>savedState.shootDays[0].blocks[0].startMin),60);assert.equal(await page.evaluate(()=>savedState.shootDays[0].times.s4),90);await page.keyboard.press('Control+z');await page.keyboard.press('Escape');
    const fit=await page.locator('#dayplanHead').evaluate(n=>n.scrollWidth<=n.clientWidth+2);assert.ok(fit);await page.screenshot({path:path.join(output,'marquee-'+width+'.png')});
   }
@@ -86,6 +88,6 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await page.screenshot({path:path.join(output,'marquee-desktop.png')});await page.keyboard.press('Escape');await page.mouse.up();
   assert.equal(await page.locator('#shotPlanDay .movement-selected').count(),0);assert.equal(await page.locator('.planningMarquee').count(),0);
   assert.equal(await page.evaluate(()=>JSON.stringify(savedState.shootDays)),beforeBox);
-  assert.deepEqual(errors,[]);console.log('Marquee selection, group movement, cross-day insertion, touch insert/swap for scenes and blocks, undo and responsive controls passed. '+output);
+  assert.deepEqual(errors,[]);console.log('Marquee selection, group movement, cross-day insertion, position-based touch insert/swap for scenes and blocks, undo and responsive controls passed. '+output);
  }finally{await browser?.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

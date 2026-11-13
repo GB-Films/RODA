@@ -9,7 +9,7 @@
     const api=root.RodaShotPlanning,rows=grouped?api.groups(state,day):api.rows(state,day),top=host.scrollTop;
     const selected=host.dataset.selected;
     host.className='shotPlanning';host.dataset.dayId=day.id;
-    host.innerHTML=`<p class="shotPlanHint">${grouped?'Escenas agrupadas por planos consecutivos. Arrastrá para insertar; Shift + arrastrar intercambia.':'Arrastrá para insertar y reacomodar horarios. Shift + arrastrar intercambia. Los planos y bloques conservan su duración.'}</p><div class="shotPlanRows"></div><aside class="shotPlanDetail" hidden></aside>`;
+    host.innerHTML=`<div class="shotPlanRows"></div><aside class="shotPlanDetail" hidden></aside>`;
     const list=host.querySelector('.shotPlanRows');
     if(!grouped&&canEdit()){
       const scheduled=new Set((state.shootDays||[]).flatMap(d=>api.rows(state,d).filter(r=>r.kind==='shot').map(r=>r.key)));
