@@ -5099,8 +5099,8 @@ function bindSchedDayPickerUI(){
     catch(error){toast(error.message);renderDayPlan();renderScheduleBoard();}
   }
   function renderShotPlan(host,day,query=''){
-    const grouped=!isShotPlan();
-    RodaShotPlanningView.render(host,{state,day,query,grouped,canEdit:()=>!isReadOnly('planning'),change:shotPlanChange,
+    const grouped=!isShotPlan(),general=host.id!=='shotPlanDay';
+    RodaShotPlanningView.render(host,{state,day,query,grouped,general,compact:isCompactPlan(),ppm:general?Number(el('schedZoom')?.value||90)/60:getDayplanPPM(),canEdit:()=>!isReadOnly('planning'),change:shotPlanChange,
       openScene:sceneId=>{selectedShotlistDayId=day.id;selectedShotlistSceneId=sceneId;shotlistExpandedSceneIds.add(sceneId);showView('shotlist');renderShotList();requestAnimationFrame(()=>Array.from(el('shotlistWrap').querySelectorAll('[data-scene-id]')).find(n=>n.dataset.sceneId===sceneId)?.scrollIntoView({block:'start'}));}});
   }
   function shotPlanPrint(day){return buildPlanningDayPrint(day,"Plan de rodaje",true);}
@@ -5125,7 +5125,7 @@ function bindSchedDayPickerUI(){
       let unit=card.querySelector('.shotPlanningUnit select');
       if(!unit&&window.RodaShotPlanningView){
         const label=document.createElement('label');label.className='shotPlanningUnit';label.innerHTML='Organizar por <select class="input" data-ro-allow="1" aria-label="Organizar plan por"><option value="scenes">Escenas</option><option value="shots">Planos</option></select>';
-        if(cardId==='dayplanCard')card.querySelector('.cardTitle').after(label);else select.parentElement.before(label);unit=label.querySelector('select');
+        if(cardId==='dayplanCard')card.querySelector('.dpToolbar').prepend(label);else select.parentElement.before(label);unit=label.querySelector('select');
         unit.addEventListener('change',()=>{planningShots=unit.value==='shots';try{localStorage.setItem('gb_planning_unit',unit.value);}catch(_e){}renderDayPlan();renderScheduleBoard();});
       }
       if(unit){unit.value=isShotPlan()?'shots':'scenes';unit.querySelector('[value="shots"]').disabled=!!window.RodaAccess&&!RodaAccess.canView('shotlist');}
@@ -5152,8 +5152,8 @@ function bindSchedDayPickerUI(){
       read:node=>{if(!node)return null;const dayId=general?(node.dataset.dayId||node.closest('.shotPlanning')?.dataset.dayId):selectedDayplanDayId,key=node.dataset.key||(node.dataset.kind+':'+node.dataset.itemId);return {dayId,key,label:node.getAttribute('aria-label')||node.textContent.trim()};},
       bars:()=>general?Array.from(container.querySelectorAll('.schedDay,.shotPlanDayColumn')).map(n=>({dayId:n.querySelector('[data-day-id]')?.dataset.dayId,node:n.querySelector('.schedHead,.shotPlanDayHeading')})).filter(r=>r.dayId&&r.node):[{dayId:selectedDayplanDayId,node:el('dayplanHead')}],
       zones:()=>general?Array.from(container.querySelectorAll('.schedGrid,.shotPlanning')).map(node=>({node,dayId:node.dataset.dayId})): [{node:el(free()?'shotPlanDay':'dpScroller'),dayId:selectedDayplanDayId}],
-      timeline:()=>!free()&&!isCompactPlan(),
-      minute:(zone,y)=>{const d=getDay(zone.dayId),snapMin=Number(el(general?'schedSnap':'dayplanSnap')?.value||15),ppm=general?Number(el('schedZoom')?.value||90)/60:getDayplanPPM();const top=general?zone.node.getBoundingClientRect().top:el('dpLane').getBoundingClientRect().top;return snap((y-top)/ppm+(general?getScheduleBoardBaseHour():0)-minutesFromHHMM(d.callTime||'08:00'),snapMin);},
+      timeline:()=>!isCompactPlan(),
+      minute:(zone,y)=>{if(free()){const host=zone.node,list=host.querySelector('.shotPlanRows'),base=minutesFromHHMM(getDay(zone.dayId).callTime||'08:00');return snap((y-list.getBoundingClientRect().top)/Number(host.dataset.ppm)-base,Number(el(general?'schedSnap':'dayplanSnap')?.value||15));}const d=getDay(zone.dayId),snapMin=Number(el(general?'schedSnap':'dayplanSnap')?.value||15),ppm=general?Number(el('schedZoom')?.value||90)/60:getDayplanPPM();const top=general?zone.node.getBoundingClientRect().top:el('dpLane').getBoundingClientRect().top;return snap((y-top)/ppm+(general?getScheduleBoardBaseHour():0)-minutesFromHHMM(d.callTime||'08:00'),snapMin);},
       scrollers:()=>general?[el('schedWrap'),...container.querySelectorAll('.shotPlanning')]:[el(free()?'shotPlanDay':'dpScroller')]
     });
   }
@@ -5196,10 +5196,12 @@ function bindSchedDayPickerUI(){
       renderDayplanInspector(null,[]);
       for(const day of daysToShow){
         ensureDayTimingMaps(day);
-        const column=document.createElement('section');column.className='shotPlanDayColumn';
-        const heading=document.createElement('header');heading.className='shotPlanDayHeading';heading.textContent=[formatDayTitle(day.date),day.label,day.location].filter(Boolean).join(' · ');
+        const column=document.createElement('section');column.className='shotPlanDayColumn schedDay';
+        const heading=document.createElement('header');heading.className='shotPlanDayHeading schedHead';heading.innerHTML=`<div class="t">${esc(formatDayTitle(day.date))}${day.label?' · '+esc(day.label):''}</div><div class="m">Call ${esc(day.callTime||'')} · ${esc(day.location||'')}</div>`;
         const host=document.createElement('div');host.id='shotPlanDay-'+day.id;column.append(heading,host);board.append(column);renderShotPlan(host,day,q);
       }
+      const focus=daysToShow.map(d=>d.id).join(',')+':'+isCompactPlan();
+      if(document.body.dataset.rodaView==='schedule'&&board.dataset.shotFocus!==focus){el('schedWrap').scrollTop=isCompactPlan()?0:Math.min(...daysToShow.map(d=>minutesFromHHMM(d.callTime||'08:00')))*Number(el('schedZoom')?.value||90)/60;board.dataset.shotFocus=focus;}
       bindCompactPlanningSwap(board,true);setupScheduleTopScrollbar();return;
     }
 

@@ -53,7 +53,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   const unit=page.locator('#dayplanCard [aria-label="Organizar plan por"]');
   assert.equal(await unit.inputValue(),'scenes');
   const baseline=await page.evaluate(()=>structuredClone(savedState));
-  await unit.selectOption('shots');
+  await unit.selectOption('shots');await page.locator('#dayplanView').selectOption('compact');
   assert.equal(await page.locator('#shotPlanDay .shotPlanRow.shot').count(),3);
   assert.deepEqual(await page.evaluate(()=>savedState.shootDays),baseline.shootDays);
   const clock=()=>page.locator('#shotPlanDay .shotPlanRow.shot .shotPlanClock').allTextContents();

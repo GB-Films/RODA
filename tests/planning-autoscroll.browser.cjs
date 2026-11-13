@@ -82,9 +82,10 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await exercise('#schedWrap','#schedBoard .schedDay:first-child .schedBlock',{heading:'#schedBoard .schedHead'});
   await page.locator('#schedView').selectOption('timeline');await exercise('#schedWrap','#schedBoard .schedDay:first-child .schedBlock',{heading:'#schedBoard .schedHead',focusFirst:true});
   await page.locator('.navBtn[data-view="dayplan"]').click();await page.locator('#dayplanCard [aria-label="Organizar plan por"]').selectOption('shots');
-  await exercise('#shotPlanDay','#shotPlanDay .shotPlanRow');
+  await exercise('#shotPlanDay','#shotPlanDay .shotPlanRow',{focusFirst:true});
   await page.locator('.navBtn[data-view="schedule"]').click();
-  await exercise('#shotPlanDay-d1','#shotPlanDay-d1 .shotPlanRow');
+  await exercise('#schedWrap','#shotPlanDay-d1 .shotPlanRow',{heading:'.shotPlanDayHeading',focusFirst:true});
+  await page.locator('#schedView').selectOption('compact');await exercise('#schedWrap','#shotPlanDay-d1 .shotPlanRow',{heading:'.shotPlanDayHeading'});
   await page.locator('.navBtn[data-view="dayplan"]').click();
   for(const width of [820,390]){await page.setViewportSize({width,height:1000});await page.waitForTimeout(100);await exercise('#shotPlanDay','#shotPlanDay .shotPlanRow',{touch:true});}
   assert.deepEqual(errors,[]);console.log('Edge scrolling up/down, stationary pointer, center stop, speed increase, sticky headings, nested shot lists, mouse/touch, drop+undo and cancel passed. '+output);
