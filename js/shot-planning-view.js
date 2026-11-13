@@ -2,33 +2,50 @@
   'use strict';
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const time=(day,min)=>{const [h,m]=String(day.callTime||'08:00').split(':').map(Number),abs=h*60+m+min;return String(Math.floor(abs/60)%24).padStart(2,'0')+':'+String(Math.round(abs%60)).padStart(2,'0')+(abs>=1440?' +1':'');};
-  function fit(){const host=document.getElementById('shotPlanDay');if(host&&!host.hidden)host.style.maxHeight=Math.max(160,innerHeight-host.getBoundingClientRect().top-24)+'px';}
+  function fit(){
+    const host=document.getElementById('shotPlanDay');
+    if(host&&!host.hidden){
+      const rect=host.getBoundingClientRect();host.style.maxHeight=Math.max(160,innerHeight-rect.top-24)+'px';
+      const detail=host.querySelector('.shotPlanDetail');
+      if(detail&&!detail.hidden&&innerWidth>700){const width=Math.min(320,rect.width-24);Object.assign(detail.style,{top:rect.top+'px',left:(rect.right-width)+'px',width:width+'px',height:Math.min(rect.height,innerHeight-rect.top-24)+'px'});}
+      else if(detail)detail.removeAttribute('style');
+    }
+  }
   const observer=new ResizeObserver(()=>requestAnimationFrame(fit));
   window.addEventListener('resize',()=>requestAnimationFrame(fit));
-  function render(host,{state,day,canEdit,change,openScene,query='',grouped=false}){
-    const api=root.RodaShotPlanning,rows=grouped?api.groups(state,day):api.rows(state,day),top=host.scrollTop;
+  function render(host,{state,day,canEdit,change,openScene,query='',grouped=false,general=false,compact=false,ppm=1.2}){
+    const api=root.RodaShotPlanning,rows=grouped?api.groups(state,day):api.rows(state,day),oldPpm=Number(host.dataset.ppm)||ppm,top=host.scrollTop*(host.classList.contains('shotPlanTimeline')&&!compact?ppm/oldPpm:1);
     const selected=host.dataset.selected;
-    host.className='shotPlanning';host.dataset.dayId=day.id;
+    host.className='shotPlanning '+(compact?'shotPlanCompact':'shotPlanTimeline');host.dataset.dayId=day.id;host.dataset.ppm=ppm;
     host.innerHTML=`<div class="shotPlanRows"></div><aside class="shotPlanDetail" hidden></aside>`;
     const list=host.querySelector('.shotPlanRows');
-    if(!grouped&&canEdit()){
+    if(!general)document.querySelector('#dayplanHead .shotPlanAdd')?.remove();
+    if(!grouped&&!general&&canEdit()){
       const scheduled=new Set((state.shootDays||[]).flatMap(d=>api.rows(state,d).filter(r=>r.kind==='shot').map(r=>r.key)));
       const available=state.scenes.flatMap(owner=>(owner.shots||[]).map((shot,i)=>({owner,shot,number:i+1,key:owner.id+'|'+shot.id}))).filter(r=>!scheduled.has(r.key));
       if(available.length){
         const add=document.createElement('details');add.className='shotPlanAdd';
         add.innerHTML='<summary>+ Programar un plano pendiente ('+available.length+')</summary><label>Plano<select class="input" aria-label="Plano pendiente"></select></label><button type="button" class="btn">Agregar a esta jornada</button>';
         const select=add.querySelector('select');for(const r of available){const opt=document.createElement('option');opt.value=r.key;opt.textContent=`E${r.owner.number} · P${r.number} · ${r.shot.type||'Plano'} · ${r.shot.desc||''}`;select.append(opt);}
-        add.querySelector('button').onclick=()=>{const r=available.find(r=>r.key===select.value);if(r&&canEdit())change(()=>api.addShot(state,day,r.owner.id,r.shot.id));};host.insertBefore(add,list);
+        add.querySelector('button').onclick=()=>{const r=available.find(r=>r.key===select.value);if(r&&canEdit())change(()=>api.addShot(state,day,r.owner.id,r.shot.id));};(document.getElementById('dayplanHead')||host).append(add);
       }
     }
-    let lastScene=null;
+    const [callH,callM]=String(day.callTime||'08:00').split(':').map(Number),base=callH*60+callM;
+    if(!compact){
+      const end=Math.max(day.night?1800:1440,...rows.map(r=>base+r.start+r.dur));
+      list.style.height=Math.ceil(end*ppm)+'px';
+      for(let minute=0;minute<=end;minute+=30){
+        const line=document.createElement('div');line.className='shotPlanGridLine'+(minute%60===0?' hour':'');line.style.top=(minute*ppm)+'px';
+        if(minute%60===0){const label=document.createElement('span');label.textContent=time({callTime:'00:00'},minute);line.append(label);}list.append(line);
+      }
+    }
     for(const row of rows){
       if(query&&!`${row.number||''} ${row.title} ${row.desc}`.toLowerCase().includes(query.toLowerCase()))continue;
-      if(row.kind==='shot'&&lastScene!==row.sceneId){const scene=state.scenes.find(s=>s.id===row.sceneId),h=document.createElement('div');h.className='shotPlanGroup';h.textContent=`Tanda #${scene.number} · ${scene.slugline}`;list.append(h);}
-      lastScene=row.kind==='shot'?row.sceneId:null;
-      const node=document.createElement('div');node.className='shotPlanRow '+row.kind;node.dataset.key=row.key;node.dataset.scene=row.sceneId||'';
-      if(row.kind==='block'&&/^#[0-9a-f]{6}$/i.test(row.color))node.style.setProperty('--block-color',row.color);
-      node.innerHTML=`${row.kind==='shot'?`<button class="shotPlanGrip" aria-label="Mover escena ${esc(row.number)}, plano ${row.shotNumber}" title="Arrastrar o usar flechas arriba y abajo" ${canEdit()?'':'disabled'}>⠿</button>`:''}<button class="shotPlanSelect" data-ro-allow="1"><span class="shotPlanClock">${time(day,row.start)}–${time(day,row.start+row.dur)} <small>${row.dur} min</small></span><span><strong>${row.kind==='shot'?`E${esc(row.number)} · P${row.shotNumber} · `:row.kind==='scene'?`E${esc(row.number)} · `:''}${esc(row.title)}</strong><span class="shotPlanDescription">${esc(row.desc)}</span></span></button>`;
+      const node=document.createElement('div');node.className='shotPlanRow '+row.kind;node.dataset.key=row.key;node.dataset.scene=row.sceneId||'';node.dataset.kind=row.kind;
+      if(!compact){node.style.top=((base+row.start)*ppm)+'px';node.style.height=(row.dur*ppm)+'px';node.classList.toggle('is-short',row.dur*ppm<(general?46:30));node.classList.toggle('is-tight',row.dur*ppm<46);}
+      node.title=`${time(day,row.start)}–${time(day,row.start+row.dur)} · ${row.dur} min · ${row.kind==='shot'?`E${row.number} · P${row.shotNumber} · `:''}${row.title} · ${row.desc}`;
+      if(row.kind==='block'&&/^#[0-9a-f]{6}$/i.test(row.color)){node.style.setProperty('--block-color',row.color);node.style.color=root.RodaProductionBlocks?.appearance(row.color).ink||'#0b0b0b';}
+      node.innerHTML=`${row.kind==='shot'?`<button class="shotPlanGrip" aria-label="Mover escena ${esc(row.number)}, plano ${row.shotNumber}" title="Arrastrar o usar flechas arriba y abajo" ${canEdit()?'':'disabled'}>⠿</button>`:''}<button class="shotPlanSelect" data-ro-allow="1"><span class="shotPlanClock">${time(day,row.start)}–${time(day,row.start+row.dur)} <small>${row.dur} min</small></span><span><strong>${row.kind==='shot'?`E${esc(row.number)} · P${row.shotNumber} · `:row.kind==='scene'?`E${esc(row.number)} · `:''}${esc(row.title)}</strong></span></button>`;
       list.append(node);
       node.querySelector('.shotPlanSelect').onclick=()=>select(row);
       const grip=node.querySelector('.shotPlanGrip');if(!grip)continue;
@@ -61,10 +78,10 @@
         window.addEventListener('pointermove',onmove);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',finish);window.addEventListener('keydown',escape);window.addEventListener('blur',finish);
       };
     }
-    if(!rows.length)list.innerHTML='<p class="muted">Jornada sin actividades. Arrastrá un plano acá o elegí esta jornada desde el detalle del plano.</p>';
+    if(!rows.length){const empty=document.createElement('p');empty.className='muted shotPlanEmpty';empty.textContent='Jornada sin actividades. Arrastrá un plano acá o elegí esta jornada desde el detalle del plano.';if(!compact){empty.style.position='absolute';empty.style.top=(base*ppm+12)+'px';empty.style.left='98px';empty.style.right='12px';}list.append(empty);}
     function select(row){
       host.dataset.selected=row.key;host.querySelectorAll('.shotPlanRow').forEach(n=>n.classList.toggle('selected',n.dataset.key===row.key));
-      const detail=host.querySelector('.shotPlanDetail');detail.hidden=false;
+      const detail=host.querySelector('.shotPlanDetail');detail.hidden=false;host.classList.add('has-detail');
       detail.innerHTML=`<button class="btn small shotPlanClose" data-ro-allow="1">Cerrar ×</button><h3>${row.kind==='shot'?`Escena ${esc(row.number)} · Plano ${row.shotNumber}`:esc(row.title)}</h3><p>${esc(row.title)}</p><p class="shotPlanFullDescription">${esc(row.desc)}</p><p><b>${time(day,row.start)}–${time(day,row.start+row.dur)}</b> · ${row.dur} min</p>${['shot','block'].includes(row.kind)?`<label>Duración de rodaje (min)<input class="input" type="number" min="1" max="720" step="1" aria-label="Duración del plano" value="${row.dur}" ${canEdit()?'':'disabled'}></label><p class="small muted">Cada plano conserva su duración. Los siguientes se acomodan al moverlo o cambiar sus minutos.</p>`:''}${row.sceneId?'<button class="btn shotPlanOpen" data-ro-allow="1">Abrir en Shotlist →</button>':''}`;
       if(row.kind==='block'&&canEdit()){
         const form=document.createElement('div');form.className='shotPlanBlockFields';
@@ -84,13 +101,21 @@
         for(const input of [destination,position,button])input.disabled=!canEdit();
         button.onclick=()=>{if(canEdit())change(()=>api.move(state,day,row.key,state.shootDays.find(d=>d.id===destination.value),position.value||null));};
       }
-      detail.querySelector('.shotPlanClose').onclick=()=>{detail.hidden=true;delete host.dataset.selected;nodeSelection();};
+      detail.querySelector('.shotPlanClose').onclick=()=>{detail.hidden=true;host.classList.remove('has-detail');delete host.dataset.selected;nodeSelection();fit();};
       detail.querySelector('input')?.addEventListener('change',e=>{if(canEdit())change(()=>api.duration(state,day,row.sceneId,row.key,e.target.value));});
-      detail.querySelector('.shotPlanOpen')?.addEventListener('click',()=>openScene(row.sceneId));
+      detail.querySelector('.shotPlanOpen')?.addEventListener('click',()=>openScene(row.sceneId));requestAnimationFrame(fit);
     }
     function nodeSelection(){host.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));}
     const previous=rows.find(r=>r.key===selected);if(previous)select(previous);
-    host.scrollTop=top;if(host.id==='shotPlanDay')observer.observe(host.parentElement);requestAnimationFrame(fit);
+    const focus=day.id+':'+compact;
+    if(!general){
+      const initial=host.dataset.focus!==focus&&document.body.dataset.rodaView==='dayplan';
+      host.scrollTop=initial?(compact?0:base*ppm+list.offsetTop):top;
+      if(initial)host.dataset.focus=focus;
+      observer.observe(host.parentElement);
+      requestAnimationFrame(()=>{fit();if(initial)host.scrollTop=compact?0:base*ppm+list.offsetTop;});
+    }
+    requestAnimationFrame(fit);
   }
   root.RodaShotPlanningView={render,time};
 })(window);
