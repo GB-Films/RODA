@@ -73,9 +73,41 @@
         else p.target={dayId:zone.dayId};
       }
     }
-    function tick(){const p=drag;if(!p)return;if(!container._movement.canEdit()||!p.node.isConnected){finish(false);return;}
-      for(const sc of container._movement.scrollers()){const rect=sc.getBoundingClientRect(),b={left:Math.max(0,rect.left),right:Math.min(window.innerWidth,rect.right),top:Math.max(0,rect.top),bottom:Math.min(window.innerHeight,rect.bottom)};if(p.x<b.left-20||p.x>b.right+20||p.y<b.top-20||p.y>b.bottom+20)continue;if(p.y<b.top+40)sc.scrollTop-=12;else if(p.y>b.bottom-40)sc.scrollTop+=12;if(p.x<b.left+35)sc.scrollLeft-=10;else if(p.x>b.right-35)sc.scrollLeft+=10;}
-      locate();p.frame=requestAnimationFrame(tick);
+    function scrollBounds(sc,p){
+      const rect=sc.getBoundingClientRect(),view=root.visualViewport;
+      const b={left:Math.max(view?.offsetLeft||0,rect.left+sc.clientLeft),right:Math.min((view?.offsetLeft||0)+(view?.width||innerWidth),rect.left+sc.clientLeft+sc.clientWidth),top:Math.max(view?.offsetTop||0,rect.top+sc.clientTop),bottom:Math.min((view?.offsetTop||0)+(view?.height||innerHeight),rect.top+sc.clientTop+sc.clientHeight)};
+      // A nested shot list may be taller than its visible parent. Use the part
+      // actually on screen, not the off-screen bottom of the list.
+      for(let parent=sc.parentElement;parent;parent=parent.parentElement){
+        const style=getComputedStyle(parent),r=parent.getBoundingClientRect();
+        if(/auto|scroll|hidden|clip/.test(style.overflowY)){b.top=Math.max(b.top,r.top+parent.clientTop);b.bottom=Math.min(b.bottom,r.top+parent.clientTop+parent.clientHeight);}
+        if(/auto|scroll|hidden|clip/.test(style.overflowX)){b.left=Math.max(b.left,r.left+parent.clientLeft);b.right=Math.min(b.right,r.left+parent.clientLeft+parent.clientWidth);}
+      }
+      // The fixed day headings cover the top of the general plan's scroll area.
+      for(const head of sc.querySelectorAll('.schedHead,.shotPlanDayHeading')){
+        const r=head.getBoundingClientRect();if(p.x>=r.left&&p.x<=r.right&&r.top<=b.top+12&&r.bottom>b.top)b.top=Math.min(b.bottom,r.bottom);
+      }
+      return b;
+    }
+    function edgeSpeed(value,start,end,band,maxSpeed){
+      band=Math.min(band,(end-start)/3);if(band<=0)return 0;
+      const distance=Math.min(value-start,end-value);if(distance>=band)return 0;
+      const strength=Math.min(1,Math.max(0,(band-distance)/band));
+      return (value<(start+end)/2?-1:1)*(100+(maxSpeed-100)*strength*strength);
+    }
+    function tick(now){const p=drag;if(!p)return;if(!container._movement.canEdit()||!p.node.isConnected){finish(false);return;}
+      const elapsed=Math.min(32,Math.max(0,now-(p.scrollFrame??now-16)))/1000;p.scrollFrame=now;
+      let changed=false,movedX=false,movedY=false;
+      // Prefer the inner scrollable list; never scroll two nested panels on
+      // the same axis in one frame. The pointer can stay still at the edge.
+      for(const sc of [...container._movement.scrollers()].filter(Boolean).reverse()){
+        const b=scrollBounds(sc,p);if(b.right<=b.left||b.bottom<=b.top||p.x<b.left-48||p.x>b.right+48||p.y<b.top-72||p.y>b.bottom+72)continue;
+        const x=sc.scrollLeft,y=sc.scrollTop;
+        if(!movedY&&sc.scrollHeight>sc.clientHeight+1)sc.scrollTop+=edgeSpeed(p.y,b.top,b.bottom,72,1000)*elapsed;
+        if(!movedX&&sc.scrollWidth>sc.clientWidth+1)sc.scrollLeft+=edgeSpeed(p.x,b.left,b.right,48,650)*elapsed;
+        movedY ||= sc.scrollTop!==y;movedX ||= sc.scrollLeft!==x;changed ||= sc.scrollTop!==y||sc.scrollLeft!==x;
+      }
+      if(changed)locate();p.frame=requestAnimationFrame(tick);
     }
     function finish(commit){const p=drag;if(!p)return;if(commit)locate();drag=null;cancelAnimationFrame(p.frame);p.ghost?.remove();clearTarget();doc.body.classList.remove('shot-plan-dragging');container.querySelectorAll('.planning-moving').forEach(n=>n.classList.remove('planning-moving'));
       if(p.marquee&&!commit){selections.set(p.r.dayId,p.before);paint();}
