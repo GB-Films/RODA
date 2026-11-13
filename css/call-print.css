@@ -1,4 +1,7 @@
 /* Production documents: white paper, studio identity, clear timing hierarchy. */
+.productionLocationLink{display:flex!important;align-items:baseline;gap:3mm;flex-wrap:wrap;margin-top:1.5mm;font:8pt/1.35 Arial,Helvetica,sans-serif;overflow-wrap:anywhere;white-space:normal;}
+.productionLocationLink>span{display:inline;font:inherit!important;margin:0!important;}
+.productionLocationLink a{display:inline;color:#164e80!important;text-decoration:underline!important;font:inherit;}
 .productionPrintMasthead{display:flex;align-items:center;justify-content:space-between;gap:6mm;padding:0 0 4mm;border-bottom:1.5pt solid #17191b;margin-bottom:4mm;font-family:Arial,Helvetica,sans-serif;color:#17191b;break-inside:avoid;}
 .productionPrintBrand{display:flex;align-items:center;gap:3mm;min-width:0;}
 .productionPrintBrand img{display:block;width:14mm;height:14mm;object-fit:contain;flex-shrink:0;}
@@ -55,7 +58,7 @@
  body.gbPrintingCallsheet #gbPrintRoot{page:rodaCallSheet;}
  body.gbPrintingDayplan #gbPrintRoot{page:rodaDayPlan;font-family:Arial,Helvetica,sans-serif;}
  .csPrint{print-color-adjust:exact;-webkit-print-color-adjust:exact;}
- body.gbPrintingDayplan .dpPrintHeader{margin-bottom:4mm;}
+ body.gbPrintingDayplan .dpPrintHeader{margin-bottom:0;}
  body.gbPrintingDayplan .dpPrintHeading{border:0;gap:6mm;padding-bottom:3mm;}
  body.gbPrintingDayplan .dpPrintHeading h1{font-size:23pt;letter-spacing:-.5pt;}
  body.gbPrintingDayplan .dpPrintDay{font-size:11pt;}
@@ -63,7 +66,13 @@
  body.gbPrintingDayplan .dayplanPrintTable{width:100%;table-layout:fixed;border-collapse:collapse;font:9pt/1.35 Arial,Helvetica,sans-serif;}
  body.gbPrintingDayplan .dayplanPrintTable th,body.gbPrintingDayplan .dayplanPrintTable td{border:0;border-bottom:1px solid #d7dade;padding:1.25mm 2mm;vertical-align:top;word-break:normal;overflow-wrap:anywhere;}
  body.gbPrintingDayplan .dayplanPrintTable th{font-size:8pt;background:#e9ebed;text-align:left;}
- body.gbPrintingDayplan .dayplanPrintTable .dpPrintContinuation th{background:white;padding:0 0 2mm;font-size:8pt;font-weight:400;border:0;}
+ /* Repeated paper gutter keeps continuation pages clear even with Minimum margins. */
+ body.gbPrintingDayplan .dayplanPrintTable .dpPrintGutter th{height:5mm;padding:0;border:0;background:#fff;line-height:0;font-size:0;}
+ body.gbPrintingDayplan .dpPrintBlock{break-inside:auto;page-break-inside:auto;}
+ body.gbPrintingDayplan .dpPrintBlock + .dpPrintBlock{break-before:page;page-break-before:always;padding-top:5mm;}
+ body.gbPrintingDayplan .dayplanPrintTable thead{display:table-header-group;}
+ body.gbPrintingDayplan .dayplanPrintTable th{position:static;}
+ body.gbPrintingDayplan .productionLocationLink{font-weight:400;}
  body.gbPrintingDayplan .dayplanPrintTable col.colHour{width:22mm;}
  body.gbPrintingDayplan .dayplanPrintTable col.colDur{width:20mm;}
  body.gbPrintingDayplan .dayplanPrintTable col.colNro{width:12mm;}
