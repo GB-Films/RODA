@@ -5155,6 +5155,12 @@ function bindSchedDayPickerUI(){
       zones:()=>general?Array.from(container.querySelectorAll('.schedGrid,.shotPlanning')).map(node=>({node,dayId:node.dataset.dayId})): [{node:el(free()?'shotPlanDay':'dpScroller'),dayId:selectedDayplanDayId}],
       timeline:()=>!isCompactPlan(),
       minute:(zone,y)=>{if(free()){const host=zone.node,list=host.querySelector('.shotPlanRows'),base=minutesFromHHMM(getDay(zone.dayId).callTime||'08:00');return snap((y-list.getBoundingClientRect().top)/Number(host.dataset.ppm)-base,Number(el(general?'schedSnap':'dayplanSnap')?.value||15));}const d=getDay(zone.dayId),snapMin=Number(el(general?'schedSnap':'dayplanSnap')?.value||15),ppm=general?Number(el('schedZoom')?.value||90)/60:getDayplanPPM();const top=general?zone.node.getBoundingClientRect().top:el('dpLane').getBoundingClientRect().top;return snap((y-top)/ppm+(general?getScheduleBoardBaseHour():0)-minutesFromHHMM(d.callTime||'08:00'),snapMin);},
+      rectangle:(zone,row)=>{
+        const base=minutesFromHHMM(getDay(zone.dayId).callTime||'08:00'),host=free()?zone.node.querySelector('.shotPlanRows'):general?zone.node:el('dpLane'),rect=host.getBoundingClientRect();
+        const ppm=free()?Number(zone.node.dataset.ppm):general?Number(el('schedZoom')?.value||90)/60:getDayplanPPM();
+        const example=zone.node.querySelector(free()?'.shotPlanRow':general?'.schedBlock':'.dpBlock')?.getBoundingClientRect();
+        return {left:example?.left??rect.left+(general||free()?56:10),right:example?.right??rect.right-10,top:rect.top+(base+row.start-(general&&!free()?getScheduleBoardBaseHour():0))*ppm,height:row.dur*ppm};
+      },
       scrollers:()=>general?[el('schedWrap'),...container.querySelectorAll('.shotPlanning')]:[el(free()?'shotPlanDay':'dpScroller')]
     });
   }

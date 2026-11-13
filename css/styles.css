@@ -4322,3 +4322,14 @@ button.schedCalCell{font:inherit;color:inherit;width:100%;padding:0;}
 
 /* Cast actions grow with their labels in narrow cards. */
 #castDirectory .cast-details [data-cast-plan],#castDirectory .cast-details [data-cast-pdf]{height:auto;min-height:34px;max-width:100%;white-space:normal;line-height:1.35;}
+
+/* Roda navigation stays quiet even with a shared Studio identity. */
+@media screen{
+html body .sidebar .nav .navBtn{border-color:transparent;background:transparent;box-shadow:none;color:var(--studio-ink,var(--text));}
+html body .sidebar .nav .navBtn:hover{border-color:var(--studio-line,var(--border));background:var(--studio-soft,#222);}
+html body .sidebar .nav .navBtn.active{border-color:transparent;background:var(--studio-accent,#efefef);color:var(--studio-onAccent,#111);}
+html body .sidebar .nav .navBtn :is(.navIco,.navLbl){color:inherit;}
+html body .sidebar .nav .navBtn .navIco{border:0;background:transparent;box-shadow:none;}
+html body .sidebar .nav .navBtn:focus-visible{outline:2px solid var(--studio-accent,#9accff);outline-offset:-2px;}
+body #studio-project-settings-actions [data-project-invite]{display:none!important;}
+}
