@@ -8312,6 +8312,8 @@ function renderReportDayplanDetail(d){
   function productionPrintBrand(){
     const project=window.RODA_STUDIO?.project;
     const spaceId=project?.spaceId||new URLSearchParams(location.search).get('studioSpace');
+    const brand=window.GBStudioDesign?.brand;
+    if(brand){const logo=window.GBStudioDesign.logoURL()||(spaceId==='gb-films'?'assets/gb-films-print.png':'');return `<div class="productionPrintBrand">${logo?`<img src="${esc(logo)}" alt="" width="56" height="56">`:''}<div><strong>${esc(brand.name||project?.studioName||'Mi estudio')}</strong><span>Producción audiovisual</span></div></div>`;}
     const isGranberta=!spaceId||spaceId==='gb-films';
     return `<div class="productionPrintBrand">${isGranberta?'<img src="assets/gb-films-print.png" alt="GB Films" width="56" height="56">':''}<div><strong>${esc(isGranberta?'GRANBERTA FILMS':project?.spaceName||'GB STUDIO')}</strong><span>Producción audiovisual</span></div></div>`;
   }
@@ -8361,6 +8363,7 @@ function renderReportDayplanDetail(d){
   }
 
   async function printDayplanContents(html,kind="Plan de rodaje"){
+    await window.GBStudioDesign?.preparePrint();
     if(!String(html || "").trim()){
       toast("No hay Plan de Rodaje para imprimir");
       return;
@@ -8594,6 +8597,7 @@ function renderReportDayplanDetail(d){
     return true;
   }
   async function printCallSheetByDayId(dayId){
+    await window.GBStudioDesign?.preparePrint();
     if(!prepareCallSheetPrint(dayId)){toast('Elegí un día con rodaje');return;}
     await waitForImages(ensureGbPrintRoot(),2500);
     try{window.print();}finally{clearPrintOrientation();cleanupGbPrintRoot();}
@@ -8616,6 +8620,7 @@ function renderReportDayplanDetail(d){
 
 
 async function printShotlistByDayId(dayId){
+    await window.GBStudioDesign?.preparePrint();
     const d = dayId ? getDay(dayId) : null;
     if(!d){ toast("Elegí un día con rodaje"); return; }
     ensureDayTimingMaps(d);
