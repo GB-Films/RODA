@@ -16,10 +16,14 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
  try{
   browser=await chromium.launch({headless:true,channel:'msedge'});
   const page=await browser.newPage({viewport:{width:1600,height:1000}}),errors=[];
-  page.on('pageerror',e=>errors.push(e.message));await page.route('https://**/*',r=>r.abort());
+  page.setDefaultTimeout(10000);page.on('pageerror',e=>{errors.push(e.message);console.error(e.message)});await page.route('https://**/*',r=>r.abort());
   await page.goto('http://127.0.0.1:'+server.address().port+'/roda/');
   const scenes=Array.from({length:20},(_,i)=>({id:'scene'+i,number:i+1,slugline:'INT. EDIFICIO - SALA '+(i+1)+' - DÍA',location:'EDIFICIO / SALA '+(i+1),intExt:'Int',timeOfDay:'Día',summary:'El equipo prepara la siguiente toma. Dos cámaras siguen a los personajes y registran las acciones de la escena. '.repeat(3),elements:{cast:[]}}));
   const seed={meta:{version:14,title:'PROYECTO DEMOSTRACIÓN',updatedAt:new Date().toISOString()},scenes,crew:[],project:{},shootDays:[{id:'day',date:'2026-11-05',label:'Día 1 · Edificio',location:'EDIFICIO',callTime:'08:00',sceneIds:scenes.map(s=>s.id),times:Object.fromEntries(scenes.map((s,i)=>[s.id,45+i*20])),durations:Object.fromEntries(scenes.map(s=>[s.id,20])),blocks:[{id:'arrival',startMin:0,durMin:15,title:'Llegada al rodaje',blockType:'arrival'},{id:'setup',startMin:15,durMin:30,title:'Armado técnico',blockType:'setup'}]}]};
+  seed.shootingLocations=[{id:'building',name:'EDIFICIO',address:'Av. Corrientes 1234, Buenos Aires'},{id:'hotel',name:'HOTEL',address:'https://maps.app.goo.gl/example'}];
+  scenes.forEach(scene=>scene.shootingLocationId='building');
+  seed.scenes.push({id:'hotelScene',number:21,slugline:'INT. HOTEL - LOBBY - DÍA',shootingLocationId:'hotel',summary:'Llegada al hotel.',elements:{cast:[]},shots:[{id:'shot1',type:'Plano medio',desc:'Entrada al lobby',durMin:10},{id:'shot2',type:'Primer plano',desc:'Reacción',durMin:20}]});
+  seed.shootDays.push({id:'hotelDay',date:'2026-11-06',label:'Día 2 · Hotel',location:'HOTEL',callTime:'10:00',sceneIds:['hotelScene'],times:{hotelScene:15},durations:{hotelScene:30},blocks:[{id:'hotelArrival',startMin:0,durMin:15,title:'Llegada al hotel'}]}, {id:'emptyDay',date:'2026-11-07',label:'Día 3 · Pendiente',callTime:'08:00',sceneIds:[],times:{},durations:{},blocks:[]});
   await page.evaluate(data=>{
    document.querySelector('.shell').hidden=false;document.body.classList.add('roda-studio');document.body.classList.remove('studio-tool-locked');
    let header=document.querySelector('.studio-global-header');if(!header){header=document.createElement('header');document.body.prepend(header);}
@@ -34,10 +38,10 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
   },seed);
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
-  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
+  for(const f of ['dialogs','roda-policy','roda-access','cast','call-sheet','script-pages','script-document','screenplay','script-revisions','script-history','form-autosave','utils','day-swap','production-blocks','shot-planning','shot-planning-view','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
   await page.waitForFunction(isStudio=>isStudio?!!window.RODA_READY:!document.body.classList.contains('bootLoading'),studio);await page.evaluate(()=>{document.querySelector('.shell').hidden=false;window.RodaAccess?.bind();});
   const before=await page.evaluate(()=>JSON.stringify(savedState.shootDays)),writes=await page.evaluate(()=>savedWrites);
-  async function inspectPrint(name,daily){
+  async function inspectPrint(name,daily,shots=false){
    await page.waitForFunction(()=>!!window.printSnapshot);
    const screen=await page.evaluate(()=>window.printScreen);
    assert.equal(screen.root,'none','Print document stays hidden behind the print dialog');
@@ -57,9 +61,23 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
     assert.equal(await pdf.locator('#gbPrintRoot thead').evaluate(e=>getComputedStyle(e).display),'table-header-group');
     assert.equal(await pdf.locator('#gbPrintRoot').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);
    }
+   const sections=pdf.locator('#gbPrintRoot .dpPrintBlock');
+   assert.equal(await pdf.locator('#gbPrintRoot .dpPrintContinuation').count(),0,'No duplicate project/day subtitle above columns');
+   assert.equal(await sections.count(),daily?1:3,'One sequential document per selected day');
+   assert.equal(await pdf.locator('#gbPrintRoot .pgGrid').count(),0,'No legacy side-by-side cards');
+   if(!daily){
+    assert.deepEqual(await sections.locator('.dpPrintDay').allTextContents(),['Jueves 05/11 · Día 1 · Edificio','Viernes 06/11 · Día 2 · Hotel','Sábado 07/11 · Día 3 · Pendiente']);
+    assert.equal(await sections.nth(1).evaluate(e=>getComputedStyle(e).breakBefore),'page');
+    assert.equal(await sections.nth(1).locator('tbody tr').count(),shots?3:2);
+    assert.match(await sections.nth(2).textContent(),/Sin escenas programadas/);
+    if(shots)assert.match(await sections.nth(1).textContent(),/Plano 1[\s\S]*Plano 2/);
+   }
+   assert.equal(await sections.first().locator('.productionLocationLink a').getAttribute('href'),'https://www.google.com/maps/search/?api=1&query=Av.%20Corrientes%201234%2C%20Buenos%20Aires');
+   if(!daily)assert.equal(await sections.nth(1).locator('.productionLocationLink a').getAttribute('href'),'https://maps.app.goo.gl/example');
+   assert.deepEqual(await pdf.locator('#gbPrintRoot td,#gbPrintRoot th').evaluateAll(cells=>cells.filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent)),[],'No clipped table cells');
    if(await pdf.locator('#gbPrintRoot .productionPrintBrand').count()){
-    assert.match(await pdf.locator('#gbPrintRoot .productionPrintBrand').textContent(),/GRANBERTA FILMS/);
-    assert.ok(await pdf.locator('#gbPrintRoot .productionPrintBrand img').evaluate(e=>e.complete&&e.naturalWidth>0),'Studio logo is loaded');
+    assert.match(await pdf.locator('#gbPrintRoot .productionPrintBrand').first().textContent(),/GRANBERTA FILMS/);
+    assert.ok(await pdf.locator('#gbPrintRoot .productionPrintBrand img').first().evaluate(e=>e.complete&&e.naturalWidth>0),'Studio logo is loaded');
    }
    await pdf.pdf({path:path.join(output,name+'.pdf'),preferCSSPageSize:true,printBackground:true});
    // Chrome's “Minimum” margin choice must still leave inner paper gutters.
@@ -75,6 +93,13 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
   await page.getByRole('button',{name:'Plan de Rodaje',exact:true}).click();await page.locator('#btnDayplanPrint').click();await inspectPrint('plan-dia',true);
   await page.getByRole('button',{name:'REPORTES',exact:true}).click();await page.locator('#reportTabs [data-tab="dayplan"]').click();await page.locator('#btnPrintCallSheet').click();await inspectPrint('plan-reportes',true);
   await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('#btnSchedPrint').click();await inspectPrint('plan-general',false);
-  assert.deepEqual(errors,[]);console.log('OK: three print routes, shared navigation hidden, project header, 12mm margins, repeated table headings, intact rows, no timing changes or saves. PDFs: '+output);
+  await page.locator('#scheduleCard .shotPlanningUnit select').selectOption('shots');await page.locator('#btnSchedPrint').click();await inspectPrint('plan-general-planos',false,true);
+  await page.evaluate(()=>localStorage.setItem('gb_sched_dayfilter_v1__default',JSON.stringify({mode:'selected',selected:['hotelDay']})));
+  await page.locator('#btnSchedPrint').click();await page.waitForFunction(()=>!!window.printSnapshot);
+  assert.equal(await page.evaluate(()=>new DOMParser().parseFromString(printSnapshot,'text/html').querySelectorAll('#gbPrintRoot .dpPrintBlock').length),1,'Respect selected days');
+  assert.ok((await page.evaluate(()=>printSnapshot)).includes('Día 2 · Hotel'));
+  await page.evaluate(()=>{window.printSnapshot=null;localStorage.setItem('gb_sched_dayfilter_v1__default',JSON.stringify({mode:'none',selected:[]}));});
+  await page.locator('#btnSchedPrint').click();assert.equal(await page.evaluate(()=>printSnapshot),null,'No empty print dialog when no days selected');
+  assert.deepEqual(errors,[]);console.log('OK: daily, reports, general, shots and filtered days, shared navigation hidden, project header, 12mm margins, repeated table headings, intact rows, no timing changes or saves. PDFs: '+output);
  }finally{await browser?.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -5107,10 +5107,12 @@ function bindSchedDayPickerUI(){
     RodaShotPlanningView.render(host,{state,day,query,grouped,canEdit:()=>!isReadOnly('planning'),change:shotPlanChange,
       openScene:sceneId=>{selectedShotlistDayId=day.id;selectedShotlistSceneId=sceneId;shotlistExpandedSceneIds.add(sceneId);showView('shotlist');renderShotList();requestAnimationFrame(()=>Array.from(el('shotlistWrap').querySelectorAll('[data-scene-id]')).find(n=>n.dataset.sceneId===sceneId)?.scrollIntoView({block:'start'}));}});
   }
-  function shotPlanPrint(day){
-    const base=minutesFromHHMM(day.callTime||'08:00');
-    const rows=RodaShotPlanning.rows(state,day).map(r=>dayplanPrintedRow({...r,number:r.number,slugline:r.kind==='shot'?`Plano ${r.shotNumber} · ${r.title}`:r.title,summary:r.desc,detail:r.desc},base+r.start,r.dur,base+r.start+r.dur)).join('');
-    return `<div class="catBlock dpPrintBlock">${buildDayplanPrintHeader(day)}<div class="items">${dayplanPrintedTable(day,rows)}</div></div>`;
+  function shotPlanPrint(day){return buildPlanningDayPrint(day,"Plan de rodaje",true);}
+  function buildPlanningDayPrint(day,kind="Plan de rodaje",byShots=isShotPlan()||!!day.shotTimeline){
+    const base=minutesFromHHMM(day.callTime||"08:00");
+    const items=byShots?RodaShotPlanning.rows(state,day).map(r=>({...r,slugline:r.kind==='shot'?`Plano ${r.shotNumber} · ${r.title}`:r.title,summary:r.desc,detail:r.desc})):buildDayplanItems(day);
+    const rows=items.map(it=>dayplanPrintedRow(it,base+it.start,it.dur,base+it.start+it.dur)).join('');
+    return `<section class="catBlock dpPrintBlock">${buildDayplanPrintHeader(day,kind)}<div class="items">${dayplanPrintedTable(day,rows)}</div></section>`;
   }
   function plannedShotDuration(day,sceneId,shot){return (day.shotTimeline||day.shotPlanning?.[sceneId]||isShotPlan())&&window.RodaShotPlanning?RodaShotPlanning.sceneRows(state,day,sceneId).find(r=>r.shotId===shot.id)?.dur??shotDurMin(shot):shotDurMin(shot);}
   function plannedShotsTotal(day,scene){return scene.shots.reduce((total,shot)=>total+plannedShotDuration(day,scene.id,shot),0);}
@@ -6629,25 +6631,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
     }
 
 
-    // Print table (se ve solo al imprimir) — igual a Reportes
-    const snapMinPrint = Number(el("schedSnap")?.value || snapMin || 15);
-
-    const rows = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - 5);
-      const durMax = Math.max(5, dpEndAbs - absStart);
-      const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
-      const absEnd = clamp(absStart + dur, 0, dpEndAbs);
-      return dayplanPrintedRow(it,absStart,dur,absEnd);
-    }).join("");
-
-    printWrap.innerHTML = `
-      <div class="catBlock dpPrintBlock">
-        ${buildDayplanPrintHeader(d)}
-        <div class="items">
-          ${dayplanPrintedTable(d,rows)}
-        </div>
-      </div>
-    `;
+    printWrap.innerHTML = buildPlanningDayPrint(d);
     renderDayplanInspector(d, items);
 
     // Bind interactions once
@@ -8182,23 +8166,9 @@ function renderReportDayplanDetail(d){
     `;
     box.appendChild(pretty);
 
-    // ========= Vista de impresión (intacta) =========
-    const rows = items.map((it)=>{
-      const absStart = clamp(base + (it.start||0), 0, dpEndAbs - 5);
-      const durMax = Math.max(5, dpEndAbs - absStart);
-      const dur = clamp(Math.max(5, it.dur||15), 5, durMax);
-      const absEnd = clamp(absStart + dur, 0, dpEndAbs);
-      return dayplanPrintedRow(it,absStart,dur,absEnd);
-    }).join("");
-
     const printWrap = document.createElement("div");
     printWrap.className = "printOnly";
-    printWrap.innerHTML = `
-      ${buildDayplanPrintHeader(d)}
-      <div class="items">
-        ${dayplanPrintedTable(d,rows)}
-      </div>
-    `;
+    printWrap.innerHTML = buildPlanningDayPrint(d);
     box.appendChild(printWrap);
 
     wrap.appendChild(box);
@@ -8306,6 +8276,45 @@ function renderReportDayplanDetail(d){
     try{ if(_gbPrintRoot) _gbPrintRoot.innerHTML = ""; }catch(_e){}
   }
 
+  function locationMapURL(address){
+    const text=String(address||'').trim();if(!text)return '';
+    const isURL=/^[a-z][a-z\d+.-]*:|^\/\/|^(?:www\.|maps\.|goo\.gl\/)/i.test(text);
+    if(!isURL)return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(text);
+    try{
+      const url=new URL(text.startsWith('//')?'https:'+text:/^[a-z][a-z\d+.-]*:/i.test(text)?text:'https://'+text);
+      if(!['https:','http:'].includes(url.protocol)||url.username||url.password)return '';
+      const host=url.hostname.toLowerCase(),google=/(^|\.)google\.(?:com|[a-z]{2}|com\.[a-z]{2}|co\.[a-z]{2})$/.test(host);
+      if(host==='maps.app.goo.gl'||host==='goo.gl'&&/^\/maps(?:\/|$)/.test(url.pathname)||google&&(host.startsWith('maps.')||/^\/maps(?:\/|$)/.test(url.pathname))){url.protocol='https:';return url.href;}
+    }catch(_e){}
+    return '';
+  }
+  function locationShareMessage(place){
+    const address=String(place?.address||'').trim(),url=locationMapURL(address);
+    return [String(place?.name||'Lugar de rodaje').trim(),address&&address!==url?address:'',url].filter(Boolean).join('\n');
+  }
+  function dayLocationPlaces(day,{primaryOnly=false}={}){
+    const ids=new Set((day.sceneIds||[]).map(id=>getScene(id)?.shootingLocationId).filter(Boolean));
+    let places=(state.shootingLocations||[]).filter(place=>ids.has(place.id)||normName(place.name)===normName(day.location||''));
+    if(primaryOnly){
+      const key=value=>normName(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(?:el|la|los|las)\b/g,'').replace(/[^a-z0-9]/g,'');
+      const named=(state.shootingLocations||[]).filter(place=>key(place.name)===key(day.location)&&key(day.location));
+      const mainIds=new Set((day.sceneIds||[]).map(getScene).filter(scene=>scene&&key(scene.location?.split(/\s+-\s+/)[0])===key(day.location)&&key(day.location)).map(scene=>scene.shootingLocationId));
+      places=named.length?named:places.filter(place=>mainIds.has(place.id));
+      if(!places.length&&ids.size===1)places=(state.shootingLocations||[]).filter(place=>ids.has(place.id));
+    }
+    if(!places.length&&locationMapURL(day.location)&&/^https?:\/\/|^(?:www\.|maps\.|goo\.gl\/)/i.test(day.location||''))places.push({name:'Ubicación de la jornada',address:day.location});
+    return places;
+  }
+  function dayLocationHTML(day,options){
+    const places=dayLocationPlaces(day,options);
+    const label=day.location||places.map(place=>place.name).join(' / ')||'Sin asignar';
+    return esc(label)+places.map(place=>{
+      const url=locationMapURL(place.address);if(!url)return '';
+      const address=String(place.address).trim(),linkLabel=/^https?:\/\/|^(?:www\.|maps\.|goo\.gl\/)/i.test(address)?'Ver en Google Maps':address;
+      return `<span class="productionLocationLink"><span>${esc(place.name)}</span><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(linkLabel)}</a></span>`;
+    }).join('');
+  }
+
   function productionPrintBrand(){
     const project=window.RODA_STUDIO?.project;
     const spaceId=project?.spaceId||new URLSearchParams(location.search).get('studioSpace');
@@ -8334,27 +8343,27 @@ function renderReportDayplanDetail(d){
 
   function dayplanPrintedTable(d,rows){
     return `<table class="dayplanPrintTable"><colgroup><col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle"><col class="colSum"></colgroup>
-      <thead><tr class="dpPrintContinuation"><th colspan="5">${esc(state.meta?.title||'Proyecto')} · ${esc([formatDayTitle(d.date),d.label].filter(Boolean).join(' · '))}</th></tr>
+      <thead><tr class="dpPrintGutter" aria-hidden="true"><th colspan="5"></th></tr>
       <tr><th>Inicio / fin</th><th>Duración</th><th>Esc.</th><th>Escena / actividad</th><th>Indicaciones</th></tr></thead>
       <tbody>${rows||'<tr><td colspan="5">Sin escenas programadas.</td></tr>'}</tbody></table>`;
   }
 
-  function buildDayplanPrintHeader(d){
+  function buildDayplanPrintHeader(d,kind="Plan de rodaje"){
     const title = `${formatDayTitle(d.date)}${d.label ? " · " + d.label : ""}`.trim();
-    return `<header class="dpPrintHeader">${productionPrintMasthead("Plan de rodaje",d)}
+    return `<header class="dpPrintHeader">${productionPrintMasthead(kind,d)}
       <div class="dpPrintHeading">
         <div><h1>${esc(state?.meta?.title || "Proyecto")}</h1></div>
         <div class="dpPrintDay">${esc(title || "Jornada de rodaje")}</div>
       </div>
       <div class="dpPrintMeta">
         <div><span>Citación general</span><strong>${esc(d.callTime || "—")}</strong></div>
-        <div><span>Locación de rodaje</span><strong>${esc(d.location || "Sin asignar")}</strong></div>
+        <div><span>Locación de rodaje</span><strong>${dayLocationHTML(d)}</strong></div>
         <div><span>Escenas programadas</span><strong>${(d.sceneIds || []).filter(getScene).length}</strong></div>
       </div>
     </header>`;
   }
 
-  async function printDayplanContents(html){
+  async function printDayplanContents(html,kind="Plan de rodaje"){
     if(!String(html || "").trim()){
       toast("No hay Plan de Rodaje para imprimir");
       return;
@@ -8364,6 +8373,9 @@ function renderReportDayplanDetail(d){
     applyPrintDeviceFlag();
     document.body.classList.add("gbPrintingDayplan");
     setPrintOrientation("landscape", 12);
+    const studioLabel=root.querySelector('.productionPrintBrand strong')?.textContent||'GB Studio';
+    const footer=JSON.stringify(kind.toUpperCase()+' · '+studioLabel).replace(/</g,'\\3c ');
+    if(_printOrientEl)_printOrientEl.textContent+=`@page rodaDayPlan{@bottom-left{content:${footer};}}`;
     await waitForImages(root,2500);
     try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
@@ -8625,153 +8637,15 @@ async function printShotlistByDayId(dayId){
 
 // ===================== PRINT: Plan General (todos los días) =====================
 function buildPlanGeneralPrintHTML(){
-  sortShootDaysInPlace();
-  const project = esc(state?.meta?.title || "Proyecto");
-  const gen = new Date().toLocaleString("es-AR");
-
-  const allDays = (state.shootDays || []);
-  const days = getScheduleDaysFiltered();
-  if(!days.length){
-    const msg = allDays.length ? "No hay días seleccionados." : "No hay días cargados.";
-    return `
-      <div class="pgPrintWrap">
-        <div class="pgPrintHeader">
-          <div class="pgHeaderLeft">
-            <div class="pgTitle">Plan General</div>
-            <div class="pgProject">${project}</div>
-          </div>
-          <div class="pgHeaderRight">
-            <div><b>Generado:</b> ${esc(gen)}</div>
-          </div>
-        </div>
-        <div class="muted">${esc(msg)}</div>
-      </div>
-    `;
-  }
-
-  // KPIs simples para el header
-  const firstDate = days[0]?.date || "";
-  const lastDate  = days[days.length-1]?.date || "";
-  const range = (firstDate && lastDate)
-    ? (firstDate === lastDate ? formatDayTitle(firstDate) : `${formatDayTitle(firstDate)} → ${formatDayTitle(lastDate)}`)
-    : "";
-  const kpis = `${days.length} día${days.length===1?"":"s"}${range ? " · "+esc(range) : ""}`;
-
-  const cards = days.map((d)=>{
-    ensureDayTimingMaps(d);
-    const dayTitle = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
-    const call = d.callTime || "";
-    const loc  = d.location || "";
-
-    const span = Math.max(5, dayplanAvailSpan(d));
-    const items = [];
-
-    for(const sid of (d.sceneIds||[])){
-      const s = getScene(sid);
-      if(!s) continue;
-      const startMin = clamp(Number(d.times?.[sid] ?? 0) || 0, dayplanMinOffset(d), span-1);
-      const durMin   = clamp(Number(d.durations?.[sid] ?? 60) || 60, 5, dayplanEndAbs(d));
-      items.push({
-        kind:"scene",
-        start:startMin,
-        dur:durMin,
-        title:`#${s.number||""} — ${s.slugline||""}`.trim()
-      });
-    }
-
-    for(const b of (d.blocks||[])){
-      if(!b) continue;
-      const startMin = clamp(Number(b.startMin ?? 0) || 0, dayplanMinOffset(d), span-1);
-      const durMin   = clamp(Number(b.durMin ?? 30) || 30, 5, dayplanEndAbs(d));
-      items.push({
-        kind:"block",
-        start:startMin,
-        dur:durMin,
-        title:`🗒 ${b.title||"Tarea"}`
-      });
-    }
-
-    items.sort((a,b)=> (a.start||0) - (b.start||0));
-
-    const rows = items.length ? items.map((it)=>{
-      const tA = clockLabelFromCall(d, it.start||0);
-      const tB = clockLabelFromCall(d, (it.start||0) + (it.dur||0));
-      const dur = formatDurHHMMCompact(it.dur||0);
-      const cls = it.kind==="block" ? "pgRowNote" : "";
-      return `
-        <tr class="${cls}">
-          <td class="pgTime"><span class="pgT">${esc(tA)}</span><span class="pgSep">–</span><span class="pgT">${esc(tB)}</span></td>
-          <td class="pgItem">${esc(it.title||"")}</td>
-          <td class="pgDur">${esc(dur)}</td>
-        </tr>
-      `;
-    }).join("") : `<tr><td colspan="3" class="muted">—</td></tr>`;
-
-    const nightBadge = d.night ? `<span class="pgBadge">Nocturno</span>` : "";
-
-    const pills = `
-      <div class="pgPills">
-        <span class="pgPill"><b>Call</b> ${esc(call||"—")}</span>
-        <span class="pgPill"><b>Locación</b> ${esc(loc||"—")}</span>
-      </div>
-    `;
-
-    return `
-      <div class="pgDayCard">
-        <div class="pgDayHead">
-          <div class="pgDayTop">
-            <div class="pgDayTitle">${esc(dayTitle||"Día")}</div>
-            ${nightBadge}
-          </div>
-          <div class="pgDayMeta">${pills}</div>
-        </div>
-
-        <table class="pgTable">
-          <thead>
-            <tr>
-              <th style="width:110px;">Hora</th>
-              <th>Escena / Tarea</th>
-              <th style="width:58px; text-align:right;">Dur</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    `;
-  }).join("");
-
-  return `
-    <div class="pgPrintWrap">
-      <div class="pgPrintHeader">
-        <div class="pgHeaderLeft">
-          <div class="pgTitle">Plan General</div>
-          <div class="pgProject">${project}</div>
-          <div class="pgKpis">${kpis}</div>
-        </div>
-        <div class="pgHeaderRight">
-          <div><b>Generado:</b> ${esc(gen)}</div>
-          <div><b>Días:</b> ${days.length}</div>
-        </div>
-      </div>
-      <div class="pgGrid">${cards}</div>
-    </div>
-  `;
+  const days=getScheduleDaysFiltered();
+  return days.map(day=>buildPlanningDayPrint(day,"Plan general")).join('');
 }
 
 async function printPlanGeneral(){
-  applyPrintDeviceFlag();
-  const root = ensureGbPrintRoot();
-  if(isShotPlan()||getScheduleDaysFiltered().some(d=>d.shotTimeline)){printDayplanContents(getScheduleDaysFiltered().map(d=>shotPlanPrint(d)).join(''));return;}
-  root.innerHTML = buildPlanGeneralPrintHTML();
-  document.body.classList.add("gbPrintingSchedule");
-  setPrintOrientation("landscape", 12);
-  try{
-    await waitForImages(root, 2500);
-    window.print();
-  } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
+  const html=buildPlanGeneralPrintHTML();
+  if(!html){toast(state.shootDays.length?"No hay jornadas seleccionadas para imprimir.":"No hay jornadas cargadas.");return;}
+  await printDayplanContents(html,"Plan general");
 }
-
-
   // Bank collapse
   function applyBankCollapsedUI(){
     const layout = el("shootingLayout");
