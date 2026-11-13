@@ -6521,7 +6521,7 @@ const height = Math.max(1, Math.round((absEnd - absStart) * ppm));
     }).join("");
 
     lane.innerHTML = grid.join("") + blocks;
-    bindCompactPlanningSwap(lane);
+    bindCompactPlanningSwap(el('dpScroller'));
     if(document.body.dataset.rodaView==='dayplan'&&scroller.dataset.focusDay!==d.id){scroller.scrollTop=isCompactPlan()?0:base*ppm;scroller.dataset.focusDay=d.id;}
 
     // Hover preview (igual que Cronograma + Planos)
