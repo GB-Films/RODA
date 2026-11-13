@@ -121,3 +121,23 @@
  .csPrintTable tr.csPrintBlock td *{color:inherit!important;}
  .csPrintTable tr.csPrintBlock td:first-child{border-left-color:var(--row-accent,#F97316);}
 }
+
+/* Shot planning keeps the studio document, with independent shot identifiers. */
+@media print{
+ body.gbPrintingDayplan .dpPrintShots col.colHour,
+ body.gbPrintingDayplan .dpPrintShots col.colEnd{width:18mm;}
+ body.gbPrintingDayplan .dpPrintShots col.colDur{width:20mm;}
+ body.gbPrintingDayplan .dpPrintShots col.colNro,
+ body.gbPrintingDayplan .dpPrintShots col.colShot{width:16mm;}
+ body.gbPrintingDayplan .dpPrintShots col.colTitle{width:55mm;}
+ body.gbPrintingDayplan .dpPrintShots .cHour,
+ body.gbPrintingDayplan .dpPrintShots .cEnd,
+ body.gbPrintingDayplan .dpPrintShots .cDur{font-variant-numeric:tabular-nums;white-space:nowrap;}
+ body.gbPrintingDayplan .dpPrintShots .cNro,
+ body.gbPrintingDayplan .dpPrintShots .cShot{font-size:11pt;font-weight:700;text-align:center;}
+ body.gbPrintingDayplan .dpPrintShots th:nth-child(4),
+ body.gbPrintingDayplan .dpPrintShots th:nth-child(5){text-align:center;}
+ body.gbPrintingDayplan .dpPrintShots .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+}
+
+@media print{body.gbPrintingDayplan .dpPrintByShots .dpPrintMeta{grid-template-columns:1fr 2fr 1fr 1fr;}body.gbPrintingDayplan .dpPrintByShots .dpPrintMeta>:nth-child(n+3){text-align:right;}}
