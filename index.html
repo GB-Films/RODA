@@ -11,10 +11,11 @@
 <link rel="stylesheet" href="css/production-blocks.css?v=1.21.2">
 <link rel="stylesheet" href="css/planning.css?v=1.27.1">
 <link rel="stylesheet" href="css/shot-planning.css?v=1.62.0">
+<link rel="stylesheet" href="css/planning-movement.css?v=1.63.0">
 <link rel="stylesheet" href="css/team.css?v=1.34.0">
 <link rel="stylesheet" href="css/dialogs.css?v=1.21.1"/>
 <link rel="stylesheet" href="css/shotlist.css?v=1.32.1">
-<link rel="stylesheet" href="css/call-print.css?v=1.62.1">
+<link rel="stylesheet" href="css/call-print.css?v=1.63.0">
 <link rel="stylesheet" href="css/elements.css?v=1.33.1">
 <link rel="stylesheet" href="css/scene-detail.css?v=1.35.0">
 <link rel="preload" href="assets/gb-films-print.png" as="image">
@@ -283,7 +284,7 @@
                 </div>
                 <div class="row gap">
                   <select class="input compact" id="shootDaySelect"></select>
-                  <button class="btn" id="btnOpenCallSheet">Imprimir</button>
+                  <button class="btn" id="btnOpenCallSheet" data-ro-allow="1">Imprimir</button>
                 </div>
               </div>
 
@@ -385,12 +386,12 @@
                 </label>
 
               <label class="row gap small muted planningViewControl">Vista
-                <select class="input compact" id="dayplanView" data-ro-allow="1" aria-label="Vista del plan" title="Arrastrá una escena sobre otra de la misma jornada para intercambiarlas, conservando sus duraciones.">
+                <select class="input compact" id="dayplanView" data-ro-allow="1" aria-label="Vista del plan" title="Arrastrá para insertar. Shift + arrastrar intercambia. Cada actividad conserva su duración.">
                   <option value="timeline">Por horario</option><option value="compact">Compacta</option>
                 </select>
               </label>
                 <div class="planningHistoryButtons row gap noPrint" aria-label="Historial del plan"><button class="btn small" type="button" id="btnDayplanUndo" disabled>↶ Deshacer</button><button class="btn small" type="button" id="btnDayplanRedo" disabled>↷ Rehacer</button></div>
-                <button class="btn" id="btnDayplanPrint">Imprimir</button>
+                <button class="btn" id="btnDayplanPrint" data-ro-allow="1">Imprimir</button>
               </div>
             </div>
           </div>
@@ -452,7 +453,7 @@
               </label>
               <button class="btn iconBtn" id="btnSchedDays" title="Días: Todos" aria-label="Seleccionar días">Días: Todos</button>
               <div class="planningHistoryButtons row gap noPrint" aria-label="Historial del plan"><button class="btn small" type="button" id="btnSchedUndo" disabled>↶ Deshacer</button><button class="btn small" type="button" id="btnSchedRedo" disabled>↷ Rehacer</button></div>
-                <button class="btn" id="btnSchedPrint">Imprimir</button>
+                <button class="btn" id="btnSchedPrint" data-ro-allow="1">Imprimir</button>
             </div>
           </div>
           <div class="cardContent scheduleContent">
@@ -475,7 +476,7 @@
             <h2 class="cardTitle">Shotlist</h2>
             <div class="row gap noPrint">
               <select class="input compact" id="shotDaySelect"></select>
-              <button class="btn" id="btnShotPrint">Imprimir</button>
+              <button class="btn" id="btnShotPrint" data-ro-allow="1">Imprimir</button>
             </div>
           </div>
           <div class="cardContent">
@@ -573,7 +574,7 @@
       <!-- ================= CALL SHEETS ================= -->
       <section class="view hidden" id="view-callsheet">
         <div class="grid2">
-          <div class="card noPrint" id="callCalCard">
+          <div class="card noPrint" id="callCalCard" data-ro-allow="1">
             <div class="cardHeader">
               <h2 class="cardTitle">Calendario</h2>
               <div class="row gap">
@@ -590,10 +591,10 @@
           <div class="card" id="callDetailCard">
             <div class="cardHeader">
               <h2 class="cardTitle">REPORTES</h2>
-              <button class="btn primary" id="btnPrintCallSheet">Imprimir</button>
+              <button class="btn primary" id="btnPrintCallSheet" data-ro-allow="1">Imprimir</button>
             </div>
             <div class="cardContent">
-              <div class="reportTabs screenOnly" id="reportTabs">
+              <div class="reportTabs screenOnly" id="reportTabs" data-ro-allow="1">
                 <button class="btn reportTabBtn" data-tab="dayplan">Plan de Rodaje</button>
                 <button class="btn reportTabBtn" data-tab="schedule">Plan General</button>
                 <button class="btn reportTabBtn active" data-tab="callsheet">Call Sheet</button>
@@ -673,7 +674,7 @@
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
     ];
-    const appFiles = ["js/vendor/leaflet/leaflet.js","js/logistics.js","js/logistics-view.js","js/firebase-config.js","js/dialogs.js","js/cast.js","js/call-sheet.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/planning-history.js","js/day-navigation.js","js/shot-planning.js","js/shot-planning-view.js","js/app.js"];
+    const appFiles = ["js/vendor/leaflet/leaflet.js","js/logistics.js","js/logistics-view.js","js/firebase-config.js","js/dialogs.js","js/cast.js","js/call-sheet.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/planning-history.js","js/day-navigation.js","js/shot-planning.js","js/shot-planning-view.js","js/planning-movement.js","js/planning-movement-view.js","js/app.js"];
 
     function loadScript(src){
       return new Promise((res)=>{

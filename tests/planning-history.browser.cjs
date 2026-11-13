@@ -34,7 +34,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
   if(studio)await page.evaluate(()=>{StorageLayer.sharedRevisions=()=>({core:0,script:0});window.RodaTeamSync={create:options=>{window.testTeam=options;return {notify(){},refresh(){},async flush(){}};}};});
-  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','collaboration','live-view','planning-history','day-navigation','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
+  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','collaboration','live-view','planning-history','day-navigation','shot-planning','shot-planning-view','planning-movement','planning-movement-view','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
   await page.waitForFunction(isStudio=>isStudio?!!window.RODA_READY:!document.body.classList.contains('bootLoading'),studio);await page.evaluate(()=>{document.querySelector('.shell').hidden=false;window.RodaAccess?.bind();});
   }
   await boot(seed);
@@ -43,11 +43,11 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   const daily=id=>page.locator('#dpLane .dpBlock[data-id="'+id+'"]'),general=id=>page.locator('#schedBoard .schedBlock[data-item-id="'+id+'"]');
   assert.equal(await page.locator('#btnDayplanUndo').isEnabled(),false);assert.equal(await page.locator('#btnDayplanRedo').isEnabled(),false);
   await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();await page.locator('.navBtn[data-view="dayplan"]').click();
-  await daily('a').click();await page.locator('#dpCloseInspector').click();
+  await daily('a').click();if(await page.locator('#dpCloseInspector').isVisible())await page.locator('#dpCloseInspector').click();
   const before=await current();
-  async function drag(source,target){const a=await source.boundingBox(),b=await target.boundingBox();await page.mouse.move(a.x+90,a.y+12);await page.mouse.down();await page.mouse.move(b.x+90,b.y+18,{steps:10});await page.mouse.up();}
+  async function drag(source,target){await source.scrollIntoViewIfNeeded();await target.scrollIntoViewIfNeeded();const a=await source.boundingBox(),b=await target.boundingBox();await page.mouse.move(a.x+90,a.y+12);await page.mouse.down();await page.keyboard.down('Shift');await page.mouse.move(b.x+90,b.y+18,{steps:10});await page.mouse.up();await page.keyboard.up('Shift');}
   await drag(daily('a'),daily('later'));const after=await current();assert.notEqual(layout(after),layout(before));assert.equal(await page.locator('#btnDayplanUndo').isEnabled(),true);
-  await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();
+  if(await page.locator('#dpCloseInspector').isVisible())await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();
   await page.locator('#btnSchedUndo').click();assert.equal(layout(await current()),layout(before));assert.equal(await page.locator('#btnSchedRedo').isEnabled(),true);
   await page.keyboard.press('Control+Shift+Z');assert.equal(layout(await current()),layout(after));
   await page.keyboard.press('Control+Z');assert.equal(layout(await current()),layout(before));
@@ -55,11 +55,11 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await page.locator('#btnSchedUndo').click();assert.equal(layout(await current()),layout(before));
   // New cross-day edit clears the earlier redo branch and is undone from the other view.
   await drag(general('a'),general('b'));const crossed=await current();assert.equal(await page.locator('#btnSchedRedo').isEnabled(),false);
-  await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="dayplan"]').click();
+  if(await page.locator('#dpCloseInspector').isVisible())await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="dayplan"]').click();
   await page.locator('#btnDayplanUndo').click();assert.equal(layout(await current()),layout(before));
   await page.locator('#btnDayplanRedo').click();assert.equal(layout(await current()),layout(crossed));
   // Native editing undo must not consume the project history.
-  await daily('a').click();await page.locator('#dpi_time').focus();await page.keyboard.press('Control+Z');assert.equal(layout(await current()),layout(crossed));
+  await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="day2"]').click();await daily('a').click();await page.locator('#dpi_time').focus();await page.keyboard.press('Control+Z');assert.equal(layout(await current()),layout(crossed));
   await page.locator('#btnDayplanUndo').click();assert.equal(layout(await current()),layout(before));
   await page.locator('#btnDayplanRedo').click();assert.equal(layout(await current()),layout(crossed));
   // Reload the same tab and origin: session history survives with its project key.
@@ -72,7 +72,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   await page.locator('#btnDayplanUndo').click();assert.equal(layout(await current()),layout(before));await page.locator('#btnDayplanRedo').click();assert.equal(layout(await current()),layout(durationChanged));await page.locator('#btnDayplanUndo').click();
   await page.locator('#dayplanBlockMenu summary').click();await page.locator('[data-production-block="break"]').click();const blockAdded=await current();assert.equal(blockAdded.shootDays[0].blocks.length,before.shootDays[0].blocks.length+1);
   await page.locator('#btnDayplanUndo').click();assert.equal(layout(await current()),layout(before));await page.locator('#btnDayplanRedo').click();assert.equal(layout(await current()),layout(blockAdded));await page.locator('#btnDayplanUndo').click();
-  await page.locator('#dayplanView').selectOption('compact');await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();await drag(general('a'),general('b'));await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="dayplan"]').click();
+  await page.locator('#dayplanView').selectOption('compact');await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();await drag(general('a'),general('b'));if(await page.locator('#dpCloseInspector').isVisible())await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="dayplan"]').click();
   if(studio){
     // Exercise the real app's remote-apply callback, rather than replacing local state.
     await page.evaluate(()=>{const next=structuredClone(savedState);next.shootDays[0].notes='Nota remota que debe conservarse';testTeam.apply(next,{data:{parts:{core:{meta:{updatedAt:'remote'}},script:{meta:{updatedAt:'remote'}}}}});});

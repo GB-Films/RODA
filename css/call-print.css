@@ -108,3 +108,16 @@
   #dayDetailCard .callNotesBox .miniLbl{display:block;margin-top:14px;}
   #dayDetailCard .callNotesPrintOption{display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;}
 }
+
+/* Carry the actual production-block palette into every printed itinerary. */
+@media print{
+ body.gbPrintingDayplan .dayplanPrintTable tr.dpPrintNote,
+ body.gbPrintingDayplan .dayplanPrintTable tr.dpPrintNote td,
+ .csPrintTable tr.csPrintBlock,.csPrintTable tr.csPrintBlock td{
+  background:var(--row-accent,#F97316)!important;color:var(--row-ink,#000)!important;
+  print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important;
+ }
+ body.gbPrintingDayplan .dayplanPrintTable tr.dpPrintNote td *,
+ .csPrintTable tr.csPrintBlock td *{color:inherit!important;}
+ .csPrintTable tr.csPrintBlock td:first-child{border-left-color:var(--row-accent,#F97316);}
+}

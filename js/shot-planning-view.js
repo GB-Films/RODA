@@ -9,7 +9,7 @@
     const api=root.RodaShotPlanning,rows=grouped?api.groups(state,day):api.rows(state,day),top=host.scrollTop;
     const selected=host.dataset.selected;
     host.className='shotPlanning';host.dataset.dayId=day.id;
-    host.innerHTML=`<p class="shotPlanHint">${grouped?'Escenas agrupadas por sus planos consecutivos. Elegí Planos para moverlos o cambiar sus duraciones.':'Arrastrá un plano entre escenas o hacia otra jornada. La línea indica dónde se insertará; los horarios siguientes se ajustan conservando cada duración.'}</p><div class="shotPlanRows"></div><aside class="shotPlanDetail" hidden></aside>`;
+    host.innerHTML=`<p class="shotPlanHint">${grouped?'Escenas agrupadas por planos consecutivos. Arrastrá para insertar; Shift + arrastrar intercambia.':'Arrastrá para insertar y reacomodar horarios. Shift + arrastrar intercambia. Los planos y bloques conservan su duración.'}</p><div class="shotPlanRows"></div><aside class="shotPlanDetail" hidden></aside>`;
     const list=host.querySelector('.shotPlanRows');
     if(!grouped&&canEdit()){
       const scheduled=new Set((state.shootDays||[]).flatMap(d=>api.rows(state,d).filter(r=>r.kind==='shot').map(r=>r.key)));
@@ -35,6 +35,7 @@
       const move=(target,targetDay=day,position='before')=>{if(!canEdit())return;change(()=>api.move(state,day,row.key,targetDay,target,position));};
       grip.onkeydown=e=>{if(!['ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();const index=rows.findIndex(r=>r.key===row.key),target=rows[index+(e.key==='ArrowUp'?-1:1)];if(target)move(target.key,day,e.key==='ArrowDown'?'after':'before');};
       grip.onpointerdown=e=>{
+        if(root.RodaPlanningMovementView)return;
         if(e.button!==0||!canEdit())return;e.preventDefault();
         const pointer=e.pointerId,x0=e.clientX,y0=e.clientY;let x=x0,y=y0,target=null,moving=false,frame=0,finished=false;
         grip.setPointerCapture(pointer);

@@ -19,7 +19,7 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
   page.setDefaultTimeout(10000);page.on('pageerror',e=>{errors.push(e.message);console.error(e.message)});await page.route('https://**/*',r=>r.abort());
   await page.goto('http://127.0.0.1:'+server.address().port+'/roda/');
   const scenes=Array.from({length:20},(_,i)=>({id:'scene'+i,number:i+1,slugline:'INT. EDIFICIO - SALA '+(i+1)+' - DÍA',location:'EDIFICIO / SALA '+(i+1),intExt:'Int',timeOfDay:'Día',summary:'El equipo prepara la siguiente toma. Dos cámaras siguen a los personajes y registran las acciones de la escena. '.repeat(3),elements:{cast:[]}}));
-  const seed={meta:{version:14,title:'PROYECTO DEMOSTRACIÓN',updatedAt:new Date().toISOString()},scenes,crew:[],project:{},shootDays:[{id:'day',date:'2026-11-05',label:'Día 1 · Edificio',location:'EDIFICIO',callTime:'08:00',sceneIds:scenes.map(s=>s.id),times:Object.fromEntries(scenes.map((s,i)=>[s.id,45+i*20])),durations:Object.fromEntries(scenes.map(s=>[s.id,20])),blocks:[{id:'arrival',startMin:0,durMin:15,title:'Llegada al rodaje',blockType:'arrival'},{id:'setup',startMin:15,durMin:30,title:'Armado técnico',blockType:'setup'}]}]};
+  const seed={meta:{version:14,title:'PROYECTO DEMOSTRACIÓN',updatedAt:new Date().toISOString()},scenes,crew:[],project:{},shootDays:[{id:'day',date:'2026-11-05',label:'Día 1 · Edificio',location:'EDIFICIO',callTime:'08:00',sceneIds:scenes.map(s=>s.id),times:Object.fromEntries(scenes.map((s,i)=>[s.id,45+i*20])),durations:Object.fromEntries(scenes.map(s=>[s.id,20])),blocks:[{id:'arrival',startMin:0,durMin:15,title:'Llegada al rodaje',blockType:'arrival',color:'#176c3a'},{id:'setup',startMin:15,durMin:30,title:'Armado técnico',blockType:'setup',color:'#f7cb48'}]}]};
   seed.shootingLocations=[{id:'building',name:'EDIFICIO',address:'Av. Corrientes 1234, Buenos Aires'},{id:'hotel',name:'HOTEL',address:'https://maps.app.goo.gl/example'}];
   scenes.forEach(scene=>scene.shootingLocationId='building');
   seed.scenes.push({id:'hotelScene',number:21,slugline:'INT. HOTEL - LOBBY - DÍA',shootingLocationId:'hotel',summary:'Llegada al hotel.',elements:{cast:[]},shots:[{id:'shot1',type:'Plano medio',desc:'Entrada al lobby',durMin:10},{id:'shot2',type:'Primer plano',desc:'Reacción',durMin:20}]});
@@ -38,7 +38,7 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
   },seed);
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
-  for(const f of ['dialogs','roda-policy','roda-access','cast','call-sheet','script-pages','script-document','screenplay','script-revisions','script-history','form-autosave','utils','day-swap','production-blocks','shot-planning','shot-planning-view','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
+  for(const f of ['dialogs','roda-policy','roda-access','cast','call-sheet','script-pages','script-document','screenplay','script-revisions','script-history','form-autosave','utils','day-swap','production-blocks','shot-planning','shot-planning-view','planning-movement','planning-movement-view','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
   await page.waitForFunction(isStudio=>isStudio?!!window.RODA_READY:!document.body.classList.contains('bootLoading'),studio);await page.evaluate(()=>{document.querySelector('.shell').hidden=false;window.RodaAccess?.bind();});
   const before=await page.evaluate(()=>JSON.stringify(savedState.shootDays)),writes=await page.evaluate(()=>savedWrites);
   async function inspectPrint(name,daily,shots=false){
@@ -79,6 +79,8 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
     assert.match(await pdf.locator('#gbPrintRoot .productionPrintBrand').first().textContent(),/GRANBERTA FILMS/);
     assert.ok(await pdf.locator('#gbPrintRoot .productionPrintBrand img').first().evaluate(e=>e.complete&&e.naturalWidth>0),'Studio logo is loaded');
    }
+   assert.deepEqual(await pdf.locator('#gbPrintRoot .dpPrintNote').evaluateAll(rows=>rows.slice(0,2).map(r=>({background:getComputedStyle(r.querySelector('td')).backgroundColor,ink:getComputedStyle(r.querySelector('td')).color}))),[{background:'rgb(23, 108, 58)',ink:'rgb(255, 255, 255)'},{background:'rgb(247, 203, 72)',ink:'rgb(0, 0, 0)'}]);
+   await pdf.pdf({path:path.join(output,name+'-colors-no-background-option.pdf'),preferCSSPageSize:true,printBackground:false});
    await pdf.pdf({path:path.join(output,name+'.pdf'),preferCSSPageSize:true,printBackground:true});
    // Chrome's “Minimum” margin choice must still leave inner paper gutters.
    await pdf.addStyleTag({content:'@page rodaDayPlan{margin:3.175mm;}'});
@@ -100,6 +102,18 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
   assert.ok((await page.evaluate(()=>printSnapshot)).includes('Día 2 · Hotel'));
   await page.evaluate(()=>{window.printSnapshot=null;localStorage.setItem('gb_sched_dayfilter_v1__default',JSON.stringify({mode:'none',selected:[]}));});
   await page.locator('#btnSchedPrint').click();assert.equal(await page.evaluate(()=>printSnapshot),null,'No empty print dialog when no days selected');
+  if(studio){
+   await page.evaluate(()=>localStorage.setItem('gb_sched_dayfilter_v1__default',JSON.stringify({mode:'all',selected:[]})));
+   for(const admin of [false,true]){
+    await page.evaluate(admin=>{RODA_STUDIO.project.rodaAccess={admin,sections:RodaPolicy.all('edit')};RodaAccess.apply();},admin);
+    const writesBefore=await page.evaluate(()=>savedWrites);
+    const print=async id=>{assert.equal(await page.locator(id).isEnabled(),true);await page.evaluate(()=>{window.printSnapshot=null;});await page.locator(id).click();await page.waitForFunction(()=>!!window.printSnapshot);assert.ok((await page.evaluate(()=>printSnapshot)).includes('PROYECTO DEMOSTRACIÓN'));await page.waitForFunction(()=>!document.body.className.includes('gbPrinting'));};
+    for(const [view,id] of [['dayplan','#btnDayplanPrint'],['schedule','#btnSchedPrint'],['shotlist','#btnShotPrint']]){await page.locator('.navBtn[data-view="'+view+'"]').click();await print(id);}
+    await page.locator('.navBtn[data-view="callsheet"]').click();
+    for(const tab of ['dayplan','schedule','callsheet','shotlist','elements']){assert.equal(await page.locator('#reportTabs [data-tab="'+tab+'"]').isEnabled(),true);await page.locator('#reportTabs [data-tab="'+tab+'"]').click();await print('#btnPrintCallSheet');}
+    assert.equal(await page.evaluate(()=>savedWrites),writesBefore,'Printing full-access reports never edits production data');
+   }
+  }
   assert.deepEqual(errors,[]);console.log('OK: daily, reports, general, shots and filtered days, shared navigation hidden, project header, 12mm margins, repeated table headings, intact rows, no timing changes or saves. PDFs: '+output);
  }finally{await browser?.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
