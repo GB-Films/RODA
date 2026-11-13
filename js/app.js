@@ -5103,12 +5103,13 @@ function bindSchedDayPickerUI(){
     RodaShotPlanningView.render(host,{state,day,query,grouped,general,compact:isCompactPlan(),ppm:general?Number(el('schedZoom')?.value||90)/60:getDayplanPPM(),canEdit:()=>!isReadOnly('planning'),change:shotPlanChange,
       openScene:sceneId=>{selectedShotlistDayId=day.id;selectedShotlistSceneId=sceneId;shotlistExpandedSceneIds.add(sceneId);showView('shotlist');renderShotList();requestAnimationFrame(()=>Array.from(el('shotlistWrap').querySelectorAll('[data-scene-id]')).find(n=>n.dataset.sceneId===sceneId)?.scrollIntoView({block:'start'}));}});
   }
-  function shotPlanPrint(day){return buildPlanningDayPrint(day,"Plan de rodaje",true);}
-  function buildPlanningDayPrint(day,kind="Plan de rodaje",byShots=isShotPlan()||!!day.shotTimeline){
+  function shotPlanPrint(day){return buildPlanningDayPrint(day);}
+  function buildPlanningDayPrint(day,kind="Plan de rodaje",byShots=isShotPlan()){
     const base=minutesFromHHMM(day.callTime||"08:00");
-    const items=byShots?RodaShotPlanning.rows(state,day).map(r=>({...r,slugline:r.kind==='shot'?`Plano ${r.shotNumber} · ${r.title}`:r.title,summary:r.desc,detail:r.desc})):buildDayplanItems(day);
-    const rows=items.map(it=>dayplanPrintedRow(it,base+it.start,it.dur,base+it.start+it.dur)).join('');
-    return `<section class="catBlock dpPrintBlock">${buildDayplanPrintHeader(day,kind)}<div class="items">${dayplanPrintedTable(day,rows)}</div></section>`;
+    const planned=byShots?RodaShotPlanning.rows(state,day):day.shotTimeline?RodaShotPlanning.groups(state,day):null;
+    const items=planned?planned.map(r=>({...r,slugline:r.title,summary:r.desc,detail:r.desc})):buildDayplanItems(day);
+    const rows=items.map(it=>dayplanPrintedRow(it,base+it.start,it.dur,base+it.start+it.dur,byShots)).join('');
+    return `<section class="catBlock dpPrintBlock">${buildDayplanPrintHeader(day,kind,byShots?items.filter(r=>r.kind==='shot').length:null)}<div class="items">${dayplanPrintedTable(day,rows,byShots)}</div></section>`;
   }
   function plannedShotDuration(day,sceneId,shot){return (day.shotTimeline||day.shotPlanning?.[sceneId]||isShotPlan())&&window.RodaShotPlanning?RodaShotPlanning.sceneRows(state,day,sceneId).find(r=>r.shotId===shot.id)?.dur??shotDurMin(shot):shotDurMin(shot);}
   function plannedShotsTotal(day,scene){return scene.shots.reduce((total,shot)=>total+plannedShotDuration(day,scene.id,shot),0);}
@@ -8320,30 +8321,32 @@ function renderReportDayplanDetail(d){
     return `<div class="productionPrintMasthead">${productionPrintBrand()}<div class="productionPrintIssue"><strong>${esc(kind)}</strong><span>${index>=0?`Jornada ${index+1} de ${state.shootDays.length}`:'Jornada de rodaje'}</span></div></div>`;
   }
 
-  function dayplanPrintedRow(it,start,dur,end){
+  function dayplanPrintedRow(it,start,dur,end,byShots=false){
     const block=it.kind==='block';
     const title=block?(it.title||'Bloque'):(it.slugline||it.title||'');
-    const detail=block?String(it.detail||''):String(it.notes||'').trim()||firstWords(it.summary,28);
+    const detail=block?String(it.detail||''):byShots?String(it.desc||it.summary||''):String(it.notes||'').trim()||firstWords(it.summary,28);
     const color=safeHexColor(it.color||(block?RodaProductionBlocks.palette.block:RodaProductionBlocks.palette.sceneAccent));
     return `<tr class="${block?'dpPrintNote':''}" style="--row-accent:${esc(color)};--row-ink:${RodaProductionBlocks.appearance(color).ink}">
-      <td class="cHour"><div class="dpClock2"><b>${esc(clockLabelAbs(start))}</b><span>${esc(clockLabelAbs(end))}</span></div></td>
+      ${byShots?`<td class="cHour"><b>${esc(clockLabelAbs(start))}</b></td><td class="cEnd"><b>${esc(clockLabelAbs(end))}</b></td>`:`<td class="cHour"><div class="dpClock2"><b>${esc(clockLabelAbs(start))}</b><span>${esc(clockLabelAbs(end))}</span></div></td>`}
       <td class="cDur">${esc(formatDuration(Math.round(dur)))}</td>
-      <td class="cNro">${block?'—':esc(it.number||'—')}</td>
+      <td class="cNro">${block?'—':esc(it.number??'—')}</td>
+      ${byShots?`<td class="cShot">${it.kind==='shot'?`<strong><span class="sr-only">Plano </span>${esc(it.shotNumber)}</strong>`:'—'}</td>`:''}
       <td class="cTitle"><strong>${esc(title)}</strong>${!block&&Number(it.pages)>0?`<small>${esc(fmtPages(it.pages))} pág.</small>`:''}</td>
       <td class="cSum">${esc(detail)}</td>
     </tr>`;
   }
 
-  function dayplanPrintedTable(d,rows){
-    return `<table class="dayplanPrintTable"><colgroup><col class="colHour"><col class="colDur"><col class="colNro"><col class="colTitle"><col class="colSum"></colgroup>
-      <thead><tr class="dpPrintGutter" aria-hidden="true"><th colspan="5"></th></tr>
-      <tr><th>Inicio / fin</th><th>Duración</th><th>Esc.</th><th>Escena / actividad</th><th>Indicaciones</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="5">Sin escenas programadas.</td></tr>'}</tbody></table>`;
+  function dayplanPrintedTable(d,rows,byShots=false){
+    const columns=byShots?7:5;
+    return `<table class="dayplanPrintTable${byShots?' dpPrintShots':''}"><colgroup><col class="colHour">${byShots?'<col class="colEnd">':''}<col class="colDur"><col class="colNro">${byShots?'<col class="colShot">':''}<col class="colTitle"><col class="colSum"></colgroup>
+      <thead><tr class="dpPrintGutter" aria-hidden="true"><th colspan="${columns}"></th></tr>
+      <tr>${byShots?'<th>Inicio</th><th>Fin</th>':'<th>Inicio / fin</th>'}<th>Duración</th><th>${byShots?'Escena':'Esc.'}</th>${byShots?'<th>Plano</th>':''}<th>${byShots?'Plano / actividad':'Escena / actividad'}</th><th>Indicaciones</th></tr></thead>
+      <tbody>${rows||`<tr><td colspan="${columns}">Sin escenas programadas.</td></tr>`}</tbody></table>`;
   }
 
-  function buildDayplanPrintHeader(d,kind="Plan de rodaje"){
+  function buildDayplanPrintHeader(d,kind="Plan de rodaje",shotCount=null){
     const title = `${formatDayTitle(d.date)}${d.label ? " · " + d.label : ""}`.trim();
-    return `<header class="dpPrintHeader">${productionPrintMasthead(kind,d)}
+    return `<header class="dpPrintHeader${shotCount===null?'':' dpPrintByShots'}">${productionPrintMasthead(kind+(shotCount===null?'':' · Por planos'),d)}
       <div class="dpPrintHeading">
         <div><h1>${esc(state?.meta?.title || "Proyecto")}</h1></div>
         <div class="dpPrintDay">${esc(title || "Jornada de rodaje")}</div>
@@ -8352,6 +8355,7 @@ function renderReportDayplanDetail(d){
         <div><span>Citación general</span><strong>${esc(d.callTime || "—")}</strong></div>
         <div><span>Locación de rodaje</span><strong>${dayLocationHTML(d)}</strong></div>
         <div><span>Escenas programadas</span><strong>${(d.sceneIds || []).filter(getScene).length}</strong></div>
+        ${shotCount===null?'':`<div><span>Planos programados</span><strong>${shotCount}</strong></div>`}
       </div>
     </header>`;
   }

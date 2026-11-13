@@ -21,7 +21,7 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
   const scenes=Array.from({length:20},(_,i)=>({id:'scene'+i,number:i+1,slugline:'INT. EDIFICIO - SALA '+(i+1)+' - DÍA',location:'EDIFICIO / SALA '+(i+1),intExt:'Int',timeOfDay:'Día',summary:'El equipo prepara la siguiente toma. Dos cámaras siguen a los personajes y registran las acciones de la escena. '.repeat(3),elements:{cast:[]}}));
   const seed={meta:{version:14,title:'PROYECTO DEMOSTRACIÓN',updatedAt:new Date().toISOString()},scenes,crew:[],project:{},shootDays:[{id:'day',date:'2026-11-05',label:'Día 1 · Edificio',location:'EDIFICIO',callTime:'08:00',sceneIds:scenes.map(s=>s.id),times:Object.fromEntries(scenes.map((s,i)=>[s.id,45+i*20])),durations:Object.fromEntries(scenes.map(s=>[s.id,20])),blocks:[{id:'arrival',startMin:0,durMin:15,title:'Llegada al rodaje',blockType:'arrival',color:'#176c3a'},{id:'setup',startMin:15,durMin:30,title:'Armado técnico',blockType:'setup',color:'#f7cb48'}]}]};
   seed.shootingLocations=[{id:'building',name:'EDIFICIO',address:'Av. Corrientes 1234, Buenos Aires'},{id:'hotel',name:'HOTEL',address:'https://maps.app.goo.gl/example'}];
-  scenes.forEach(scene=>scene.shootingLocationId='building');
+  scenes.forEach(scene=>{scene.shootingLocationId='building';scene.shots=[1,2,3].map(n=>({id:scene.id+'p'+n,type:n===1?'Plano general':'Primer plano',desc:'Descripción completa del plano '+n+'. '+('Seguimos al personaje durante su recorrido. '.repeat(5)),durMin:5}));});
   seed.scenes.push({id:'hotelScene',number:21,slugline:'INT. HOTEL - LOBBY - DÍA',shootingLocationId:'hotel',summary:'Llegada al hotel.',elements:{cast:[]},shots:[{id:'shot1',type:'Plano medio',desc:'Entrada al lobby',durMin:10},{id:'shot2',type:'Primer plano',desc:'Reacción',durMin:20}]});
   seed.shootDays.push({id:'hotelDay',date:'2026-11-06',label:'Día 2 · Hotel',location:'HOTEL',callTime:'10:00',sceneIds:['hotelScene'],times:{hotelScene:15},durations:{hotelScene:30},blocks:[{id:'hotelArrival',startMin:0,durMin:15,title:'Llegada al hotel'}]}, {id:'emptyDay',date:'2026-11-07',label:'Día 3 · Pendiente',callTime:'08:00',sceneIds:[],times:{},durations:{},blocks:[]});
   await page.evaluate(data=>{
@@ -56,7 +56,7 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
    if(daily){
     assert.equal(await pdf.locator('#gbPrintRoot .dpPrintHeader h1').textContent(),seed.meta.title);
     assert.match(await pdf.locator('#gbPrintRoot .dpPrintMeta').textContent(),/08:00[\s\S]*EDIFICIO[\s\S]*20/);
-    assert.equal(await pdf.locator('#gbPrintRoot .dayplanPrintTable tbody tr').count(),22);
+    assert.equal(await pdf.locator('#gbPrintRoot .dayplanPrintTable tbody tr').count(),shots?62:22);
     assert.equal(await pdf.locator('#gbPrintRoot .dayplanPrintTable tbody tr').first().evaluate(e=>getComputedStyle(e).breakInside),'avoid');
     assert.equal(await pdf.locator('#gbPrintRoot thead').evaluate(e=>getComputedStyle(e).display),'table-header-group');
     assert.equal(await pdf.locator('#gbPrintRoot').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);
@@ -64,6 +64,16 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
    const sections=pdf.locator('#gbPrintRoot .dpPrintBlock');
    assert.equal(await pdf.locator('#gbPrintRoot .dpPrintContinuation').count(),0,'No duplicate project/day subtitle above columns');
    assert.equal(await sections.count(),daily?1:3,'One sequential document per selected day');
+   if(shots){
+    assert.deepEqual(await sections.first().locator('thead tr').last().locator('th').allTextContents(),['Inicio','Fin','Duración','Escena','Plano','Plano / actividad','Indicaciones']);
+    assert.equal(await sections.first().locator('.cShot').count(),62);
+    assert.deepEqual((await sections.first().locator('.cShot').allTextContents()).slice(0,5),['—','—','Plano 1','Plano 2','Plano 3']);
+    assert.deepEqual((await sections.first().locator('.cNro').allTextContents()).slice(0,5),['—','—','1','1','1']);
+    assert.ok((await sections.first().locator('.cSum').nth(2).textContent()).endsWith('su recorrido. '),'Keep the complete shot description');
+    assert.match(await sections.first().locator('.dpPrintMeta').textContent(),/Planos programados60/);
+    if(!daily){const cells=await sections.nth(1).locator('tbody tr').nth(1).locator('td').allTextContents();assert.deepEqual(cells.slice(0,5),['10:15','10:25','10m','21','Plano 1']);}
+   }
+
    assert.equal(await pdf.locator('#gbPrintRoot .pgGrid').count(),0,'No legacy side-by-side cards');
    if(!daily){
     assert.deepEqual(await sections.locator('.dpPrintDay').allTextContents(),['Jueves 05/11 · Día 1 · Edificio','Viernes 06/11 · Día 2 · Hotel','Sábado 07/11 · Día 3 · Pendiente']);
@@ -96,6 +106,8 @@ const output=process.env.RODA_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmpdir()
   await page.getByRole('button',{name:'REPORTES',exact:true}).click();await page.locator('#reportTabs [data-tab="dayplan"]').click();await page.locator('#btnPrintCallSheet').click();await inspectPrint('plan-reportes',true);
   await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('#btnSchedPrint').click();await inspectPrint('plan-general',false);
   await page.locator('#scheduleCard .shotPlanningUnit select').selectOption('shots');await page.locator('#btnSchedPrint').click();await inspectPrint('plan-general-planos',false,true);
+  await page.locator('.navBtn[data-view="dayplan"]').click();await page.locator('#btnDayplanPrint').click();await inspectPrint('plan-dia-planos',true,true);
+  await page.locator('.navBtn[data-view="schedule"]').click();
   await page.evaluate(()=>localStorage.setItem('gb_sched_dayfilter_v1__default',JSON.stringify({mode:'selected',selected:['hotelDay']})));
   await page.locator('#btnSchedPrint').click();await page.waitForFunction(()=>!!window.printSnapshot);
   assert.equal(await page.evaluate(()=>new DOMParser().parseFromString(printSnapshot,'text/html').querySelectorAll('#gbPrintRoot .dpPrintBlock').length),1,'Respect selected days');
