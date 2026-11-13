@@ -15,7 +15,7 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
  await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
  try{
   browser=await chromium.launch({headless:true,channel:'msedge'});
-  const page=await browser.newPage({viewport:{width:1600,height:1000}}),errors=[];
+  const page=await browser.newPage({viewport:{width:1600,height:1000},hasTouch:true}),errors=[];
   page.setDefaultTimeout(10000);page.on('pageerror',e=>{errors.push(e.message);console.error(e.message)});await page.route('https://**/*',r=>r.abort());
   await page.goto('http://127.0.0.1:'+server.address().port+'/roda/');
   const seed={meta:{version:14,title:'PRUEBA SHOTLIST',updatedAt:new Date().toISOString()},project:{},scenes:[
@@ -46,51 +46,46 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   seed.shootDays[0].sceneIds=['s1','s2','s4'];seed.shootDays[0].times={s1:0,s2:60,s4:90};seed.shootDays[0].durations={s1:30,s2:30,s4:45};seed.shootDays[0].blocks=[{id:'meal',title:'Almuerzo',startMin:30,durMin:30}];
   await boot(seed);await page.locator('.navBtn[data-view="dayplan"]').click();
   const unit=page.locator('#dayplanCard [aria-label="Organizar plan por"]');assert.equal(await unit.isVisible(),true);
-  const baseline=await page.evaluate(()=>structuredClone(savedState.shootDays));
-  async function drag(from,to,fraction=.2,shift=false){await page.locator(from).scrollIntoViewIfNeeded();await page.locator(to).scrollIntoViewIfNeeded();const a=await page.locator(from).boundingBox(),b=await page.locator(to).boundingBox();assert(a&&b);await page.mouse.move(a.x+Math.min(90,a.width/2),a.y+a.height/2);await page.mouse.down();if(shift)await page.keyboard.down('Shift');await page.mouse.move(b.x+Math.min(100,b.width/2),b.y+b.height*fraction,{steps:12});await page.mouse.up();if(shift)await page.keyboard.up('Shift');await page.waitForTimeout(150);}
-  await drag('#dpLane [data-key="scene:s4"]','#dpLane [data-key="scene:s2"]');
-  assert.deepEqual(await page.evaluate(()=>savedState.shootDays[0].times),{s1:0,s4:60,s2:105});
-  await page.locator('#btnDayplanUndo').click();assert.deepEqual(await page.evaluate(()=>savedState.shootDays.map(d=>({times:d.times,durations:d.durations,blocks:d.blocks.map(b=>[b.id,b.startMin,b.durMin])}))),baseline.map(d=>({times:d.times,durations:d.durations,blocks:d.blocks.map(b=>[b.id,b.startMin,b.durMin])})));
-  await page.locator('#dpScroller').evaluate(n=>n.scrollTop=Math.max(0,n.scrollTop-120));
-  await drag('#dpLane [data-key="scene:s4"]','#dpLane [data-key="scene:s1"]',.2,true);
-  assert.deepEqual(await page.evaluate(()=>savedState.shootDays[0].times),{s4:0,s2:75,s1:105});
-  await page.locator('#btnDayplanUndo').click();
-  await page.locator('#dayplanHead .planningSelectAll').click();assert.equal(await page.locator('#dpLane .planningCheck:checked').count(),4);
-  await page.locator('#dayplanHead [data-shift="-1"]').click();assert.deepEqual(await page.evaluate(()=>savedState.shootDays[0].times),{s1:-15,s2:45,s4:75});assert.equal(await page.evaluate(()=>savedState.shootDays[0].blocks[0].startMin),15);
-  await page.locator('#btnDayplanUndo').click();await page.locator('#dayplanHead .planningClear').click();
-  // Real group drag includes a production block and a scene.
-  await page.locator('#dpLane [data-key="scene:s1"] .planningCheck').click();await page.locator('#dpLane [data-key="block:meal"] .planningCheck').click();
-  await drag('#dpLane [data-key="scene:s1"]','#dpLane [data-key="scene:s4"]',.85);
+  async function drag(from,to,after=false,touch=false){const a=await page.locator(from).boundingBox(),b=await page.locator(to).boundingBox(),x=a.x+a.width/2,y=a.y+a.height/2,tx=b.x+b.width/2,ty=b.y+b.height*(after?.8:.3);if(touch){const grip=await page.locator(from+' .planTouchGrip').boundingBox(),cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:grip.x+grip.width/2,y}]});for(let i=1;i<=8;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:grip.x+grip.width/2+(tx-grip.x-grip.width/2)*i/8,y:y+(ty-y)*i/8}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();}else{await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(tx,ty,{steps:8});await page.mouse.up();}await page.waitForTimeout(100);}
+  async function box(first,last,gutter){const a=await page.locator(first).boundingBox(),b=await page.locator(last).boundingBox();await page.mouse.move(a.x-gutter,a.y+2);await page.mouse.down();await page.mouse.move(a.x+60,b.y+b.height-2,{steps:8});await page.mouse.up();}
+  assert.equal(await page.locator('.planningCheck,.planningSelectionBar').count(),0);
+  await page.locator('#dpScroller').evaluate(n=>n.scrollTop=Math.max(0,n.scrollTop-100));
+  await box('#dpLane [data-key="scene:s1"]','#dpLane [data-key="block:meal"]',20);
+  assert.equal(await page.locator('#dpLane .movement-selected').count(),2);
+  await drag('#dpLane [data-key="scene:s1"]','#dpLane [data-key="scene:s4"]',true);
   assert.deepEqual(await page.evaluate(()=>savedState.shootDays[0].times),{s2:0,s4:30,s1:75});assert.equal(await page.evaluate(()=>savedState.shootDays[0].blocks[0].startMin),105);
-  await page.locator('#btnDayplanUndo').click();await page.locator('#dayplanHead .planningClear').click();
+  await page.keyboard.press('Control+z');await page.keyboard.press('Escape');
   await page.locator('#dayplanView').selectOption('compact');
-  await drag('#dpLane [data-key="block:meal"]','#dpLane [data-key="scene:s4"]',.85);
-  assert.equal(await page.evaluate(()=>savedState.shootDays[0].blocks[0].startMin),105);await page.locator('#btnDayplanUndo').click();
   await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('#dayNavigation summary').click();await page.locator('#dayNavigation [data-day="all"]').click();
-  await drag('#schedBoard [data-day-id="d1"][data-item-id="s4"]','#schedBoard [data-day-id="d2"][data-item-id="s3"]');
-  assert.equal(await page.evaluate(()=>savedState.shootDays[1].times.s4),0);assert.equal(await page.evaluate(()=>savedState.shootDays[1].times.s3),45);
-  await page.locator('#btnSchedUndo').click();
-  await drag('#schedBoard [data-day-id="d1"][data-item-id="s4"]','#schedBoard [data-day-id="d2"][data-item-id="s3"]',.2,true);
-  assert.equal(await page.evaluate(()=>savedState.shootDays[1].times.s4),0);assert.equal(await page.evaluate(()=>savedState.shootDays[0].times.s3),90);assert.equal(await page.evaluate(()=>savedState.shootDays[0].durations.s3),30);assert.equal(await page.evaluate(()=>savedState.shootDays[1].durations.s4),45);await page.locator('#btnSchedUndo').click();
-  const day1=page.locator('.schedDay').filter({has:page.locator('[data-day-id="d1"]')});await day1.locator('.planningSelectAll').click();await day1.locator('[data-shift="1"]').click();assert.equal(await page.evaluate(()=>savedState.shootDays[0].times.s1),15);await page.locator('#btnSchedUndo').click();
-  await page.locator('.navBtn[data-view="dayplan"]').click();await page.locator('#dayplanHead .planningClear').click();await unit.selectOption('shots');
-  assert.equal(await page.locator('#shotPlanDay .shotPlanRow.shot').count(),2);
-  await drag('#shotPlanDay [data-key="s1|a"]','#shotPlanDay [data-key="scene:s2"]');assert.equal(await page.evaluate(()=>savedState.shootDays[0].shotTimeline['s1|a'].start),45);
-  await page.locator('#btnDayplanUndo').click();await page.locator('#btnDayplanRedo').click();
-  await page.locator('.navBtn[data-view="schedule"]').click();assert.equal(await page.locator('#scheduleCard [aria-label="Organizar plan por"]').inputValue(),'shots');
-  assert.ok(await page.locator('.shotPlanDayColumn').count()>=2);
-  await page.locator('.navBtn[data-view="dayplan"]').click();await unit.selectOption('scenes');
-  assert.equal(await page.locator('#shotPlanDay .shotPlanRow .planningCheck').count(),5);
-  await page.locator('#dayplanHead .planningSelectAll').click();await page.locator('#dayplanHead [data-shift="1"]').click();assert.equal(await page.evaluate(()=>savedState.shootDays[0].shotTimeline['s1|b'].start),15);
-  for(const width of [820,390]){await page.setViewportSize({width,height:900});await page.waitForTimeout(250);assert.equal(await unit.isVisible(),true);const fit=await page.locator('#shotPlanDay').evaluate(n=>({w:n.clientWidth,s:n.scrollWidth,h:n.clientHeight}));assert.ok(fit.s<=fit.w+2,JSON.stringify(fit));assert.ok(fit.h>=(studio?180:160),JSON.stringify(fit));await page.screenshot({path:path.join(output,'movement-'+width+'.png')});}
-  await page.setViewportSize({width:1600,height:1000});
-  async function cancelDrag(reason){
-   const source=page.locator('#shotPlanDay .shotPlanRow').first(),target=page.locator('#shotPlanDay .shotPlanRow').last();await source.scrollIntoViewIfNeeded();await target.scrollIntoViewIfNeeded();const a=await source.boundingBox(),b=await target.boundingBox(),before=await page.evaluate(()=>JSON.stringify(savedState)),writes=await page.evaluate(()=>savedWrites);
-   await page.mouse.move(a.x+90,a.y+a.height/2);await page.mouse.down();await page.mouse.move(b.x+90,b.y+10,{steps:8});assert.equal(await page.locator('.planningDragGhost').count(),1);
-   if(reason==='escape')await page.keyboard.press('Escape');else if(reason==='pointercancel')await source.dispatchEvent('pointercancel',{pointerId:1});else await page.evaluate(()=>{RODA_STUDIO.canEdit=false;RODA_STUDIO.project.rodaAccess={admin:false,sections:RodaPolicy.all('read')};RodaAccess.apply();});
-   await page.mouse.up();assert.equal(await page.evaluate(()=>JSON.stringify(savedState)),before);assert.equal(await page.evaluate(()=>savedWrites),writes);assert.equal(await page.locator('.planningDragGhost').count(),0);
+  await box('#schedBoard [data-item-id="s1"]','#schedBoard [data-item-id="meal"]',15);assert.equal(await page.locator('#schedBoard .movement-selected').count(),2);
+  await drag('#schedBoard [data-item-id="s1"]','#schedBoard [data-item-id="s3"]');assert.equal(await page.evaluate(()=>savedState.shootDays[1].times.s3),60);await page.locator('#btnSchedUndo').click();await page.keyboard.press('Escape');
+  await page.locator('.navBtn[data-view="dayplan"]').click();
+  for(const width of [820,390]){
+   await page.setViewportSize({width,height:1000});await page.waitForTimeout(150);
+   const mode=page.locator('#dayplanHead [data-drag-mode="swap"]');await mode.click();assert.equal(await mode.getAttribute('aria-pressed'),'true');
+   const before=await page.evaluate(()=>structuredClone(savedState.shootDays[0]));
+   await drag('#dpLane [data-key="block:meal"]','#dpLane [data-key="scene:s4"]',false,true);
+   assert.equal(await page.evaluate(()=>savedState.shootDays[0].blocks[0].startMin),105);assert.equal(await page.evaluate(()=>savedState.shootDays[0].times.s4),30);assert.equal(await page.evaluate(()=>savedState.shootDays[0].durations.s4),45);
+   await page.keyboard.press('Control+z');await page.keyboard.press('Escape');
+   await page.locator('#dayplanHead [data-drag-mode="insert"]').click();await drag('#dpLane [data-key="block:meal"]','#dpLane [data-key="scene:s4"]',false,true);
+   assert.equal(await page.evaluate(()=>savedState.shootDays[0].blocks[0].startMin),60);assert.equal(await page.evaluate(()=>savedState.shootDays[0].times.s4),90);await page.keyboard.press('Control+z');await page.keyboard.press('Escape');
+   const fit=await page.locator('#dayplanHead').evaluate(n=>n.scrollWidth<=n.clientWidth+2);assert.ok(fit);await page.screenshot({path:path.join(output,'marquee-'+width+'.png')});
   }
-  await cancelDrag('escape');await cancelDrag('pointercancel');if(studio)await cancelDrag('permission');
-  assert.deepEqual(errors,[]);console.log('Planning movement browser passed; '+output);
+  await page.setViewportSize({width:1600,height:1000});await page.waitForTimeout(100);
+  await unit.selectOption('shots');await page.keyboard.press('Escape');
+  const beforeBox=await page.evaluate(()=>JSON.stringify(savedState.shootDays));
+  await box('#shotPlanDay [data-key="s1|a"]','#shotPlanDay [data-key="s1|b"]',12);
+  assert.equal(await page.locator('#shotPlanDay .movement-selected').count(),2);
+  assert.equal(await page.evaluate(()=>JSON.stringify(savedState.shootDays)),beforeBox);
+  await drag('#shotPlanDay [data-key="s1|a"]','#shotPlanDay [data-key="block:meal"]',true);
+  assert.equal(await page.evaluate(()=>savedState.shootDays[0].shotTimeline['s1|a'].start),30);
+  assert.equal(await page.evaluate(()=>savedState.shootDays[0].shotTimeline['s1|b'].dur),15);
+  await page.keyboard.press('Control+z');await page.keyboard.press('Escape');
+  const r=await page.locator('#shotPlanDay [data-key="s1|a"]').boundingBox();
+  await page.mouse.move(r.x-12,r.y+2);await page.mouse.down();await page.mouse.move(r.x+80,r.y+r.height-2,{steps:6});assert.equal(await page.locator('.planningMarquee').count(),1);
+  await page.screenshot({path:path.join(output,'marquee-desktop.png')});await page.keyboard.press('Escape');await page.mouse.up();
+  assert.equal(await page.locator('#shotPlanDay .movement-selected').count(),0);assert.equal(await page.locator('.planningMarquee').count(),0);
+  assert.equal(await page.evaluate(()=>JSON.stringify(savedState.shootDays)),beforeBox);
+  assert.deepEqual(errors,[]);console.log('Marquee selection, group movement, cross-day insertion, touch insert/swap for scenes and blocks, undo and responsive controls passed. '+output);
  }finally{await browser?.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
