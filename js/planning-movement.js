@@ -33,7 +33,7 @@
     if(same&&hit.some(r=>selected.has(r.key)))return false;
     if(!same&&moving.some(r=>b.some(t=>t.key===r.key)))throw Error('Una de las actividades ya está en la jornada de destino.');
     if(options.swap){
-      if(!hit.length)throw Error('Mantené Shift sobre otra actividad para intercambiar.');
+      if(!hit.length)throw Error('Elegí otra actividad para intercambiar.');
       if(same){
         // Exchange contiguous groups while preserving the rest of this interval,
         // its deliberate gaps, and its exact finishing time.

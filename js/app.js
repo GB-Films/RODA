@@ -3250,10 +3250,6 @@ function setupScheduleWheelScroll(){
     // Mode can be unlocked after rendering; the guard also runs on dragstart.
     head.draggable = true;
     head.title = "Arrastrá este encabezado sobre otro día para intercambiar sus escenas";
-    const hint = document.createElement("div");
-    hint.className = "daySwapHint";
-    hint.textContent = "⠿ Arrastrá para intercambiar escenas";
-    head.appendChild(hint);
     head.addEventListener("dragstart",e=>{
       if(isReadOnly()){ e.preventDefault(); return; }
       daySwapDragging = true;

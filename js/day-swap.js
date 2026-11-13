@@ -178,10 +178,6 @@
         head.setAttribute("aria-disabled",String(!canEdit()));
         head.setAttribute("aria-label",`${head.textContent.trim()}. Intercambiar escenas: arrastrá a otro día, o presioná Enter aquí y después en el destino.`);
         head.title = "Arrastrá sobre otro día para intercambiar sus escenas";
-        const hint = head.ownerDocument.createElement("div");
-        hint.className = "daySwapHint";
-        hint.textContent = "⠿ Arrastrá para intercambiar escenas";
-        head.append(hint);
         head.addEventListener("dragstart",event=>{
           if(!canEdit()){ event.preventDefault(); return; }
           event.stopPropagation();

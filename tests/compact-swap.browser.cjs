@@ -43,42 +43,42 @@ const output=process.env.RODA_PLANNING_QA_DIR||fs.mkdtempSync(path.join(os.tmpdi
   const daily=id=>page.locator('#dpLane .dpBlock[data-id="'+id+'"]'),general=id=>page.locator('#schedBoard .schedBlock[data-item-id="'+id+'"]');
   async function begin(source,target){
     const a=await source.boundingBox(),b=await target.boundingBox();
-    await page.mouse.move(a.x+100,a.y+a.height/2);await page.mouse.down();await page.keyboard.down('Shift');await page.mouse.move(b.x+100,b.y+b.height/2,{steps:8});
+    await page.mouse.move(a.x+100,a.y+a.height/2);await page.mouse.down();await page.mouse.move(b.x+100,b.y+b.height/2,{steps:8});
     assert.equal(await target.evaluate(el=>el.classList.contains('planning-swap-target')),true);
-    assert.equal(await page.locator('.planningDragGhost').count(),1);
+    assert.equal(await page.locator('.planningDragGhost').count(),0);
   }
   await daily('a').click();if(await page.locator('#dpCloseInspector').isVisible())await page.locator('#dpCloseInspector').click();baseline=await current();const startWrites=await writes();
   await begin(daily('a'),daily('b'));
   await page.screenshot({path:path.join(output,'intercambio-compacto-arrastre.png')});
-  await page.mouse.up();await page.keyboard.up('Shift');
+  await page.mouse.up();
   let saved=await current();assert.deepEqual(saved.shootDays[0].times,{before:0,a:165,middle:135,b:15,after:195});assert.deepEqual(saved.shootDays[0].durations,baseline.shootDays[0].durations);assert.equal(saved.shootDays[0].blocks[0].startMin,90);assert.deepEqual(saved.shootDays[1],baseline.shootDays[1]);assert.equal(await writes(),startWrites+1);
   assert.equal(await daily('a').locator('.dpTime').textContent(),'10:45–11:15');assert.equal(await daily('a').locator('.planDuration').textContent(),'30 min');
   if(await page.locator('#dpCloseInspector').isVisible())await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="schedule"]').click();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="all"]').click();
-  await begin(general('a'),general('b'));await page.mouse.up();await page.keyboard.up('Shift');saved=await current();assert.deepEqual(saved.shootDays,baseline.shootDays);assert.equal(await writes(),startWrites+2);
+  await begin(general('a'),general('b'));await page.mouse.up();saved=await current();assert.deepEqual(saved.shootDays,baseline.shootDays);assert.equal(await writes(),startWrites+2);
   if(await page.locator('#dpCloseInspector').isVisible())await page.locator('#dpCloseInspector').click();
   // Cancel with Escape, pointercancel, invalid production block, outside the list; cancel a valid cross-day preview.
   async function unchanged(action){const before=await current(),count=await writes();await action();assert.deepEqual(await current(),before);assert.equal(await writes(),count);assert.equal(await page.locator('.planning-moving,.planning-swap-target').count(),0);}
-  await unchanged(async()=>{await begin(general('a'),general('b'));await page.keyboard.press('Escape');await page.mouse.up();await page.keyboard.up('Shift');});
-  await unchanged(async()=>{await begin(general('a'),general('b'));await page.locator('#schedBoard').dispatchEvent('pointercancel',{pointerId:1});await page.mouse.up();await page.keyboard.up('Shift');});
-  async function invalidDrag(source,target){const a=await source.boundingBox(),b=await target.boundingBox();await page.mouse.move(a.x+100,a.y+15);await page.mouse.down();await page.keyboard.down('Shift');await page.mouse.move(b.x+100,b.y+15,{steps:6});assert.equal(await target.evaluate(el=>el.classList.contains('planning-swap-target')),false);await page.mouse.up();await page.keyboard.up('Shift');}
+  await unchanged(async()=>{await begin(general('a'),general('b'));await page.keyboard.press('Escape');await page.mouse.up();});
+  await unchanged(async()=>{await begin(general('a'),general('b'));await page.locator('#schedBoard').dispatchEvent('pointercancel',{pointerId:1});await page.mouse.up();});
+  async function invalidDrag(source,target){const a=await source.boundingBox(),b=await target.boundingBox();await page.mouse.move(a.x+100,a.y+15);await page.mouse.down();await page.mouse.move(b.x+100,b.y+15,{steps:6});assert.equal(await target.evaluate(el=>el.classList.contains('planning-swap-target')),false);await page.mouse.up();}
   // Production blocks are now valid swap targets (covered by planning-movement.browser).
-  await unchanged(async()=>{await begin(general('a'),general('other'));await page.keyboard.press('Escape');await page.mouse.up();await page.keyboard.up('Shift');});
-  await unchanged(async()=>{const a=await general('a').boundingBox();await page.mouse.move(a.x+100,a.y+15);await page.mouse.down();await page.keyboard.down('Shift');await page.mouse.move(50,100,{steps:8});await page.mouse.up();await page.keyboard.up('Shift');});
+  await unchanged(async()=>{await begin(general('a'),general('other'));await page.keyboard.press('Escape');await page.mouse.up();});
+  await unchanged(async()=>{const a=await general('a').boundingBox();await page.mouse.move(a.x+100,a.y+15);await page.mouse.down();await page.mouse.move(50,100,{steps:8});await page.mouse.up();});
   // Adjacent scenes with unequal duration leave the following scene, meal and next day fixed.
-  await begin(general('a'),general('before'));await page.mouse.up();await page.keyboard.up('Shift');saved=await current();assert.deepEqual(saved.shootDays[0].times,{before:30,a:0,middle:105,b:135,after:195});assert.deepEqual(saved.shootDays[0].durations,baseline.shootDays[0].durations);assert.equal(saved.shootDays[0].blocks[0].startMin,60);assert.deepEqual(saved.shootDays[1],baseline.shootDays[1]);
+  await begin(general('a'),general('before'));await page.mouse.up();saved=await current();assert.deepEqual(saved.shootDays[0].times,{before:30,a:0,middle:105,b:135,after:195});assert.deepEqual(saved.shootDays[0].durations,baseline.shootDays[0].durations);assert.equal(saved.shootDays[0].blocks[0].startMin,60);assert.deepEqual(saved.shootDays[1],baseline.shootDays[1]);
   if(await page.locator('#dpCloseInspector').isVisible())await page.locator('#dpCloseInspector').click();
-  await begin(general('a'),general('after'));await page.mouse.up();await page.keyboard.up('Shift');saved=await current();assert.deepEqual(saved.shootDays[0].times,{before:30,a:195,middle:105,b:135,after:0});assert.deepEqual(saved.shootDays[0].durations,baseline.shootDays[0].durations);
+  await begin(general('a'),general('after'));await page.mouse.up();saved=await current();assert.deepEqual(saved.shootDays[0].times,{before:30,a:195,middle:105,b:135,after:0});assert.deepEqual(saved.shootDays[0].durations,baseline.shootDays[0].durations);
   if(await page.locator('#dpCloseInspector').isVisible())await page.locator('#dpCloseInspector').click();await page.locator('.navBtn[data-view="dayplan"]').click();
   await unchanged(async()=>{
     await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="longday"]').click();const source=daily('long0'),a=await source.boundingBox(),r=await page.locator('#dpScroller').boundingBox();
-    await page.mouse.move(a.x+100,a.y+a.height/2);await page.mouse.down();await page.keyboard.down('Shift');await page.mouse.move(a.x+100,Math.min(r.y+r.height,1000)-15,{steps:8});
+    await page.mouse.move(a.x+100,a.y+a.height/2);await page.mouse.down();await page.mouse.move(a.x+100,Math.min(r.y+r.height,1000)-15,{steps:8});
     await page.waitForFunction(()=>document.getElementById('dpScroller').scrollTop>180);
-    await page.keyboard.press('Escape');await page.mouse.up();await page.keyboard.up('Shift');await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="day"]').click();
+    await page.keyboard.press('Escape');await page.mouse.up();await page.locator('.dayPicker > summary').click();await page.locator('.dayPickerOption[data-day="day"]').click();
   });
   await page.screenshot({path:path.join(output,'intercambio-compacto-resultado.png')});
   if(studio){
     await begin(daily('a'),daily('b'));await page.evaluate(()=>{RODA_STUDIO.canEdit=false;RODA_STUDIO.project.rodaAccess={admin:false,sections:{planning:'read'}};RodaAccess.apply();});
-    const before=await current(),count=await writes();await page.mouse.up();await page.keyboard.up('Shift');assert.deepEqual(await current(),before);assert.equal(await writes(),count);
+    const before=await current(),count=await writes();await page.mouse.up();assert.deepEqual(await current(),before);assert.equal(await writes(),count);
     await unchanged(()=>invalidDrag(daily('a'),daily('b')));await daily('a').click();assert.equal(await page.locator('#dpi_time').isEnabled(),false);
   }
   assert.deepEqual(errors,[]);console.log('OK: compact swaps in both plans, unequal durations, adjacent/reverse swaps, unchanged interval end/later scenes/other days, cancellation, invalid targets and read-only access. '+output);
