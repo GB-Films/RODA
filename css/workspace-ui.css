@@ -1,0 +1,41 @@
+/* Quiet surfaces are local to Roda. Timelines, status colors and paper keep
+   their own visual semantics. These rules never apply to printed documents. */
+@media screen{
+ .main .view .card{border-color:transparent;box-shadow:none;}
+ .main .view .cardHeader{border-bottom-color:color-mix(in srgb,var(--border) 45%,transparent);background:transparent;}
+ .main .view :is(.btn,.input,input:not([type=checkbox]):not([type=radio]):not([type=color]),select,textarea){border-color:transparent;box-shadow:none;}
+ .main .view :is(.btn,.input,input,select,textarea):hover{border-color:var(--border);}
+ .main .view :is(button,input,select,textarea,summary):focus-visible{outline:2px solid var(--studio-accent,#fff);outline-offset:2px;}
+ .main .view .btn:not(.primary):not(.danger):not(.active){background:color-mix(in srgb,var(--studio-ink,var(--text)) 5%,transparent);}
+ .main .view :is(.tableWrap,.overview-stats,.log-day,.log-map-panel,.log-stats>div,.log-vehicle){border-color:transparent;box-shadow:none;}
+ .main .view :is(td,th){border-color:color-mix(in srgb,var(--border) 40%,transparent);}
+ .main .view :is(.callCompactCard,.callSettings,.callNotesBox){border-color:transparent;box-shadow:none;}
+ #dayDetailCard .dayDetail3col{display:block;}
+ #dayDetailCard .dayDetail3col>[hidden]{display:none!important;}
+ #dayDetailCard .dayDetail3col>.col{min-width:0;}
+ .callSectionTabs{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 20px;}
+ .main .view .callSectionTab{border:0;background:transparent!important;padding:10px 18px;color:var(--muted);border-radius:7px;min-height:42px;}
+ .main .view .callSectionTab[aria-selected=true]{background:var(--studio-accent,#fff)!important;color:var(--studio-on-accent,#111);}
+ #dayDetailCard .colTitle{display:none;}
+ #dayDetailCard .callFilters{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px;max-width:100%;}
+ #dayDetailCard .callFilters>input{flex:1;min-width:180px;}
+ #dayDetailCard .callFilters .listFilterRow{flex:0 1 360px;margin:0;}
+ #dayDetailCard :is(.callCompactCard,.dpRowCard){border:0;border-radius:8px;background:color-mix(in srgb,var(--studio-ink,var(--text)) 3%,transparent);padding:16px;margin-bottom:10px;}
+ #dayDetailCard .callRowActions{border-top:0;padding-top:4px;gap:6px;}
+ #dayDetailCard .callRowActions .btn{background:transparent;}
+ #dayDetailCard .callPeopleList{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:12px;align-items:start;}
+ #dayDetailCard .callNotesBox{margin-top:24px;background:transparent;}
+ #dayDetailCard .callNotesBox summary{color:var(--muted);}
+ #reportTabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 14px;}
+ #reportTabs .reportTabBtn{border:0;}
+ .main #reportTabs .reportTabBtn.active{background:var(--studio-accent,#fff);color:var(--studio-on-accent,#111);}
+ #reportSearch,#reportSearchStatus{display:none!important;}
+ .reportPaperPreview{min-width:0;background:transparent!important;padding:0!important;}
+ .reportPreviewToolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;}.reportPreviewToolbar .btn{flex-shrink:0;}
+ .reportPreviewCaption{font-size:11px;color:var(--muted);margin:0 0 10px;}
+ .reportPaperFrame{display:block;width:100%;height:70vh;min-height:360px;border:0;border-radius:8px;background:#252729;}
+ .log-pin,.log-pin.location,.log-pin.approximate{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;text-shadow:none!important;}
+ .log-pin svg{display:block;width:30px;height:40px;filter:drop-shadow(0 2px 2px #0005);}
+ .log-pin.approximate svg{opacity:.75;}
+ @media(max-width:600px){.callSectionTabs{gap:2px}.main .view .callSectionTab{flex:1;padding:10px 7px;font-size:12px}#dayDetailCard .callFilters .listFilterRow{flex:1 1 100%}.reportPaperFrame{height:66vh;min-height:300px}}
+}

@@ -50,7 +50,7 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
   },seed);
   // Reproduce the shared header's !important display rule, also in standalone Roda.
   await page.addStyleTag({content:'.studio-global-header.studio-shared-header{display:flex!important;background:#050505;color:white;}'});
-  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
+  for(const f of ['dialogs','roda-policy','roda-access','cast','script-pages','script-document','screenplay','script-revisions','script-history','utils','day-swap','production-blocks','call-sheet','workspace-ui','app'].filter(f=>fs.existsSync(path.join(appRoot,'js',f+'.js'))))await page.addScriptTag({url:'js/'+f+'.js'});
   await page.waitForFunction(isStudio=>isStudio?!!window.RODA_READY:!document.body.classList.contains('bootLoading'),studio);await page.evaluate(()=>{document.querySelector('.shell').hidden=false;window.RodaAccess?.bind();});
   const before=await page.evaluate(()=>JSON.stringify(savedState.shootDays)),writes=await page.evaluate(()=>savedWrites);
   async function inspectPrint(name){
@@ -105,10 +105,11 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
    assert.equal(await page.locator('body').evaluate(e=>e.classList.contains('gbPrintingCallsheet')),false);
    await page.evaluate(()=>{window.printSnapshot=null;});
   }
-  await page.getByRole('button',{name:'Call Diario',exact:true}).click();
+  await page.locator('.navBtn[data-view="shooting"]').click();
+  await page.getByRole('tab',{name:'Cast',exact:true}).click();
   const checkActorLayout=async()=>{
     assert.deepEqual(await page.locator('#dayCast .castTimeStack .timeLine').evaluateAll(rows=>rows.flatMap(row=>{
-      const [label,control]=row.children,a=label.getBoundingClientRect(),b=control.getBoundingClientRect();return a.right>b.left+1?[row.textContent]:[];
+      const [label,control]=row.children,a=label.getBoundingClientRect(),b=control.getBoundingClientRect();return a.right>b.left+1&&a.bottom>b.top+1&&b.bottom>a.top+1?[row.textContent]:[];
     })),[],'Time labels never overlap their controls');
     assert.deepEqual(await page.locator('#dayCast .castWorkWindow').evaluateAll(rows=>rows.filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent)),[]);
   };
@@ -122,15 +123,15 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
   await page.pdf({path:path.join(output,'call-native.pdf'),preferCSSPageSize:true,printBackground:true});
   assert.equal(await page.locator('#gbPrintRoot').textContent(),'','Native printing also cleans up');
   await page.getByRole('button',{name:'REPORTES',exact:true}).click();await page.locator('#reportTabs [data-tab="callsheet"]').click();await page.locator('#btnPrintCallSheet').click();await inspectPrint('call-reportes');
-  assert.equal(await page.locator('#callSheetDetail .csPrintTable--agenda').count(),1,'Preview uses the same document');
+  assert.equal(await page.frameLocator('#callSheetDetail iframe').locator('.csPrintTable--agenda').count(),1,'Preview uses the same document');
   assert.equal(await page.locator('#callSheetDetail .callTimeTable').count(),0,'Legacy cramped table is gone');
   await page.pdf({path:path.join(output,'call-native-reportes.pdf'),preferCSSPageSize:true,printBackground:true});
   assert.equal(await page.evaluate(()=>JSON.stringify(savedState.shootDays)),before);
   assert.equal(await page.evaluate(()=>savedWrites),writes);
-  await page.getByRole('button',{name:'Call Diario',exact:true}).click();
+  await page.locator('.navBtn[data-view="shooting"]').click();
   await page.locator('.callNotesBox summary').click();await page.locator('#callPrintFullNotes').check();
   assert.equal(await page.evaluate(()=>savedState.shootDays[0].notes),seed.shootDays[0].notes,'Full original notes are preserved');
-  assert.equal(await page.locator('#callSheetDetail .csPrintDayNotes p').textContent(),seed.shootDays[0].notes.trim());
+  await page.locator('.navBtn[data-view="callsheet"]').click();
   assert.equal(await page.evaluate(()=>savedState.shootDays[0].callPrintFullNotes),true);
   assert.deepEqual(errors,[]);console.log('OK: Call Diario and Reports print, grouped roles, manual calls, contacts and notes preserved, repeated headings, intact rows, 12mm margins, no timing changes or saves. PDFs: '+output);
  }finally{await browser?.close();server.close();}

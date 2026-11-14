@@ -3395,6 +3395,7 @@ const zone = document.createElement("div");
 
   
 function renderDayDetail(){
+  window.RodaWorkspace?.callTabs();
     renderDayNavigation();
   // Asegurar que haya un día seleccionado válido
   if(!selectedDayId || !getDay(selectedDayId)){
@@ -7817,28 +7818,18 @@ grid.appendChild(cell);
   }
 
   function renderReportsDetail(){
+    if(document.body.dataset.rodaView&&document.body.dataset.rodaView!=='callsheet')return;
     renderDayNavigation();
-    const dayId = getReportsSelectedDayId();
-    const d = dayId ? getDay(dayId) : null;
-
-    if(reportsTab==="dayplan"){
-      renderReportDayplanDetail(d);
-      return;
-    }
-    if(reportsTab==="shotlist"){
-      renderReportShotlistDetail(d);
-      return;
-    }
-    if(reportsTab==="elements"){
-      renderReportElementsDetail(d);
-      return;
-    }
-    if(reportsTab==="schedule"){
-      renderReportScheduleDetail();
-      return;
-    }
-    // Call Sheet
-    renderCallSheetDetail(null, dayId);
+    const d=getDay(getReportsSelectedDayId());
+    const specs={
+      dayplan:{host:'reportDayplanDetail',html:()=>d?buildPlanningDayPrint(d):'',className:'gbPrintingDayplan',landscape:true},
+      schedule:{host:'reportScheduleDetail',html:()=>buildPlanGeneralPrintHTML(),className:'gbPrintingDayplan',landscape:true},
+      callsheet:{host:'callSheetDetail',html:()=>d?buildCallSheetPrint(d):'',className:'gbPrintingCallsheet'},
+      shotlist:{host:'reportShotlistDetail',html:()=>d?buildShotlistPrintHTML(d):'',className:'gbPrintingShotlist',margin:10},
+      elements:{host:'reportElementsDetail',html:()=>d?buildElementsByScenePrintPage(d,{title:'Elementos por escena'}):'',className:'gbPrintingElements',margin:6}
+    };
+    const spec=specs[reportsTab]||specs.callsheet;
+    if(window.RodaWorkspace)RodaWorkspace.preview(el(spec.host),{...spec,html:spec.html()});
   }
 
   function buildElementsByScenePrintPage(d, opts={}){
@@ -9994,8 +9985,8 @@ el("scriptVerSelect")?.addEventListener("change", ()=>{
         printPlanGeneral();
         return;
       }
-      const print = el("reportDayplanDetail")?.querySelector(".printOnly");
-      printDayplanContents(print?.innerHTML);
+      const day=getDay(getReportsSelectedDayId());
+      if(day)printDayplanContents(buildPlanningDayPrint(day));
     });
     // Ctrl+P / browser menu must use the same document as our Print buttons.
     window.addEventListener('beforeprint',()=>{

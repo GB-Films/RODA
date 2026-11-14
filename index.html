@@ -6,7 +6,7 @@
   <meta http-equiv="Expires" content="0"/>
   <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
   <title>GB Production Board</title>
-  <link href="css/styles.css?v=1.67.1" rel="stylesheet"/>
+  <link href="css/styles.css?v=1.68.0" rel="stylesheet"/>
   <link href="css/shotthumb_patch.css?v=20260124-01" rel="stylesheet"/>
 <link rel="stylesheet" href="css/production-blocks.css?v=1.21.2">
 <link rel="stylesheet" href="css/planning.css?v=1.27.1">
@@ -20,7 +20,8 @@
 <link rel="stylesheet" href="css/scene-detail.css?v=1.35.0">
 <link rel="preload" href="assets/gb-films-print.png" as="image">
 <link rel="stylesheet" href="js/vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/logistics.css?v=1.60.3">
+<link rel="stylesheet" href="css/logistics.css?v=1.68.0">
+<link rel="stylesheet" href="css/workspace-ui.css?v=1.68.0">
 </head>
 <body>
   <div class="shell">
@@ -45,12 +46,15 @@
       </div>
 
       <nav class="nav">
+        <span class="nav-section">Preproducción</span>
         <button class="navBtn" data-view="cast"><span class="navLbl">Reparto</span></button>
         <button class="navBtn" data-view="breakdown"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Breakdown</span></button>
+        <span class="nav-section">Rodaje</span>
         <button class="navBtn" data-view="shooting"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Call Diario</span></button>
         <button class="navBtn" data-view="dayplan"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Plan de Rodaje</span></button>
         <button class="navBtn" data-view="schedule"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Plan General</span></button>
         <button class="navBtn" data-view="shotlist"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Shotlist</span></button>
+        <span class="nav-section">Producción</span>
         <button class="navBtn" data-view="elements"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Elementos</span></button>
         <button class="navBtn" data-view="logistics"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Logística</span></button>
         <button class="navBtn" data-view="crew"><span class="navIco" aria-hidden="true"></span><span class="navLbl">Equipo</span></button>
@@ -597,7 +601,7 @@
               <div class="reportTabs screenOnly" id="reportTabs" data-ro-allow="1">
                 <button class="btn reportTabBtn" data-tab="dayplan">Plan de Rodaje</button>
                 <button class="btn reportTabBtn" data-tab="schedule">Plan General</button>
-                <button class="btn reportTabBtn active" data-tab="callsheet">Call Sheet</button>
+                <button class="btn reportTabBtn active" data-tab="callsheet">Call Diario</button>
                 <button class="btn reportTabBtn" data-tab="shotlist">Shotlist</button>
                 <button class="btn reportTabBtn" data-tab="elements">Elementos</button>
               </div>
@@ -674,7 +678,7 @@
       "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js",
       "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
     ];
-    const appFiles = ["js/vendor/leaflet/leaflet.js","js/logistics.js","js/logistics-view.js","js/firebase-config.js","js/dialogs.js","js/cast.js","js/call-sheet.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/planning-history.js","js/day-navigation.js","js/shot-planning.js","js/shot-planning-view.js","js/planning-movement.js","js/planning-movement-view.js","js/app.js"];
+    const appFiles = ["js/vendor/leaflet/leaflet.js","js/logistics.js","js/logistics-view.js","js/firebase-config.js","js/dialogs.js","js/cast.js","js/call-sheet.js","js/utils.js","js/day-swap.js","js/production-blocks.js","js/collaboration.js","js/live-view.js","js/storage.js","js/planning-history.js","js/day-navigation.js","js/shot-planning.js","js/shot-planning-view.js","js/planning-movement.js","js/planning-movement-view.js","js/workspace-ui.js","js/app.js"];
 
     function loadScript(src){
       return new Promise((res)=>{
