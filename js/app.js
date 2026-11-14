@@ -7826,79 +7826,31 @@ grid.appendChild(cell);
       dayplan:{host:'reportDayplanDetail',html:()=>d?buildPlanningDayPrint(d):'',className:'gbPrintingDayplan',landscape:true},
       schedule:{host:'reportScheduleDetail',html:()=>buildPlanGeneralPrintHTML(),className:'gbPrintingDayplan',landscape:true},
       callsheet:{host:'callSheetDetail',html:()=>d?buildCallSheetPrint(d):'',className:'gbPrintingCallsheet'},
-      shotlist:{host:'reportShotlistDetail',html:()=>d?buildShotlistPrintHTML(d):'',className:'gbPrintingShotlist',margin:10},
-      elements:{host:'reportElementsDetail',html:()=>d?buildElementsByScenePrintPage(d,{title:'Elementos por escena'}):'',className:'gbPrintingElements',margin:6}
+      shotlist:{host:'reportShotlistDetail',html:()=>d?buildShotlistPrintHTML(d):'',className:'gbPrintingShotlist',landscape:true,margin:12},
+      elements:{host:'reportElementsDetail',html:()=>d?buildElementsByScenePrintPage(d,{title:'Elementos por escena'}):'',className:'gbPrintingElements',landscape:true,margin:12}
     };
     const spec=specs[reportsTab]||specs.callsheet;
     if(window.RodaWorkspace)RodaWorkspace.preview(el(spec.host),{...spec,html:spec.html()});
   }
 
   function buildElementsByScenePrintPage(d, opts={}){
-  if(!d) return "";
-  const title = opts.title || "Elementos por escena";
-  const proj = esc(state.meta?.title || "Proyecto");
-  const dayTxt = `${formatDayTitle(d.date)}${d.label ? " · "+esc(d.label) : ""}`;
-  const callHHMM = normalizeHHMM(d.callTime) || "08:00";
-
-  const ALWAYS = new Set(["cast","props","wardrobe","art"]);
-  const scenePairs = (d.sceneIds||[]).map(sid=>({ sid, sc: getScene(sid) })).filter(x=>!!x.sc);
-
-  const sceneBlocks = scenePairs.map(({sid, sc})=>{
-    const num = sc.number || "";
-    const slug = sc.slugline || "";
-    const metaBits = [];
-    if(sc.intExt) metaBits.push(sc.intExt);
-    if(sc.location) metaBits.push(sc.location);
-    if(sc.timeOfDay) metaBits.push(sc.timeOfDay);
-    if((Number(sc.pages)||0) > 0) metaBits.push(`${fmtPages(sc.pages)} pág`);
-
-    const startOff = Number(d.times?.[sid] ?? 0) || 0;
-    const startClock = callHHMM ? fmtClockFromCall(callHHMM, startOff) : "";
-
-    const rows = cats.map((cat)=>{
-      const arr = union(sc.elements?.[cat] || []);
-      if(!ALWAYS.has(cat) && !arr.length) return "";
-      const label = catNames?.[cat] || cat;
-      const items = arr.length ? arr.map(x=>esc(String(x))).join(", ") : `<span class="muted">—</span>`;
-      return `
-        <tr class="eleRow ${cat==="cast" ? "eleRowCast" : ""}">
-          <th>
-            <span class="eleCatLabel">
-              <span class="dot" style="background:${catColors[cat]}"></span>${esc(label)}
-            </span>
-          </th>
-          <td>${items}</td>
-        </tr>
-      `;
-    }).filter(Boolean).join("");
-
-    return `
-      <div class="eleScene">
-        <div class="eleSceneHdr">
-          <div class="eleSceneNum">Escena ${esc(num)}${startClock ? ` · ${esc(startClock)}` : ""}</div>
-          <div class="eleSceneSlug">${esc(slug)}</div>
-        </div>
-        ${metaBits.length ? `<div class="eleSceneMeta">${esc(metaBits.join(" · "))}</div>` : ``}
-        <table class="eleTable">
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    `;
-  }).join("");
-
-  return `
-    <div class="elementsPrintPage printOnly">
-      <div class="eleHeader">
-        <div class="eleTitle">${esc(title)}</div>
-        <div class="eleSub">${proj} · ${dayTxt}</div>
-        <div class="eleSub2"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
-      </div>
-      <div class="eleList">
-        ${sceneBlocks || `<div class="muted">No hay escenas asignadas.</div>`}
-      </div>
-    </div>
-  `;
-}
+    if(!d)return '';
+    const always=new Set(['cast','props','wardrobe','art']);
+    const sections=(d.sceneIds||[]).map(sid=>{
+      const sc=getScene(sid);if(!sc)return '';
+      const start=Number(d.times?.[sid]??0)||0, duration=Number(d.durations?.[sid]??60)||60;
+      const meta=[sc.intExt,sc.location,sc.timeOfDay].filter(Boolean).join(' · ');
+      const rows=cats.map(cat=>{
+        const items=union(sc.elements?.[cat]||[]);
+        if(!always.has(cat)&&!items.length)return '';
+        return `<tr><th scope="row">${esc(catNames?.[cat]||cat)}</th><td>${items.length?items.map(item=>esc(String(item))).join(', '):'—'}</td></tr>`;
+      }).join('');
+      return `<table class="productionReportTable productionElementsTable"><colgroup><col style="width:38mm"><col></colgroup><thead>
+        <tr class="productionSceneHeading"><th colspan="2"><strong>Escena ${esc(sc.number||'—')} · ${esc(sc.slugline||'')}</strong><span>${esc(fmtClockFromCall(d.callTime||'08:00',start))} – ${esc(fmtClockFromCall(d.callTime||'08:00',start+duration))}${meta?' · '+esc(meta):''}</span></th></tr>
+        <tr><th>Categoría</th><th>Elementos necesarios</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }).join('');
+    return `<article class="productionReport">${buildDayplanPrintHeader(d,opts.title||'Elementos por escena')}${sections||'<p>No hay escenas asignadas a esta jornada.</p>'}</article>`;
+  }
 
 // Screen version: tarjetas (más usable) + punto de color por categoría
 function buildElementsBySceneScreenPage(d, opts={}){
@@ -8413,108 +8365,31 @@ function renderReportDayplanDetail(d){
 
 
   function buildShotlistPrintHTML(d){
-    const project = state?.meta?.title || "Proyecto";
-    const dayLabel = `${formatDayTitle(d.date)}${d.label ? " · "+d.label : ""}`.trim();
-
-    // KPIs
-    const scenes = (d.sceneIds||[]).map(id=>shootingScene(id,d)).filter(Boolean);
-    const pages = scenes.reduce((acc, s)=> acc + (Number(s.pages)||0), 0);
-    const totalShots = scenes.reduce((acc, s)=> acc + ((s.shots||[]).length), 0);
-
-    let kpi = `
-      <div class="shotPrintKpis">
-        <span class="pill">Escenas: <b>${scenes.length}</b></span>
-        <span class="pill">Planos: <b>${totalShots}</b></span>
-        <span class="pill">Pág: <b>${fmtPages(pages)}</b></span>
-      </div>
-    `;
-
-    const header = `
-      <div class="shotPrintHeader">
-        <div class="shotPrintTitle">Shotlist</div>
-        <div class="shotPrintSub"><b>${esc(project)}</b> · ${esc(dayLabel||"Día")}</div>
-        <div class="shotPrintMeta"><b>Call:</b> ${esc(d.callTime||"")} &nbsp; <b>Locación:</b> ${esc(d.location||"")}</div>
-        ${kpi}
-      </div>
-    `;
-
-    if(!scenes.length){
-      return header + `<div class="muted">No hay escenas asignadas a este día.</div>`;
+    const scenes=(d.sceneIds||[]).map(id=>shootingScene(id,d)).filter(Boolean);
+    const count=scenes.reduce((sum,sc)=>sum+(sc.shots||[]).length,0);
+    let out=`<article class="productionReport">${buildDayplanPrintHeader(d,'Shotlist',count)}`;
+    for(const sc of scenes){
+      const sid=sc.id,start=Number(d.times?.[sid]??0)||0,duration=Number(d.durations?.[sid]??60)||60;
+      const shots=sc.shots||[],hasImages=shots.some(sh=>sh.thumbUrl),columns=hasImages?8:7;
+      const total=shots.reduce((sum,sh)=>sum+plannedShotDuration(d,sid,sh),0);
+      let offset=0;
+      const rows=shots.map((sh,index)=>{
+        const dur=plannedShotDuration(d,sid,sh),owner=shotOwner(sh.id)||getScene(sid),key=`${owner.id}|${sh.id}`;
+        const number=d.shotTimeline||d.shotPlanning?.[sid]||isShotPlan()?owner.shots.findIndex(s=>s.id===sh.id)+1:index+1;
+        const at=d.shotTimeline?.[key]?.start??(start+offset);offset+=dur;
+        return `<tr><td class="productionShotCheck"><span class="productionCheck" aria-label="${d.shotsDone?.[key]?'Realizado':'Pendiente'}">${d.shotsDone?.[key]?'✓':''}</span></td>
+          <td class="productionNumber">${esc(owner.number||'—')}</td><td class="productionNumber">${number}</td>
+          <td class="productionClock"><b>${esc(fmtClockFromCall(d.callTime||'08:00',at))}</b><span>${esc(fmtClockFromCall(d.callTime||'08:00',at+dur))}</span></td>
+          <td>${esc(formatDuration(dur))}</td><td>${esc(normalizeShotType(sh.type)||sh.type||'Plano')}</td>
+          ${hasImages?`<td>${sh.thumbUrl?`<img class="productionShotImage" src="${esc(sh.thumbUrl)}" alt="Referencia del plano ${number}">`:''}</td>`:''}
+          <td class="productionDescription">${esc(sh.desc||'')}</td></tr>`;
+      }).join('');
+      out+=`<table class="productionReportTable productionShotTable"><colgroup><col style="width:9mm"><col style="width:16mm"><col style="width:14mm"><col style="width:22mm"><col style="width:20mm"><col style="width:32mm">${hasImages?'<col style="width:32mm">':''}<col></colgroup><thead><tr class="productionPrintGutter" aria-hidden="true"><th colspan="${columns}"></th></tr>
+        <tr class="productionSceneHeading"><th colspan="${columns}"><strong>Tanda · #${esc(sc.number||'')} · ${esc(sc.shootingBatchName||sc.slugline||'')}</strong><span>${esc(fmtClockFromCall(d.callTime||'08:00',start))} – ${esc(fmtClockFromCall(d.callTime||'08:00',start+duration))} · Escena: ${esc(formatDuration(duration))} · Planos: ${esc(formatDuration(total))}${total>duration?' · Los planos superan el tiempo asignado':''}</span></th></tr>
+        <tr><th>✓</th><th>Escena</th><th>Plano</th><th>Inicio / fin</th><th>Duración</th><th>Tipo</th>${hasImages?'<th>Referencia</th>':''}<th>Descripción</th></tr></thead>
+        <tbody>${rows||`<tr><td colspan="${columns}">Sin planos cargados para esta escena.</td></tr>`}</tbody></table>`;
     }
-
-    let out = header;
-    for(const sid of (d.sceneIds||[])){
-      const sc = shootingScene(sid,d);
-      if(!sc) continue;
-      ensureSceneExtras(sc);
-      const st = Number(d.times?.[sid] ?? 0) || 0;
-      const du = Number(d.durations?.[sid] ?? 60) || 60;
-      const scStart = d.callTime ? fmtClockFromCall(d.callTime, st) : "";
-      const scEnd = d.callTime ? fmtClockFromCall(d.callTime, st+du) : "";
-
-      const shotsMin = plannedShotsTotal(d,sc);
-      const warn = shotsMin > du ? "Planos > duración" : "";
-
-      let rows = "";
-      let offset = 0;
-      const shots = (sc.shots||[]);
-      if(!shots.length){
-        rows = `<tr><td colspan="7" class="muted">Sin planos cargados para esta escena.</td></tr>`;
-      }else{
-        rows = shots.map((sh, idx)=>{
-          const dur = plannedShotDuration(d,sid,sh);
-          const owner=shotOwner(sh.id)||getScene(sid);
-          const key = `${owner.id}|${sh.id}`;
-          const shotNumber=d.shotTimeline||d.shotPlanning?.[sid]||isShotPlan()?owner.shots.findIndex(s=>s.id===sh.id)+1:idx+1;
-          const done = !!d.shotsDone?.[key];
-          const t = d.callTime ? fmtClockFromCall(d.callTime, d.shotTimeline?.[key]?.start ?? (st + offset)) : "";
-          offset += dur;
-          return `
-            <tr class="${done?"shotRowDone":""}">
-              <td class="shotChk"><input type="checkbox" ${done?"checked":""} /></td>
-              <td class="shotNum">${shotNumber}</td>
-              <td class="shotTime">${esc(t||"")}</td>
-              <td class="shotType">${esc(normalizeShotType(sh.type)||sh.type||"Plano")}</td>
-              <td class="shotThumb">${(sh.thumbUrl?`<img class="shotThumbImg" src="${esc(sh.thumbUrl)}" alt="thumb"/>`:"")}</td>
-              <td><b>Escena original #${esc(owner.number)}</b><br>${esc(sh.desc||"")}</td>
-              <td class="shotDur">${esc(String(dur||DEFAULT_SHOT_MIN))}</td>
-            </tr>
-          `;
-        }).join("");
-      }
-
-      out += `
-        <div class="shotSceneBox">
-          <div class="shotSceneHead">
-            <div>
-              <div class="t">Tanda · #${esc(sc.number||"")} — ${esc(sc.shootingBatchName||sc.slugline||"")}</div>
-              <div class="m">${esc(scStart||"")} → ${esc(scEnd||"")} · Escena: ${esc(formatDuration(du))} · Planos: ${esc(formatDuration(shotsMin))}</div>
-            </div>
-            ${warn ? `<div class="warn">${esc(warn)}</div>` : ""}
-          </div>
-
-          <div class="shotTableWrap">
-            <div class="tableWrap">
-              <table class="table shotTable">
-                <thead>
-                  <tr>
-                    <th class="shotChk">✓</th>
-                    <th class="shotNum">#</th>
-                    <th class="shotTime">Hora</th>
-                    <th class="shotType">Tipo</th>
-                    <th class="shotThumb">Mini</th>
-                    <th>Descripción</th>
-                    <th class="shotDur">Min</th>
-                  </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    return out;
+    return out+(scenes.length?'':'<p>No hay escenas asignadas a esta jornada.</p>')+'</article>';
   }
 
   function getReportsSelectedDayId(){
@@ -8611,7 +8486,7 @@ function renderReportDayplanDetail(d){
     root.innerHTML = buildElementsByScenePrintPage(d, { title: "Elementos por escena" });
 
     document.body.classList.add("gbPrintingElements");
-    setPrintOrientation("portrait", 6);
+    setPrintOrientation("landscape", 12);
     try{ window.print(); } finally { clearPrintOrientation(); cleanupGbPrintRoot(); }
   }
 
@@ -8627,7 +8502,7 @@ async function printShotlistByDayId(dayId){
     const root = ensureGbPrintRoot();
     root.innerHTML = buildShotlistPrintHTML(d);
     document.body.classList.add("gbPrintingShotlist");
-    setPrintOrientation("portrait");
+    setPrintOrientation("landscape", 12);
     try{
       await waitForImages(root, 2500);
       window.print();
