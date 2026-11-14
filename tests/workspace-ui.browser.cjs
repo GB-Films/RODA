@@ -91,6 +91,37 @@ const output=process.env.RODA_CALL_PRINT_QA_DIR||fs.mkdtempSync(path.join(os.tmp
     await page.evaluate(()=>window.printSnapshot=null);
    }
   }
+  // The report owns the available height and keeps the shared day control in reach.
+  const controls=page.locator('.reportControls');
+  const frame=page.locator('#reportPane-elements iframe');
+  const zoom=page.locator('#reportPaperZoom');
+  await zoom.click();
+  assert.equal(await zoom.getAttribute('aria-pressed'),'true');
+  assert.equal(await frame.contentFrame().locator('#previewPaper').evaluate(p=>getComputedStyle(p).zoom),'1');
+  await zoom.click();
+  assert.equal(await zoom.getAttribute('aria-pressed'),'false');
+  assert.equal(await controls.locator('#dayNavigation').count(),1);
+  await controls.locator('.dayPicker > summary').click();
+  assert.equal(await controls.locator('.dayPickerOption').first().isVisible(),true);
+  await controls.locator('.dayPickerOption').first().click();
+  assert.equal(await page.locator('#reportTabs .reportTabBtn[aria-pressed="true"]').textContent(),'Elementos');
+  await frame.contentFrame().locator('#gbPrintRoot').waitFor({state:'visible'});
+  for(const [width,height] of [[1600,1000],[834,900],[390,844],[844,390]]){
+   await page.setViewportSize({width,height});
+   const side=await controls.boundingBox(),paper=await frame.boundingBox();
+   const stacked=width<=700;
+   if(stacked)assert.ok(paper.y>=side.y+side.height-1,'Preview sits below controls');
+   else{
+    assert.equal(Math.round(paper.y),Math.round(side.y),'Preview starts at the top beside the controls');
+    assert.ok(paper.x>=side.x+side.width-1 && paper.width>side.width,'Preview gets most of the width');
+   }
+   assert.ok(paper.height>100 && paper.y+paper.height<=height+1,'Preview fits available height');
+   assert.ok(paper.x+paper.width<=width+1,'Preview stays within viewport');
+   await page.locator('#btnPrintCallSheet').scrollIntoViewIfNeeded();
+   await page.screenshot({path:path.join(output,'report-layout-'+width+'x'+height+'.png')});
+  }
+  const mounted=await page.evaluate(()=>{const before=document.getElementById('dayNavigation');document.querySelector('.navBtn[data-view="dayplan"]').click();return before===document.querySelector('.main > #dayNavigation');});
+  assert.ok(mounted,'The same day picker returns to the shared toolbar');
   assert.equal(await page.evaluate(()=>JSON.stringify(savedState)),before,'UI never changes project data');
   assert.equal(await page.evaluate(()=>savedWrites),writes);
   assert.deepEqual(errors,[]);
