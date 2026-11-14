@@ -141,3 +141,40 @@
 }
 
 @media print{body.gbPrintingDayplan .dpPrintByShots .dpPrintMeta{grid-template-columns:1fr 2fr 1fr 1fr;}body.gbPrintingDayplan .dpPrintByShots .dpPrintMeta>:nth-child(n+3){text-align:right;}}
+
+/* Shotlist and Elements share the production-document identity and paper grid. */
+.productionReport{font:9pt/1.35 Arial,Helvetica,sans-serif;color:#17191b;width:100%;}
+.productionReport,.productionReport *{box-sizing:border-box;}
+.productionReport .dpPrintHeader{margin:0 0 5mm;break-inside:avoid;break-after:avoid;}
+.productionReport .dpPrintHeading{display:flex;align-items:baseline;justify-content:space-between;gap:6mm;padding-bottom:3mm;}
+.productionReport .dpPrintHeading h1{font:700 23pt/1.12 Arial,Helvetica,sans-serif;letter-spacing:-.5pt;margin:0;overflow-wrap:anywhere;}
+.productionReport .dpPrintDay{font-size:11pt;text-align:right;}
+.productionReport .dpPrintMeta{display:grid;grid-template-columns:1fr 2fr 1fr;gap:5mm;border-top:1px solid #bcc0c3;border-bottom:1px solid #bcc0c3;padding:3mm 0;}
+.productionReport .dpPrintByShots .dpPrintMeta{grid-template-columns:1fr 2fr 1fr 1fr;}
+.productionReport .dpPrintMeta span{display:block;font-size:8pt;margin-bottom:1mm;}
+.productionReport .dpPrintMeta strong{display:block;font-size:10pt;overflow-wrap:anywhere;}
+.productionReport .dpPrintMeta>div:nth-child(n+3){text-align:right;}
+.productionReportTable{width:100%;table-layout:fixed;border-collapse:collapse;margin:0 0 6mm;font:9pt/1.35 Arial,Helvetica,sans-serif;}
+.productionReportTable thead{display:table-header-group;}
+.productionReportTable tr{break-inside:avoid;page-break-inside:avoid;}
+.productionReportTable th,.productionReportTable td{position:static;border:0;border-bottom:1px solid #d7dade;padding:2mm;text-align:left;vertical-align:top;overflow-wrap:anywhere;}
+.productionReportTable thead th{background:#e9ebed;font-size:8pt;}
+.productionReportTable .productionSceneHeading th{background:#fff;border-top:1.5pt solid #17191b;border-bottom:0;padding:3mm 0;}
+.productionSceneHeading strong{display:block;font-size:11pt;}
+.productionSceneHeading span{display:block;font-size:8pt;font-weight:400;margin-top:1mm;}
+.productionElementsTable tbody th{background:#f4f5f6;font-size:9pt;}
+.productionNumber{font-size:11pt;font-weight:700;}
+.productionClock{font-variant-numeric:tabular-nums;white-space:nowrap;}
+.productionClock span{display:block;font-size:8pt;color:#50575c;}
+.productionDescription{white-space:pre-wrap;}
+.productionShotImage{display:block;max-width:100%;max-height:27mm;object-fit:contain;}
+.productionCheck{display:inline-flex;align-items:center;justify-content:center;width:3.5mm;height:3.5mm;border:1px solid #72777a;font-size:9pt;}
+@page rodaProductionReport{size:A4 landscape;margin:12mm;@top-left{content:"";}@top-center{content:"";}@top-right{content:"";}@bottom-left{content:"GB Studio";font:7pt Arial,sans-serif;color:#555;}@bottom-right{content:counter(page) " / " counter(pages);font:7pt Arial,sans-serif;color:#555;}}
+@media print{
+ body.gbPrintingShotlist #gbPrintRoot,body.gbPrintingElements #gbPrintRoot{page:rodaProductionReport;position:static!important;width:auto!important;padding:4mm 5mm!important;}
+ .productionReport{print-color-adjust:exact;-webkit-print-color-adjust:exact;}
+}
+
+.productionElementsTable{break-inside:avoid;page-break-inside:avoid;}
+.productionShotTable thead tr:not(.productionSceneHeading) th{white-space:nowrap;}
+.productionReportTable .productionPrintGutter th{height:4mm;padding:0;border:0;background:#fff;line-height:0;font-size:0;}
