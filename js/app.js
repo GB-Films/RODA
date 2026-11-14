@@ -3395,6 +3395,7 @@ const zone = document.createElement("div");
 
   
 function renderDayDetail(){
+  if(document.body.dataset.rodaView&&document.body.dataset.rodaView!=='shooting')return;
   window.RodaWorkspace?.callTabs();
     renderDayNavigation();
   // Asegurar que haya un día seleccionado válido
