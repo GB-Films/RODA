@@ -322,7 +322,8 @@ const shotlistExpandedSceneIds = new Set();
     if(!all&&!getDay(selection))selection=days[0]?.id||null;
     const day=days.find(d=>d.id===selection);
     const title=day?.title||(selection==='all'?'Todas las jornadas':selection==='unassigned'?'Sin jornada asignada':selection==='multiple'?getScheduleDaysFiltered().length+' jornadas seleccionadas':selection==='none'?'Ninguna jornada seleccionada':'Sin jornadas');
-    dayNavigation.render({visible,days,selection,title,meta:day?.detail||(view==='crew'?'Personas del equipo según su citación o sus personajes':days.length+' jornadas del proyecto'),allowAll:all,allowUnassigned:view==='elements',allowCompare:view==='schedule'});
+    const reportControls = view === "callsheet" ? el("reportDayNavigation") : null;
+    dayNavigation.render({visible,days,selection,title,meta:day?.detail||(view==='crew'?'Personas del equipo según su citación o sus personajes':days.length+' jornadas del proyecto'),allowAll:all,allowUnassigned:view==='elements',allowCompare:view==='schedule'}, reportControls || main);
   }
 
   let selectedDayplanDayId = null;
@@ -7804,7 +7805,11 @@ grid.appendChild(cell);
   function applyReportsTabUI(){
     const tab = (reportsTab || "callsheet");
     const tabs = document.querySelectorAll("#reportTabs .reportTabBtn");
-    tabs.forEach(btn=> btn.classList.toggle("active", btn.dataset.tab===tab));
+    tabs.forEach(button => {
+      const active = button.dataset.tab === tab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
     ["dayplan","schedule","callsheet","shotlist","elements"].forEach(t=>{
       el(`reportPane-${t}`)?.classList.toggle("hidden", t!==tab);
     });

@@ -25,7 +25,8 @@ window.RodaDayNavigation = (() => {
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : event.key === 'ArrowUp' ? (at <= 0 ? buttons.length - 1 : at - 1) : (at + 1) % buttons.length;
       buttons[next]?.focus();
     });
-    function render(config) {
+    function render(config, mount = main) {
+      if (bar.parentNode !== mount) mount.prepend(bar);
       bar.hidden = !config.visible;
       main.classList.toggle('hasDayNavigation', config.visible);
       document.body.classList.toggle('hasSharedDayNavigation', config.visible);

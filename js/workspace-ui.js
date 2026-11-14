@@ -40,10 +40,24 @@
     host.classList.add('reportPaperPreview');
     if(host._previewResize)host._previewResize.disconnect();
     host.replaceChildren();
-    if(!html){const p=document.createElement('p');p.textContent='Elegí una jornada con rodaje para ver el documento.';host.append(p);return;}
-    const caption=document.createElement('p');caption.className='reportPreviewCaption';caption.textContent='Vista de impresión · A4 '+(landscape?'horizontal':'vertical')+' · Los saltos de página se ajustan al imprimir.';
-    const frame=document.createElement('iframe');frame.title='Vista previa del documento para imprimir';frame.className='reportPaperFrame';frame.setAttribute('sandbox','allow-same-origin');
-    const toolbar=document.createElement('div');toolbar.className='reportPreviewToolbar';const zoom=document.createElement('button');zoom.type='button';zoom.className='btn small';zoom.dataset.roAllow='1';zoom.textContent='Tamaño real';zoom.setAttribute('aria-pressed','false');toolbar.append(caption,zoom);host.append(toolbar,frame);
+    const zoom = document.getElementById('reportPaperZoom');
+    const format = document.getElementById('reportPaperFormat');
+    format.textContent = html ? 'A4 ' + (landscape ? 'horizontal' : 'vertical') : '';
+    zoom.hidden = !html;
+    zoom.textContent = 'Tamaño real';
+    zoom.setAttribute('aria-pressed', 'false');
+    zoom.onclick = null;
+    if (!html) {
+      const empty = document.createElement('p');
+      empty.textContent = 'Elegí una jornada con rodaje para ver el documento.';
+      host.append(empty);
+      return;
+    }
+    const frame = document.createElement('iframe');
+    frame.title = 'Vista previa del documento para imprimir';
+    frame.className = 'reportPaperFrame';
+    frame.setAttribute('sandbox', 'allow-same-origin');
+    host.append(frame);
     const doc=frame.contentDocument;
     doc.open();doc.write('<!doctype html><html><head></head><body></body></html>');doc.close();
     const base=doc.createElement('base');base.href=document.baseURI;doc.head.append(base);

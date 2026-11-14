@@ -26,16 +26,66 @@
  #dayDetailCard .callPeopleList{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:12px;align-items:start;}
  #dayDetailCard .callNotesBox{margin-top:24px;background:transparent;}
  #dayDetailCard .callNotesBox summary{color:var(--muted);}
- #reportTabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 14px;}
- #reportTabs .reportTabBtn{border:0;}
- .main #reportTabs .reportTabBtn.active{background:var(--studio-accent,#fff);color:var(--studio-on-accent,#111);}
- #reportSearch,#reportSearchStatus{display:none!important;}
- .reportPaperPreview{min-width:0;background:transparent!important;padding:0!important;}
- .reportPreviewToolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;}.reportPreviewToolbar .btn{flex-shrink:0;}
- .reportPreviewCaption{font-size:11px;color:var(--muted);margin:0 0 10px;}
- .reportPaperFrame{display:block;width:100%;height:70vh;min-height:360px;border:0;border-radius:8px;background:#252729;}
+ #callDetailCard.reportWorkspace {
+   display:grid;
+   grid-template-columns:clamp(208px, 19%, 256px) minmax(0, 1fr);
+   grid-template-rows:minmax(0, 1fr);
+   gap:12px;
+   min-width:0;
+ }
+ .reportControls {
+   display:flex;
+   flex-direction:column;
+   align-items:stretch;
+   gap:16px;
+   min-width:0;
+   padding:14px;
+ }
+ .reportControls .cardTitle {margin:0;font-size:18px;}
+ #reportTabs {display:flex;flex-direction:column;flex-wrap:nowrap;gap:4px;margin:0;}
+ #reportTabs .reportTabBtn {min-height:36px;border:0;text-align:left;border-radius:7px;}
+ .main #reportTabs .reportTabBtn.active {background:var(--studio-accent,#fff);color:var(--studio-on-accent,#111);}
+ #reportDayNavigation .dayNavigation {display:grid;gap:6px;min-width:0;z-index:110;}
+ #reportDayNavigation .dayNavigation[hidden] {display:none;}
+ #reportDayNavigation .dayPicker {width:100%;min-width:0;max-width:none;}
+ #reportDayNavigation .dayPickerOptions {max-height:min(252px, 35dvh);}
+ #reportDayNavigation .dayNavigationLabel,
+ #reportDayNavigation .dayNavigationMeta {display:block;}
+ .reportActions {display:flex;flex-direction:column;align-items:stretch;gap:8px;}
+ .reportActions .btn[hidden] {display:none;}
+ .reportPreviewCaption {font-size:11px;color:var(--muted);margin:0;}
+ .reportPreviewCaption:empty {display:none;}
+ .reportDocument, .reportPane, .reportPaperPreview {min-width:0;min-height:0;height:100%;}
+ .reportPaperPreview {background:transparent!important;padding:0!important;}
+ .reportPaperPreview > p {margin:0;padding:16px;color:var(--muted);}
+ .reportPaperFrame {display:block;width:100%;height:100%;border:0;border-radius:8px;background:#252729;}
+ @media (max-width:700px) {
+   #callDetailCard.reportWorkspace {
+     grid-template-columns:minmax(0, 1fr);
+     grid-template-rows:auto minmax(0, 1fr);
+     gap:8px;
+   }
+   .reportControls {gap:8px;padding:8px;}
+   .reportControls .cardTitle {font-size:15px;}
+   #reportTabs {flex-direction:row;overflow-x:auto;padding:2px 2px 4px;scrollbar-width:thin;}
+   #reportTabs .reportTabBtn {flex:none;white-space:nowrap;}
+   #reportDayNavigation .dayNavigation {display:block;min-height:0;}
+   #reportDayNavigation :is(.dayNavigationLabel,.dayNavigationMeta) {display:none;}
+   .reportActions {flex-direction:row;align-items:center;flex-wrap:wrap;}
+   .reportActions .reportPreviewCaption {margin-right:auto;}
+ }
+ @media (max-height:620px) and (min-width:701px) {
+   .reportControls {overflow:auto;gap:8px;padding:10px;}
+   #reportDayNavigation .dayPickerMenu {position:static;width:100%;margin-top:4px;box-shadow:none;}
+   #reportDayNavigation .dayNavigationMeta {display:none;}
+   .reportActions {flex-direction:row;align-items:center;flex-wrap:wrap;}
+   .reportPreviewCaption {flex-basis:100%;}
+ }
+ @media (max-height:500px) and (max-width:1279px) {
+   .roda-studio[data-roda-view="callsheet"] .mTopMid {visibility:visible;}
+ }
  .log-pin,.log-pin.location,.log-pin.approximate{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;text-shadow:none!important;}
  .log-pin svg{display:block;width:30px;height:40px;filter:drop-shadow(0 2px 2px #0005);}
  .log-pin.approximate svg{opacity:.75;}
- @media(max-width:600px){.callSectionTabs{gap:2px}.main .view .callSectionTab{flex:1;padding:10px 7px;font-size:12px}#dayDetailCard .callFilters .listFilterRow{flex:1 1 100%}.reportPaperFrame{height:66vh;min-height:300px}}
+ @media(max-width:600px){.callSectionTabs{gap:2px}.main .view .callSectionTab{flex:1;padding:10px 7px;font-size:12px}#dayDetailCard .callFilters .listFilterRow{flex:1 1 100%}}
 }
